@@ -4675,12 +4675,13 @@ def build_project_document_from_plan(
     return document
 
 
-def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
-    """Reconcile automatic bindings from explicit structured asset ids only.
+def refresh_lightweight_reference_plans(document: ProjectDocument, *, shot_ids: set[str] | None = None) -> bool:
+    """Keep exact prose choices; fill only legacy automatic structured requirements.
 
-    An empty requirement/cue/action structure is an intentional request for no references. Text,
-    names, speakers, and neighboring shots never add an asset implicitly.
+    Never infer assets from text or replace a selected state/view with its owner's
+    current image. Scope is supplied by validated route targets, or all initial shots.
     """
+    from short_drama.studio_references import generation_bindings_from_cues, shot_cues
 
     assets_by_version = {
         version.id: asset
@@ -4691,12 +4692,15 @@ def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
     changed = False
 
     for shot in document.shots:
+        if shot_ids is not None and shot.id not in shot_ids:
+            continue
         plan = plans_by_shot.get(shot.id)
         if plan is None:
             continue
 
-        existing_by_asset: dict[str, ReferenceBinding] = {}
-        unresolved: list[ReferenceBinding] = []
+        cues = shot_cues(shot)
+        explicit_subjects = {cue.subject_asset_id for cue in cues}
+        explicit_versions = {cue.asset_version_id for cue in cues}
         relevant_asset_ids = {
             requirement.subject_asset_id for requirement in plan.requirements
         }
@@ -4704,50 +4708,31 @@ def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
         for interaction in plan.interactions:
             relevant_asset_ids.add(interaction.actor_asset_id)
             relevant_asset_ids.add(interaction.target_asset_id)
-        relevant_asset_ids.update(
-            cue.subject_asset_id
-            for beat in shot.timeline_beats
-            for cue in beat.references
-        )
+        # Even an editorial choice or an unresolved cue suppresses automatic
+        # fallback for that subject. The saved prose decides when to select media.
+        relevant_asset_ids.difference_update(explicit_subjects)
+        bindings = generation_bindings_from_cues(document, shot)
+        represented_assets: set[str] = set(explicit_subjects)
         for binding in plan.bindings:
             asset = assets_by_version.get(binding.target_id)
             if asset is None:
-                unresolved.append(binding.model_copy(deep=True))
+                if binding.target_id not in explicit_versions:
+                    bindings.append(binding.model_copy(deep=True))
                 continue
-            if (
-                binding.purpose in _AUTOMATIC_REFERENCE_BINDING_PURPOSES
-                and asset.id not in relevant_asset_ids
-            ):
+            if asset.id in explicit_subjects or binding.target_id in explicit_versions:
                 continue
-            existing_by_asset.setdefault(asset.id, binding)
-
-        selected_assets = [
-            asset
-            for asset in document.assets
-            if asset.id in existing_by_asset or asset.id in relevant_asset_ids
-        ]
-
-        bindings: list[ReferenceBinding] = []
-        for asset in selected_assets:
-            existing = existing_by_asset.get(asset.id)
-            target_id = asset.approved_version_id or asset.current_version_id
-            bindings.append(
-                ReferenceBinding(
-                    kind=asset.kind,
-                    target_id=target_id,
-                    purpose=(
-                        existing.purpose
-                        if existing is not None
-                        else _ENRICHED_REFERENCE_BINDING_PURPOSE
-                    ),
-                    required=(
-                        existing.required
-                        if existing is not None
-                        else True
-                    ),
-                )
-            )
-        bindings.extend(unresolved)
+            if binding.purpose in _AUTOMATIC_REFERENCE_BINDING_PURPOSES:
+                if asset.id not in relevant_asset_ids:
+                    continue
+                bindings.append(binding.model_copy(update={"target_id": asset.approved_version_id or asset.current_version_id}))
+            else:
+                bindings.append(binding.model_copy(deep=True))
+            represented_assets.add(asset.id)
+        for asset in document.assets:
+            if asset.id in relevant_asset_ids - represented_assets:
+                bindings.append(ReferenceBinding(kind=asset.kind,
+                    target_id=asset.approved_version_id or asset.current_version_id,
+                    purpose=_ENRICHED_REFERENCE_BINDING_PURPOSE, required=True))
         max_images = min(9, max(plan.max_reference_images, len(bindings), 1))
         before = [item.model_dump(mode="json") for item in plan.bindings]
         after = [item.model_dump(mode="json") for item in bindings]

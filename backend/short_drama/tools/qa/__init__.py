@@ -190,13 +190,11 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             request.version_id,
             request.request,
         )
-        resolved_reference_refs = service.asset_inspection_reference_version_refs(
-            request.project_id,
-            request.asset_id,
-            request.version_id,
-            request.request,
-        )
-        unique_reference_refs = list(dict.fromkeys(resolved_reference_refs))
+        # Use the exact references observed before the language call, not a second
+        # read of mutable source metadata after a possibly long inspection.
+        unique_reference_refs = list(dict.fromkeys(
+            (reference.source_project_id, reference.asset_version_id)
+            for reference in result.evidence_references))
         result = result.model_copy(
             update={
                 "evidence_references": [
@@ -221,8 +219,9 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             refs.append(
                 ArtifactRef(
                     project_id=request.project_id,
-                    artifact_type="shot_plan",
+                    artifact_type="shot",
                     artifact_id=request.request.shot_id,
+                    version=result.shot_revision,
                 )
             )
         if result.narrative_context is not None:
@@ -234,7 +233,8 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             ))
         refs.extend(service.asset_version_artifact_refs(
             request.project_id,
-            [request.version_id, *(
+            [request.version_id, *([result.provider_output_review.asset_version_id]
+                if result.provider_output_review is not None else []), *(
                 version_id
                 for reference_project_id, version_id in unique_reference_refs
                 if reference_project_id == request.project_id
@@ -245,7 +245,7 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
     registry.register(
         ToolSpec(
             id="qa.inspect_asset_version",
-            version=4,
+            version=5,
             category=ToolCategory.QA,
             description=(
                 "生成或导入一个实际图片版本后调用；对照资产 brief、"
@@ -254,6 +254,9 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                 "review_focus 声明本次用途/疑问；叙事影响判断时可用 narrative_context 选择已保存场次与台词ID，"
                 "程序仅读取该场摘要与所选台词。自定实现条件放 implementation_preferences，不冒充用户要求。"
                 "本张局部视图不按整个资产的最终多视图卡误审。"
+                "intended_reference_role 区分软COMPOSITION与硬FIRST_FRAME/LAST_FRAME；未声明硬边界不默认按首帧验收。"
+                "masked EDIT可选compare_provider_output=true，在同一次视觉调用中观察final及同任务已登记raw，"
+                "顶层仅代表final，provider_output_review单独记录raw的实际结论与可执行建议；不自动采用、批准或重生成。"
                 "regions 在同一次检查中追加候选/已声明参考的实际脸部、文字、部件裁图，"
                 "保留全图与真实像素范围，细节不足应报告未观察。"
                 "仅需裁切且边界可见时，crop_suggestion 可在同次观察给出候选的归一化region、"

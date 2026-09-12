@@ -226,8 +226,9 @@ def test_explicit_shot_choice_uses_current_draft_without_fabricating_review(tmp_
         asset_id=subject.id, name="chosen-draft", color="blue")
     document = service.get_project(document.project.id).document
     media = _subject_input(subject.id, version_id)
-    with pytest.raises(WorkflowConflictError, match="not approved"):
-        service._resolve_approved_asset_inputs(document, [media])
+    assert service._resolve_approved_asset_inputs(document, [media])[0].source.local_path
+    before_candidates, _ = generation_unit_media_candidates(document, [document.shots[0]])
+    assert version_id not in [item.media_input.asset_version_id for item in before_candidates]
 
     shot = document.shots[0].model_copy(deep=True)
     shot.references = [ShotReferenceCue(subject_asset_id=subject.id, asset_version_id=version_id,
@@ -246,8 +247,9 @@ def test_explicit_shot_choice_uses_current_draft_without_fabricating_review(tmp_
     assert [item.media_input.asset_version_id for item in candidates] == [version_id]
 
     saved.shots[0].references[0].usage = "EDITORIAL"
-    with pytest.raises(WorkflowConflictError, match="not approved"):
-        service._resolve_approved_asset_inputs(saved, [media])
+    assert service._resolve_approved_asset_inputs(saved, [media])[0].source.local_path
+    editorial_candidates, _ = generation_unit_media_candidates(saved, [saved.shots[0]])
+    assert version_id not in [item.media_input.asset_version_id for item in editorial_candidates]
     saved.shots[0].references[0].usage = "GENERATION"
     version.freshness = Freshness.STALE
     with pytest.raises(WorkflowConflictError, match="not current"):

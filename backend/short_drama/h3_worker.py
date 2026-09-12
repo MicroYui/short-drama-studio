@@ -75,11 +75,13 @@ class PersistentH3Worker:
         workspace_root: Path,
         config_store: H3ProviderConfigStore,
         client_factory: H3ClientFactory = default_h3_client_factory,
+        source_staleness_checker: Callable[[GenerationTask, H3ProviderRun], str | None] | None = None,
     ) -> None:
         self.repository = repository
         self.workspace_root = workspace_root
         self.config_store = config_store
         self.client_factory = client_factory
+        self.source_staleness_checker = source_staleness_checker
         self.ingestor = H3MediaIngestor()
         self._advance_locks_guard = threading.Lock()
         self._advance_locks: dict[str, threading.Lock] = {}
@@ -406,6 +408,7 @@ class PersistentH3Worker:
                     document,
                     asset_version_id=version_id,
                     subject_asset_id=media.subject_asset_id,
+                    explicit_choice=True,
                 )
             except AssetReferenceTruthError as exc:
                 return str(exc)
@@ -413,6 +416,8 @@ class PersistentH3Worker:
             validate_h3_audio_durations(document, provider_run.media_inputs)
         except H3CapabilityError as exc:
             return str(exc)
+        if self.source_staleness_checker is not None:
+            return self.source_staleness_checker(task, provider_run)
         return None
 
     @staticmethod

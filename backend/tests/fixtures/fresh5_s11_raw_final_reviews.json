@@ -1,0 +1,1410 @@
+{
+  "source_project_id": "project-564a0137c835",
+  "source_work_order_id": "work-order-38824900349d488fb9e4bff7e07f7e0a",
+  "note": "Saved actual S11 requests and reports. Tests replay these reports with FakeLanguageClient; small local fixture images prove wiring, not new visual quality.",
+  "turns": [
+    {
+      "id": "specialist-turn-d53294d53e7640faa72a5224278f8389",
+      "sequence": 38,
+      "tool_name": "image.create_edit_guide",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "source_asset_version_id": "asset-version-f9589d56833d",
+          "regions": [
+            {
+              "polygon": [
+                {
+                  "x": 0,
+                  "y": 0.24
+                },
+                {
+                  "x": 0.18,
+                  "y": 0.295
+                },
+                {
+                  "x": 0.351,
+                  "y": 0.319
+                },
+                {
+                  "x": 0.435,
+                  "y": 0.351
+                },
+                {
+                  "x": 0.456,
+                  "y": 0.409
+                },
+                {
+                  "x": 0.458,
+                  "y": 0.47
+                },
+                {
+                  "x": 0.295,
+                  "y": 0.483
+                },
+                {
+                  "x": 0.26,
+                  "y": 0.545
+                },
+                {
+                  "x": 0.19,
+                  "y": 0.588
+                },
+                {
+                  "x": 0,
+                  "y": 0.605
+                }
+              ],
+              "label": "移除林岚全部灰蓝袖口与两只手，恢复原位置木纹、纸边、蓝白块面及阴影"
+            },
+            {
+              "polygon": [
+                {
+                  "x": 0.368,
+                  "y": 0.399
+                },
+                {
+                  "x": 0.456,
+                  "y": 0.405
+                },
+                {
+                  "x": 0.633,
+                  "y": 0.447
+                },
+                {
+                  "x": 0.638,
+                  "y": 0.462
+                },
+                {
+                  "x": 0.768,
+                  "y": 0.48
+                },
+                {
+                  "x": 0.77,
+                  "y": 0.456
+                },
+                {
+                  "x": 0.781,
+                  "y": 0.431
+                },
+                {
+                  "x": 0.85,
+                  "y": 0.413
+                },
+                {
+                  "x": 0.842,
+                  "y": 0.36
+                },
+                {
+                  "x": 0.875,
+                  "y": 0.278
+                },
+                {
+                  "x": 1,
+                  "y": 0.26
+                },
+                {
+                  "x": 1,
+                  "y": 0.818
+                },
+                {
+                  "x": 0.846,
+                  "y": 0.738
+                },
+                {
+                  "x": 0.747,
+                  "y": 0.658
+                },
+                {
+                  "x": 0.631,
+                  "y": 0.609
+                },
+                {
+                  "x": 0.58,
+                  "y": 0.555
+                },
+                {
+                  "x": 0.582,
+                  "y": 0.516
+                },
+                {
+                  "x": 0.426,
+                  "y": 0.469
+                },
+                {
+                  "x": 0.367,
+                  "y": 0.44
+                }
+              ],
+              "label": "整体重排唯一黑笔与周启完整手腕袖连接；含旧轮廓恢复、右上持笔空间及周五右侧悬尖投影区"
+            }
+          ],
+          "arrows": [
+            {
+              "start": {
+                "x": 0.719,
+                "y": 0.536
+              },
+              "end": {
+                "x": 0.815,
+                "y": 0.445
+              },
+              "label": "整组手笔转为独持悬停，尖端在周五右侧空白上方，不能触纸或添墨点"
+            }
+          ],
+          "descriptor": "镜11同轴停笔换姿编辑指导，源图完整像素来自已采用镜10。第一选区清除林岚双手和袖口；第二选区整体调整同一黑笔与周启手掌、参与握持的完整手指及腕袖连接，并恢复旧轮廓背景。保留纸顶边、便签及蓝白版式向右下倾的实际方向；所有已有红黑字、标题、旧签名保持。周启一只海军蓝袖口手自然独持同一黑笔，笔尖悬于周五右侧空白，尖端与软投影清楚分离。允许调整握角和入画位置，不能转纸迁就手。整笔正常比例、完整置于右侧预备裁框x0.5至1、y0.265625至0.765625内；不是要求模型裁图。先完整尺寸编辑，再根据实图决定是否收紧。圈线箭头标签仅为指导，不能留在成品；此图示及遮罩不是停笔成图。"
+        }
+      },
+      "reason": "继续镜11停笔图：以已采用递笔图的真实纸面为底，按已观察的完整手笔范围换姿，锁住纸向与文字，不再从纸向错误的候选重试。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "image.create_edit_guide",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-564a0137c835",
+          "asset_id": "asset-8514c45a7c73",
+          "source_asset_version_id": "asset-version-f9589d56833d",
+          "guide_version": {
+            "id": "asset-version-069e2d133682",
+            "version": 5,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "局部编辑图示：镜11同轴停笔换姿编辑指导，源图完整像素来自已采用镜10。第一选区清除林岚双手和袖口；第二选区整体调整同一黑笔与周启手掌、参与握持的完整手指及腕袖连接，并恢复旧轮廓背景。保留纸顶边、便签及蓝白版式向右下倾的实际方向；所有已有红黑字、标题、旧签名保持。周启一只海军蓝袖口手自然独持同一黑笔，笔尖悬于周五右侧空白，尖端与软投影清楚分离。允许调整握角和入画位置，不能转纸迁就手。整笔正常比例、完整置于右侧预备裁框x0.5至1、y0.265625至0.765625内；不是要求模型裁图。先完整尺寸编辑，再根据实图决定是否收紧。圈线箭头标签仅为指导，不能留在成品；此图示及遮罩不是停笔成图。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh5/asset-version-069e2d133682-edit-guide.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 1152,
+            "height": 2048,
+            "duration_seconds": null,
+            "file_size_bytes": 2736499,
+            "parent_version_id": "asset-version-f9589d56833d",
+            "image_task_id": null,
+            "derivation_references": [
+              {
+                "asset_version_id": "asset-version-f9589d56833d",
+                "source_project_id": "project-564a0137c835",
+                "reference_role": "COMPOSITION",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "本次局部编辑的实际原图；图示和遮罩不代表修复完成。",
+                "subject_alias": "周启停笔未签构图"
+              }
+            ],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "局部编辑图示",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-edit-guide-v1",
+              "prompt": "{\"source_asset_version_id\":\"asset-version-f9589d56833d\",\"regions\":[{\"polygon\":[{\"x\":0.0,\"y\":0.24},{\"x\":0.18,\"y\":0.295},{\"x\":0.351,\"y\":0.319},{\"x\":0.435,\"y\":0.351},{\"x\":0.456,\"y\":0.409},{\"x\":0.458,\"y\":0.47},{\"x\":0.295,\"y\":0.483},{\"x\":0.26,\"y\":0.545},{\"x\":0.19,\"y\":0.588},{\"x\":0.0,\"y\":0.605}],\"label\":\"移除林岚全部灰蓝袖口与两只手，恢复原位置木纹、纸边、蓝白块面及阴影\"},{\"polygon\":[{\"x\":0.368,\"y\":0.399},{\"x\":0.456,\"y\":0.405},{\"x\":0.633,\"y\":0.447},{\"x\":0.638,\"y\":0.462},{\"x\":0.768,\"y\":0.48},{\"x\":0.77,\"y\":0.456},{\"x\":0.781,\"y\":0.431},{\"x\":0.85,\"y\":0.413},{\"x\":0.842,\"y\":0.36},{\"x\":0.875,\"y\":0.278},{\"x\":1.0,\"y\":0.26},{\"x\":1.0,\"y\":0.818},{\"x\":0.846,\"y\":0.738},{\"x\":0.747,\"y\":0.658},{\"x\":0.631,\"y\":0.609},{\"x\":0.58,\"y\":0.555},{\"x\":0.582,\"y\":0.516},{\"x\":0.426,\"y\":0.469},{\"x\":0.367,\"y\":0.44}],\"label\":\"整体重排唯一黑笔与周启完整手腕袖连接；含旧轮廓恢复、右上持笔空间及周五右侧悬尖投影区\"}],\"arrows\":[{\"start\":{\"x\":0.719,\"y\":0.536},\"end\":{\"x\":0.815,\"y\":0.445},\"label\":\"整组手笔转为独持悬停，尖端在周五右侧空白上方，不能触纸或添墨点\"}],\"descriptor\":\"镜11同轴停笔换姿编辑指导，源图完整像素来自已采用镜10。第一选区清除林岚双手和袖口；第二选区整体调整同一黑笔与周启手掌、参与握持的完整手指及腕袖连接，并恢复旧轮廓背景。保留纸顶边、便签及蓝白版式向右下倾的实际方向；所有已有红黑字、标题、旧签名保持。周启一只海军蓝袖口手自然独持同一黑笔，笔尖悬于周五右侧空白，尖端与软投影清楚分离。允许调整握角和入画位置，不能转纸迁就手。整笔正常比例、完整置于右侧预备裁框x0.5至1、y0.265625至0.765625内；不是要求模型裁图。先完整尺寸编辑，再根据实图决定是否收紧。圈线箭头标签仅为指导，不能留在成品；此图示及遮罩不是停笔成图。\"}",
+              "created_at": "2026-09-12T09:18:17.609+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T09:18:17.609+00:00"
+          },
+          "mask_version": {
+            "id": "asset-version-0781f694450b",
+            "version": 6,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "局部编辑遮罩：镜11同轴停笔换姿编辑指导，源图完整像素来自已采用镜10。第一选区清除林岚双手和袖口；第二选区整体调整同一黑笔与周启手掌、参与握持的完整手指及腕袖连接，并恢复旧轮廓背景。保留纸顶边、便签及蓝白版式向右下倾的实际方向；所有已有红黑字、标题、旧签名保持。周启一只海军蓝袖口手自然独持同一黑笔，笔尖悬于周五右侧空白，尖端与软投影清楚分离。允许调整握角和入画位置，不能转纸迁就手。整笔正常比例、完整置于右侧预备裁框x0.5至1、y0.265625至0.765625内；不是要求模型裁图。先完整尺寸编辑，再根据实图决定是否收紧。圈线箭头标签仅为指导，不能留在成品；此图示及遮罩不是停笔成图。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh5/asset-version-0781f694450b-edit-mask.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 1152,
+            "height": 2048,
+            "duration_seconds": null,
+            "file_size_bytes": 17857,
+            "parent_version_id": "asset-version-f9589d56833d",
+            "image_task_id": null,
+            "derivation_references": [
+              {
+                "asset_version_id": "asset-version-f9589d56833d",
+                "source_project_id": "project-564a0137c835",
+                "reference_role": "COMPOSITION",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "本次局部编辑的实际原图；图示和遮罩不代表修复完成。",
+                "subject_alias": "周启停笔未签构图"
+              }
+            ],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "局部编辑遮罩",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-edit-mask-v1",
+              "prompt": "{\"source_asset_version_id\":\"asset-version-f9589d56833d\",\"regions\":[{\"polygon\":[{\"x\":0.0,\"y\":0.24},{\"x\":0.18,\"y\":0.295},{\"x\":0.351,\"y\":0.319},{\"x\":0.435,\"y\":0.351},{\"x\":0.456,\"y\":0.409},{\"x\":0.458,\"y\":0.47},{\"x\":0.295,\"y\":0.483},{\"x\":0.26,\"y\":0.545},{\"x\":0.19,\"y\":0.588},{\"x\":0.0,\"y\":0.605}],\"label\":\"移除林岚全部灰蓝袖口与两只手，恢复原位置木纹、纸边、蓝白块面及阴影\"},{\"polygon\":[{\"x\":0.368,\"y\":0.399},{\"x\":0.456,\"y\":0.405},{\"x\":0.633,\"y\":0.447},{\"x\":0.638,\"y\":0.462},{\"x\":0.768,\"y\":0.48},{\"x\":0.77,\"y\":0.456},{\"x\":0.781,\"y\":0.431},{\"x\":0.85,\"y\":0.413},{\"x\":0.842,\"y\":0.36},{\"x\":0.875,\"y\":0.278},{\"x\":1.0,\"y\":0.26},{\"x\":1.0,\"y\":0.818},{\"x\":0.846,\"y\":0.738},{\"x\":0.747,\"y\":0.658},{\"x\":0.631,\"y\":0.609},{\"x\":0.58,\"y\":0.555},{\"x\":0.582,\"y\":0.516},{\"x\":0.426,\"y\":0.469},{\"x\":0.367,\"y\":0.44}],\"label\":\"整体重排唯一黑笔与周启完整手腕袖连接；含旧轮廓恢复、右上持笔空间及周五右侧悬尖投影区\"}],\"arrows\":[{\"start\":{\"x\":0.719,\"y\":0.536},\"end\":{\"x\":0.815,\"y\":0.445},\"label\":\"整组手笔转为独持悬停，尖端在周五右侧空白上方，不能触纸或添墨点\"}],\"descriptor\":\"镜11同轴停笔换姿编辑指导，源图完整像素来自已采用镜10。第一选区清除林岚双手和袖口；第二选区整体调整同一黑笔与周启手掌、参与握持的完整手指及腕袖连接，并恢复旧轮廓背景。保留纸顶边、便签及蓝白版式向右下倾的实际方向；所有已有红黑字、标题、旧签名保持。周启一只海军蓝袖口手自然独持同一黑笔，笔尖悬于周五右侧空白，尖端与软投影清楚分离。允许调整握角和入画位置，不能转纸迁就手。整笔正常比例、完整置于右侧预备裁框x0.5至1、y0.265625至0.765625内；不是要求模型裁图。先完整尺寸编辑，再根据实图决定是否收紧。圈线箭头标签仅为指导，不能留在成品；此图示及遮罩不是停笔成图。\"}",
+              "created_at": "2026-09-12T09:18:17.609+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T09:18:17.609+00:00"
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-069e2d133682",
+            "version": 5
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-0781f694450b",
+            "version": 6
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-069e2d133682",
+              "version": 5
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-0781f694450b",
+              "version": 6
+            }
+          ],
+          "current_state": {
+            "project_id": "project-564a0137c835",
+            "asset_id": "asset-8514c45a7c73",
+            "source_asset_version_id": "asset-version-f9589d56833d",
+            "guide_asset_version_id": "asset-version-069e2d133682",
+            "mask_asset_version_id": "asset-version-0781f694450b",
+            "width": 1152,
+            "height": 2048,
+            "guide_reference_role": "LAYOUT_GUIDE",
+            "mask_semantics": "transparent pixels are editable; opaque pixels preserve the original"
+          },
+          "changed_ids": {
+            "created_asset_version_ids": [
+              "asset-version-069e2d133682",
+              "asset-version-0781f694450b"
+            ]
+          }
+        }
+      },
+      "requested_at": "2026-09-12T09:18:16.200550Z",
+      "updated_at": "2026-09-12T09:18:17.740152Z"
+    },
+    {
+      "id": "specialist-turn-0d60493f9b18425d8a54f53a1d5a97e2",
+      "sequence": 39,
+      "tool_name": "image.enqueue",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "asset_id": "asset-8514c45a7c73",
+        "request": {
+          "operation": "EDIT",
+          "parent_version_id": "asset-version-f9589d56833d",
+          "primary_input_version_id": "asset-version-f9589d56833d",
+          "mask_version_id": "asset-version-0781f694450b",
+          "mask_feather_pixels": 4,
+          "size": "1152x2048",
+          "quality": "high",
+          "background": "opaque",
+          "output_format": "png",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "reference_inputs": [
+            {
+              "asset_version_id": "asset-version-f9589d56833d",
+              "reference_role": "COMPOSITION",
+              "reference_authority": "AUTHORITATIVE",
+              "subject_alias": "同向桌面底板",
+              "purpose": "实际编辑底图；保留纸张、便签、所有文字、蓝白版式、木桌和光向，只在选区内改变完整手笔组合。当前双方递笔状态不是目标。"
+            },
+            {
+              "asset_version_id": "asset-version-33e2632ded3d",
+              "reference_role": "PROP_IDENTITY",
+              "reference_authority": "AUTHORITATIVE",
+              "subject_alias": "唯一黑色按动笔",
+              "purpose": "保持同一支正常比例的哑光黑杆、单黑夹、尾部按钮及小型银灰伸出书写尖；不采用本图背景或摆放角度。"
+            },
+            {
+              "asset_version_id": "asset-version-d57c89b3d1dd",
+              "reference_role": "WARDROBE",
+              "reference_authority": "AUTHORITATIVE",
+              "subject_alias": "周启衣着",
+              "purpose": "仅贡献海军蓝放下的长袖袖口、肤色及成年男性手臂比例，不出现脸、全身或中性背景。"
+            },
+            {
+              "asset_version_id": "asset-version-069e2d133682",
+              "reference_role": "LAYOUT_GUIDE",
+              "reference_authority": "GUIDE_ONLY",
+              "subject_alias": "完整手笔换姿范围",
+              "purpose": "圈线表示移除林岚双手并重排周启完整手笔的区域，箭头表示日期旁悬尖目标；所有标记均不得出现在结果。"
+            }
+          ],
+          "prompt": "Edit image 1 into the same-axis tabletop insert for Zhou Qi pausing without signing. Retain the exact camera and paper plane from image 1: the document top edge, title baseline and yellow-note edges continue sloping DOWN toward image right. Do not rotate the paper, note, title, design or handwriting. Keep all existing ink: title 定稿确认单, original bottom 确认：周启, red note lines 换配色 and 重排版式, and black 周五. The blank space beside 周五 remains genuinely blank, without a new signature, tick, dot or stroke.\nInside the supplied editable regions remove BOTH gray-blue-sleeved Lin Lan hands and their visible sleeve portions. Restore the pale wood and the existing white/blue document surfaces revealed beneath them, following the original straight edges and existing design. No residual fingers or old pen fragments.\nRebuild the entire navy-sleeved male hand and the ONE black retractable pen as a coherent natural held object, rather than retaining the old shared handoff grip. Only Zhou Qi's one adult male hand remains visible, entering naturally from image right with continuous fingers, palm, wrist and navy cuff. Hold the safe black barrel behind the silver tip in a relaxed writing grip. Reference 2 defines the pen shape, not its angle. Preserve normal real pen proportions, a single clip, rear button and short silver writing tip; no elongated shaft, cap or duplicate pen.\nPlace the complete pen and essential holding hand within the right-side area x=0.50–1.00, y=0.265625–0.765625 so a later vertical crop can retain them. The hand and rear pen can occupy the open upper-right area. Allow a different natural grip from the old picture. Aim the silver tip above the BLANK area immediately to the right of the black 周五 line, approximately at image coordinate (0.815,0.445), without covering the date or red lines. This coordinate is an approximate visual target, not an ink point. Lift the WHOLE pen clearly away from the paper: the tip is visibly suspended in air, with its soft left-window-light shadow visibly displaced on the paper below. Show an unmistakable separation rather than a nearly touching writing pose. No contact of the tip with paper or skin, no writing, no motion blur. The hand may naturally adjust its wrist angle to make the air gap legible.\nImage 4 is only the editing guide. Do not reproduce its outlines, arrows or labels. Preserve unedited paper lettering and geometry, natural paper grain, thin note edges and coherent contact shadows. Photoreal ordinary office lighting, no face, no extra person, no added objects. Keep full original 9:16 canvas for this edit; do not crop or enlarge now.",
+          "descriptor": "镜11停笔构图修订候选：从镜10已采用图的原始同向纸面派生，完整移除林岚手袖，周启单手独持同一黑笔悬于周五旁，保留原字和纸向；先全幅编辑，后按实际结果决定裁切。尚未检查，不代表停笔或动态已通过。"
+        }
+      },
+      "reason": "继续镜11停笔未签构图：改用已采用递笔图的真实纸面作底，按已保存的完整手笔选区换成周启独持悬笔，保留正确纸向和全部原字。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "image.enqueue",
+        "status": "SUCCEEDED",
+        "output": {
+          "task": {
+            "id": "image-task-70c0392d9c77",
+            "project_id": "project-564a0137c835",
+            "asset_id": "asset-8514c45a7c73",
+            "output_version_id": "asset-version-87934a481075",
+            "output_version_number": 8,
+            "descriptor": "镜11停笔构图修订候选：从镜10已采用图的原始同向纸面派生，完整移除林岚手袖，周启单手独持同一黑笔悬于周五旁，保留原字和纸向；先全幅编辑，后按实际结果决定裁切。尚未检查，不代表停笔或动态已通过。",
+            "parent_version_id": "asset-version-f9589d56833d",
+            "operation": "EDIT",
+            "status": "QUEUED",
+            "provider": "openai",
+            "model": "gpt-image-2",
+            "request": {
+              "operation": "EDIT",
+              "prompt": "Edit image 1 into the same-axis tabletop insert for Zhou Qi pausing without signing. Retain the exact camera and paper plane from image 1: the document top edge, title baseline and yellow-note edges continue sloping DOWN toward image right. Do not rotate the paper, note, title, design or handwriting. Keep all existing ink: title 定稿确认单, original bottom 确认：周启, red note lines 换配色 and 重排版式, and black 周五. The blank space beside 周五 remains genuinely blank, without a new signature, tick, dot or stroke.\nInside the supplied editable regions remove BOTH gray-blue-sleeved Lin Lan hands and their visible sleeve portions. Restore the pale wood and the existing white/blue document surfaces revealed beneath them, following the original straight edges and existing design. No residual fingers or old pen fragments.\nRebuild the entire navy-sleeved male hand and the ONE black retractable pen as a coherent natural held object, rather than retaining the old shared handoff grip. Only Zhou Qi's one adult male hand remains visible, entering naturally from image right with continuous fingers, palm, wrist and navy cuff. Hold the safe black barrel behind the silver tip in a relaxed writing grip. Reference 2 defines the pen shape, not its angle. Preserve normal real pen proportions, a single clip, rear button and short silver writing tip; no elongated shaft, cap or duplicate pen.\nPlace the complete pen and essential holding hand within the right-side area x=0.50–1.00, y=0.265625–0.765625 so a later vertical crop can retain them. The hand and rear pen can occupy the open upper-right area. Allow a different natural grip from the old picture. Aim the silver tip above the BLANK area immediately to the right of the black 周五 line, approximately at image coordinate (0.815,0.445), without covering the date or red lines. This coordinate is an approximate visual target, not an ink point. Lift the WHOLE pen clearly away from the paper: the tip is visibly suspended in air, with its soft left-window-light shadow visibly displaced on the paper below. Show an unmistakable separation rather than a nearly touching writing pose. No contact of the tip with paper or skin, no writing, no motion blur. The hand may naturally adjust its wrist angle to make the air gap legible.\nImage 4 is only the editing guide. Do not reproduce its outlines, arrows or labels. Preserve unedited paper lettering and geometry, natural paper grain, thin note edges and coherent contact shadows. Photoreal ordinary office lighting, no face, no extra person, no added objects. Keep full original 9:16 canvas for this edit; do not crop or enlarge now.",
+              "size": "1152x2048",
+              "quality": "high",
+              "background": "opaque",
+              "output_format": "png",
+              "layout_profile": "LIGHTWEIGHT_SINGLE",
+              "input_version_ids": [],
+              "reference_inputs": [
+                {
+                  "asset_version_id": "asset-version-f9589d56833d",
+                  "purpose": "实际编辑底图；保留纸张、便签、所有文字、蓝白版式、木桌和光向，只在选区内改变完整手笔组合。当前双方递笔状态不是目标。",
+                  "subject_alias": "同向桌面底板",
+                  "reference_role": "COMPOSITION",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-33e2632ded3d",
+                  "purpose": "保持同一支正常比例的哑光黑杆、单黑夹、尾部按钮及小型银灰伸出书写尖；不采用本图背景或摆放角度。",
+                  "subject_alias": "唯一黑色按动笔",
+                  "reference_role": "PROP_IDENTITY",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-d57c89b3d1dd",
+                  "purpose": "仅贡献海军蓝放下的长袖袖口、肤色及成年男性手臂比例，不出现脸、全身或中性背景。",
+                  "subject_alias": "周启衣着",
+                  "reference_role": "WARDROBE",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-069e2d133682",
+                  "purpose": "圈线表示移除林岚双手并重排周启完整手笔的区域，箭头表示日期旁悬尖目标；所有标记均不得出现在结果。",
+                  "subject_alias": "完整手笔换姿范围",
+                  "reference_role": "LAYOUT_GUIDE",
+                  "reference_authority": "GUIDE_ONLY"
+                }
+              ],
+              "primary_input_version_id": "asset-version-f9589d56833d",
+              "mask_version_id": "asset-version-0781f694450b",
+              "mask_feather_pixels": 4
+            },
+            "attempt": 1,
+            "retry_of_task_id": null,
+            "provider_request_id": null,
+            "provider_output_path": null,
+            "provider_output_version_id": null,
+            "provider_output_version_number": 7,
+            "staged_path": null,
+            "output_path": null,
+            "output_mime_type": null,
+            "revised_prompt": null,
+            "usage": null,
+            "cost": null,
+            "error_code": null,
+            "error_message": null,
+            "retry_disposition": null,
+            "submitted_at": null,
+            "finished_at": null,
+            "created_at": "2026-09-12T09:18:53.855+00:00",
+            "updated_at": "2026-09-12T09:18:53.855+00:00"
+          },
+          "project": {
+            "project": {
+              "id": "project-564a0137c835",
+              "name": "视频前完整验收 · 第五轮空项目",
+              "source_mode": "IDEA_EXPANSION",
+              "run_mode": "AUTO_DRAFT",
+              "production_profile": "AI_SHORT_DRAMA",
+              "content_planning_output": "SCRIPT_AND_SHOTS",
+              "language": "zh-CN",
+              "aspect_ratio": "9:16",
+              "target_duration_seconds": 54.0,
+              "voice_reference_revision": 0,
+              "stage": "PLANNED",
+              "current_script_version_id": "project-564a0137c835-script-v2",
+              "current_bible_version_id": "project-564a0137c835-bible-v1",
+              "current_manifest_id": null,
+              "updated_at": "2026-09-12T09:18:17.609+00:00"
+            },
+            "document_pointers": {
+              "master_audio_document_id": null,
+              "audio_structure_document_id": null,
+              "timed_text_document_id": null,
+              "production_spec_document_id": "production-document-fdce833348ee",
+              "storyboard_document_id": "production-document-a3cda4845653",
+              "asset_plan_document_id": null,
+              "generation_plan_document_id": "production-document-8f9be22a9c84"
+            },
+            "production_document_refs": [
+              {
+                "id": "production-document-fdce833348ee",
+                "kind": "production.spec",
+                "current_version_id": "production-document-version-d5fb6e095753"
+              },
+              {
+                "id": "production-document-2458c416ac05",
+                "kind": "storyboard.draft",
+                "current_version_id": "production-document-version-f36579303052"
+              },
+              {
+                "id": "production-document-a3cda4845653",
+                "kind": "storyboard",
+                "current_version_id": "production-document-version-886fee20a46d"
+              },
+              {
+                "id": "production-document-8f9be22a9c84",
+                "kind": "video.generation-plan",
+                "current_version_id": "production-document-version-bb1a3fdb56e7"
+              }
+            ],
+            "output_slots": [
+              {
+                "id": "production.spec.current",
+                "revision": 1,
+                "current_artifact_ref": {
+                  "project_id": "project-564a0137c835",
+                  "artifact_type": "production_spec",
+                  "artifact_id": "production-document-fdce833348ee",
+                  "version": 1
+                },
+                "invalidation_reason": null
+              },
+              {
+                "id": "storyboard.current",
+                "revision": 14,
+                "current_artifact_ref": {
+                  "project_id": "project-564a0137c835",
+                  "artifact_type": "storyboard",
+                  "artifact_id": "production-document-a3cda4845653",
+                  "version": 14
+                },
+                "invalidation_reason": null
+              },
+              {
+                "id": "video.generation-plan.current",
+                "revision": 2,
+                "current_artifact_ref": null,
+                "invalidation_reason": "Storyboard changed after the GenerationPlan was compiled."
+              }
+            ],
+            "take_selection": [],
+            "counts": {
+              "assets": 16,
+              "shots": 16,
+              "reference_packs": 5,
+              "production_documents": 4,
+              "manifests": 0,
+              "tasks": 0,
+              "takes": 0,
+              "exports": 0,
+              "route_evidence": 0,
+              "video_inspections": 0,
+              "take_comparisons": 0,
+              "audio_inspections": 0,
+              "episode_reviews": 0
+            },
+            "progress": {
+              "total_shots": 16,
+              "shots_with_selected_take": 0,
+              "total_tasks": 0,
+              "terminal_tasks": 0,
+              "failed_tasks": 0,
+              "unresolved_tasks": 0,
+              "passed_takes": 0,
+              "stale_takes": 0,
+              "manifest_ready": false,
+              "export_ready": false
+            }
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-70c0392d9c77",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset",
+            "artifact_id": "asset-8514c45a7c73",
+            "version": null
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "image_task",
+              "artifact_id": "image-task-70c0392d9c77",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset",
+              "artifact_id": "asset-8514c45a7c73",
+              "version": null
+            }
+          ],
+          "current_state": {
+            "task.id": "image-task-70c0392d9c77",
+            "task.project_id": "project-564a0137c835",
+            "task.status": "QUEUED",
+            "task.output_path": null
+          },
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T09:18:52.896031Z",
+      "updated_at": "2026-09-12T09:18:54.006939Z"
+    },
+    {
+      "id": "executor-image-lifecycle-work-order-38824900349d488fb9e4bff7e07f7e0a-41",
+      "sequence": 41,
+      "tool_name": "image.advance",
+      "arguments": {
+        "task_id": "image-task-70c0392d9c77"
+      },
+      "reason": "图片任务已保存，继续准备并提交当前素材。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "image.advance",
+        "status": "SUCCEEDED",
+        "output": {
+          "task": {
+            "id": "image-task-70c0392d9c77",
+            "project_id": "project-564a0137c835",
+            "asset_id": "asset-8514c45a7c73",
+            "output_version_id": "asset-version-87934a481075",
+            "output_version_number": 8,
+            "descriptor": "镜11停笔构图修订候选：从镜10已采用图的原始同向纸面派生，完整移除林岚手袖，周启单手独持同一黑笔悬于周五旁，保留原字和纸向；先全幅编辑，后按实际结果决定裁切。尚未检查，不代表停笔或动态已通过。",
+            "parent_version_id": "asset-version-f9589d56833d",
+            "operation": "EDIT",
+            "status": "SUCCEEDED",
+            "provider": "openai",
+            "model": "gpt-image-2",
+            "request": {
+              "operation": "EDIT",
+              "prompt": "Edit image 1 into the same-axis tabletop insert for Zhou Qi pausing without signing. Retain the exact camera and paper plane from image 1: the document top edge, title baseline and yellow-note edges continue sloping DOWN toward image right. Do not rotate the paper, note, title, design or handwriting. Keep all existing ink: title 定稿确认单, original bottom 确认：周启, red note lines 换配色 and 重排版式, and black 周五. The blank space beside 周五 remains genuinely blank, without a new signature, tick, dot or stroke.\nInside the supplied editable regions remove BOTH gray-blue-sleeved Lin Lan hands and their visible sleeve portions. Restore the pale wood and the existing white/blue document surfaces revealed beneath them, following the original straight edges and existing design. No residual fingers or old pen fragments.\nRebuild the entire navy-sleeved male hand and the ONE black retractable pen as a coherent natural held object, rather than retaining the old shared handoff grip. Only Zhou Qi's one adult male hand remains visible, entering naturally from image right with continuous fingers, palm, wrist and navy cuff. Hold the safe black barrel behind the silver tip in a relaxed writing grip. Reference 2 defines the pen shape, not its angle. Preserve normal real pen proportions, a single clip, rear button and short silver writing tip; no elongated shaft, cap or duplicate pen.\nPlace the complete pen and essential holding hand within the right-side area x=0.50–1.00, y=0.265625–0.765625 so a later vertical crop can retain them. The hand and rear pen can occupy the open upper-right area. Allow a different natural grip from the old picture. Aim the silver tip above the BLANK area immediately to the right of the black 周五 line, approximately at image coordinate (0.815,0.445), without covering the date or red lines. This coordinate is an approximate visual target, not an ink point. Lift the WHOLE pen clearly away from the paper: the tip is visibly suspended in air, with its soft left-window-light shadow visibly displaced on the paper below. Show an unmistakable separation rather than a nearly touching writing pose. No contact of the tip with paper or skin, no writing, no motion blur. The hand may naturally adjust its wrist angle to make the air gap legible.\nImage 4 is only the editing guide. Do not reproduce its outlines, arrows or labels. Preserve unedited paper lettering and geometry, natural paper grain, thin note edges and coherent contact shadows. Photoreal ordinary office lighting, no face, no extra person, no added objects. Keep full original 9:16 canvas for this edit; do not crop or enlarge now.",
+              "size": "1152x2048",
+              "quality": "high",
+              "background": "opaque",
+              "output_format": "png",
+              "layout_profile": "LIGHTWEIGHT_SINGLE",
+              "input_version_ids": [],
+              "reference_inputs": [
+                {
+                  "asset_version_id": "asset-version-f9589d56833d",
+                  "purpose": "实际编辑底图；保留纸张、便签、所有文字、蓝白版式、木桌和光向，只在选区内改变完整手笔组合。当前双方递笔状态不是目标。",
+                  "subject_alias": "同向桌面底板",
+                  "reference_role": "COMPOSITION",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-33e2632ded3d",
+                  "purpose": "保持同一支正常比例的哑光黑杆、单黑夹、尾部按钮及小型银灰伸出书写尖；不采用本图背景或摆放角度。",
+                  "subject_alias": "唯一黑色按动笔",
+                  "reference_role": "PROP_IDENTITY",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-d57c89b3d1dd",
+                  "purpose": "仅贡献海军蓝放下的长袖袖口、肤色及成年男性手臂比例，不出现脸、全身或中性背景。",
+                  "subject_alias": "周启衣着",
+                  "reference_role": "WARDROBE",
+                  "reference_authority": "AUTHORITATIVE"
+                },
+                {
+                  "asset_version_id": "asset-version-069e2d133682",
+                  "purpose": "圈线表示移除林岚双手并重排周启完整手笔的区域，箭头表示日期旁悬尖目标；所有标记均不得出现在结果。",
+                  "subject_alias": "完整手笔换姿范围",
+                  "reference_role": "LAYOUT_GUIDE",
+                  "reference_authority": "GUIDE_ONLY"
+                }
+              ],
+              "primary_input_version_id": "asset-version-f9589d56833d",
+              "mask_version_id": "asset-version-0781f694450b",
+              "mask_feather_pixels": 4
+            },
+            "attempt": 1,
+            "retry_of_task_id": null,
+            "provider_request_id": "06216b15-f704-4b46-8172-f6a488febe5e",
+            "provider_output_path": "/fixtures/fresh5/image-task-70c0392d9c77.png",
+            "provider_output_version_id": "asset-version-59b5d165028c",
+            "provider_output_version_number": 7,
+            "staged_path": "/fixtures/fresh5/image-task-70c0392d9c77.png.part",
+            "output_path": "/fixtures/fresh5/v8-asset-version-87934a481075.png",
+            "output_mime_type": "image/png",
+            "revised_prompt": null,
+            "usage": {
+              "input_tokens": 7000,
+              "input_tokens_details": {
+                "image_tokens": 6045,
+                "text_tokens": 955
+              },
+              "output_tokens": 5650,
+              "output_tokens_details": {
+                "image_tokens": 5650,
+                "text_tokens": 0
+              },
+              "total_tokens": 12650
+            },
+            "cost": {
+              "estimated_amount": 0.222635,
+              "currency": "USD",
+              "pricing": {
+                "currency": "USD",
+                "unit": "PER_1M_TOKENS",
+                "image_input": 8.0,
+                "text_input": 5.0,
+                "image_output": 30.0,
+                "captured_at": "2026-09-12T09:20:42.051+00:00"
+              },
+              "usage": {
+                "input_tokens": 7000,
+                "input_tokens_details": {
+                  "image_tokens": 6045,
+                  "text_tokens": 955
+                },
+                "output_tokens": 5650,
+                "output_tokens_details": {
+                  "image_tokens": 5650,
+                  "text_tokens": 0
+                },
+                "total_tokens": 12650
+              },
+              "note": "Estimate from provider token usage; provider billing is authoritative."
+            },
+            "error_code": null,
+            "error_message": null,
+            "retry_disposition": null,
+            "submitted_at": "2026-09-12T09:18:56.143+00:00",
+            "finished_at": "2026-09-12T09:20:42.462+00:00",
+            "created_at": "2026-09-12T09:18:53.855+00:00",
+            "updated_at": "2026-09-12T09:20:42.462+00:00"
+          },
+          "project": {
+            "project": {
+              "id": "project-564a0137c835",
+              "name": "视频前完整验收 · 第五轮空项目",
+              "source_mode": "IDEA_EXPANSION",
+              "run_mode": "AUTO_DRAFT",
+              "production_profile": "AI_SHORT_DRAMA",
+              "content_planning_output": "SCRIPT_AND_SHOTS",
+              "language": "zh-CN",
+              "aspect_ratio": "9:16",
+              "target_duration_seconds": 54.0,
+              "voice_reference_revision": 0,
+              "stage": "PLANNED",
+              "current_script_version_id": "project-564a0137c835-script-v2",
+              "current_bible_version_id": "project-564a0137c835-bible-v1",
+              "current_manifest_id": null,
+              "updated_at": "2026-09-12T09:20:42.462+00:00"
+            },
+            "document_pointers": {
+              "master_audio_document_id": null,
+              "audio_structure_document_id": null,
+              "timed_text_document_id": null,
+              "production_spec_document_id": "production-document-fdce833348ee",
+              "storyboard_document_id": "production-document-a3cda4845653",
+              "asset_plan_document_id": null,
+              "generation_plan_document_id": "production-document-8f9be22a9c84"
+            },
+            "production_document_refs": [
+              {
+                "id": "production-document-fdce833348ee",
+                "kind": "production.spec",
+                "current_version_id": "production-document-version-d5fb6e095753"
+              },
+              {
+                "id": "production-document-2458c416ac05",
+                "kind": "storyboard.draft",
+                "current_version_id": "production-document-version-f36579303052"
+              },
+              {
+                "id": "production-document-a3cda4845653",
+                "kind": "storyboard",
+                "current_version_id": "production-document-version-886fee20a46d"
+              },
+              {
+                "id": "production-document-8f9be22a9c84",
+                "kind": "video.generation-plan",
+                "current_version_id": "production-document-version-bb1a3fdb56e7"
+              }
+            ],
+            "output_slots": [
+              {
+                "id": "production.spec.current",
+                "revision": 1,
+                "current_artifact_ref": {
+                  "project_id": "project-564a0137c835",
+                  "artifact_type": "production_spec",
+                  "artifact_id": "production-document-fdce833348ee",
+                  "version": 1
+                },
+                "invalidation_reason": null
+              },
+              {
+                "id": "storyboard.current",
+                "revision": 14,
+                "current_artifact_ref": {
+                  "project_id": "project-564a0137c835",
+                  "artifact_type": "storyboard",
+                  "artifact_id": "production-document-a3cda4845653",
+                  "version": 14
+                },
+                "invalidation_reason": null
+              },
+              {
+                "id": "video.generation-plan.current",
+                "revision": 2,
+                "current_artifact_ref": null,
+                "invalidation_reason": "Storyboard changed after the GenerationPlan was compiled."
+              }
+            ],
+            "take_selection": [],
+            "counts": {
+              "assets": 16,
+              "shots": 16,
+              "reference_packs": 5,
+              "production_documents": 4,
+              "manifests": 0,
+              "tasks": 0,
+              "takes": 0,
+              "exports": 0,
+              "route_evidence": 0,
+              "video_inspections": 0,
+              "take_comparisons": 0,
+              "audio_inspections": 0,
+              "episode_reviews": 0
+            },
+            "progress": {
+              "total_shots": 16,
+              "shots_with_selected_take": 0,
+              "total_tasks": 0,
+              "terminal_tasks": 0,
+              "failed_tasks": 0,
+              "unresolved_tasks": 0,
+              "passed_takes": 0,
+              "stale_takes": 0,
+              "manifest_ready": false,
+              "export_ready": false
+            }
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-70c0392d9c77",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset",
+            "artifact_id": "asset-8514c45a7c73",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-59b5d165028c",
+            "version": 7
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-87934a481075",
+            "version": 8
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "image_task",
+              "artifact_id": "image-task-70c0392d9c77",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset",
+              "artifact_id": "asset-8514c45a7c73",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-59b5d165028c",
+              "version": 7
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-87934a481075",
+              "version": 8
+            }
+          ],
+          "current_state": {
+            "task.id": "image-task-70c0392d9c77",
+            "task.project_id": "project-564a0137c835",
+            "task.status": "SUCCEEDED",
+            "task.output_path": "/fixtures/fresh5/v8-asset-version-87934a481075.png"
+          },
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T09:18:55.473686Z",
+      "updated_at": "2026-09-12T09:20:42.716140Z"
+    },
+    {
+      "id": "specialist-turn-be7c5d3f7d07493baf90f284a79b2dc2",
+      "sequence": 42,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "asset_id": "asset-8514c45a7c73",
+        "version_id": "asset-version-87934a481075",
+        "request": {
+          "shot_id": "shot-andingao-11",
+          "canonical_reference_version_ids": [
+            "asset-version-e00af3fe58d4",
+            "asset-version-33e2632ded3d",
+            "asset-version-d57c89b3d1dd"
+          ],
+          "review_focus": "本张从已采用镜10的完整同向底板进行完整手笔换姿，拟用于镜11的0–2.4秒停笔静态COMPOSITION；之前反向纸面候选不再作为底图。本次检查实际纸顶边、标题和便签是否保持向画右下倾的承接，原红黑文字是否未受编辑损伤，是否已完全移除林岚双手袖口和旧笔残片。仅周启海军蓝袖的一只手独持唯一黑笔，检查全笔正常比例、指掌腕袖连续，以及遮罩边界是否截断、残片或接缝。核心是银灰笔尖指向周五旁空白，尖端与纸面和投影是否有清楚空气间隙，确实未触纸，不能只用没有新增字来证明。逐字读取实际便签换配色、重排版式、周五，日期旁无新签名或墨点，黄底自然。拟裁框x=.5,y=.265625,width=.5,height=.5仅为此前底图建议，请基于新结果确认整笔、握手、腕袖、整张便签和空白区是否都能保留且旧签名在框外；若合适给crop_suggestion，否则给真实新框或说明不能裁。若本地mask边界损伤而供应商原始结果可能可用，请准确指出，不重复旧建议。静态不证明2.4秒动态保持，脸和全房间不在范围。",
+          "narrative_context": {
+            "scene_id": "scene-885d61c18b62"
+          },
+          "implementation_preferences": [
+            "具体握姿和悬停高度可调整；必要的是同向承接、主管独持笔、可辨未触纸及日期未签，不要求逐像素配准。"
+          ],
+          "regions": [
+            {
+              "label": "拟取9:16局部与完整手笔",
+              "region": {
+                "x": 0.5,
+                "y": 0.265625,
+                "width": 0.5,
+                "height": 0.5
+              }
+            }
+          ]
+        }
+      },
+      "reason": "检查镜11刚完成的同向纸面修订，确认停笔证据及裁切范围是否实际成立，再决定采用或局部处理。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 1.8,
+          "issues": [
+            {
+              "code": "PROP_COMPONENT_TRUNCATED",
+              "severity": "major",
+              "message": "黑笔画左前端在约(0.582, 0.531)处呈垂直截断面，收尖段和银灰书写尖均不可见；画右的单夹、尾钮仍在。这不是完整的母版笔形，且直接丢失本镜必须展示的尖端证据。",
+              "repair_layer": "LOCAL_COMPOSITE",
+              "category": "PROP_CONTINUITY"
+            },
+            {
+              "code": "LIMB_CONTOUR_DISCONTINUITY",
+              "severity": "major",
+              "message": "便签下方的手背上缘约x=0.769、y=0.466–0.482出现垂直切口与方形台阶，位置对应编辑圈的拐角，皮肤轮廓明显被截断。下方掌腕与海军蓝袖口连接尚连续，但不能抵消上缘破损，特写会暴露拼接感。",
+              "repair_layer": "LOCAL_COMPOSITE",
+              "category": "TECHNICAL_MEDIA"
+            },
+            {
+              "code": "BACKGROUND_COMPOSITE_SEAM",
+              "severity": "major",
+              "message": "林岚双手和灰蓝袖已不见，但原位置的背景恢复不完整：约x=0–0.59、y=0.47–0.61内出现沿多边形边界的灰暗块、错位蓝白块面和木桌硬接缝。纸面看起来被折断或覆盖了异色贴片，破坏原本平整的纸张与桌面关系。",
+              "repair_layer": "LOCAL_COMPOSITE",
+              "category": "TECHNICAL_MEDIA"
+            },
+            {
+              "code": "ACTION_STATE_MISMATCH",
+              "severity": "major",
+              "message": "现有笔杆横向指向画左，残缺前端位于便签左下方的蓝白版面上方，并非“周五”旁空白处。真实尖端缺失，也没有可辨的尖端—纸面—投影分离证据。因此不能确认所要求的停笔悬空状态；日期旁没有新增墨迹不能替代该证据。这里不是认定笔已触纸，而是当前图无法承担明确展示未触纸的职责。",
+              "repair_layer": "POSE_AND_COMPOSITION",
+              "category": "CONTACT_CONTINUITY"
+            }
+          ],
+          "summary": "不建议用于镜11的停笔静态COMPOSITION。可保留的部分是同向纸面与既有文字：纸顶边、标题基线和便签上边仍向画右下倾；“定稿确认单”、红字“换配色”“重排版式”、黑字“周五”及底部“确认：周启”均可辨。黄色便签仍贴附，日期右侧未见新增签名、勾画或墨点。林岚双手袖口已移除，画内仅见一只海军蓝袖持笔手，未见第二支笔或独立旧笔残片。但笔前端、手背轮廓与背景恢复均有明显破损，核心悬停位置也未建立。\n全图旧签名仍可见属于当前未裁状态；附裁框可将其排除，但不会修好手笔或改变停笔位置。优先检查已登记、但本次未展示的供应商原始结果asset-version-59b5d165028c，不能由本合成图推定原图同样损坏或已经可用。若原图具有完整手笔且状态正确，可依据其实际轮廓重新合成，并复核圈外纸面；若原图也未建立日期旁悬停，则需调整整组手笔姿态与覆盖范围，而非仅补银尖或沿旧圈重复修补。未见原始结果的新轮廓，本次不提供替代mask。\n本结论仅覆盖纸笔、可见手部和桌面局部，不涉及脸部、全房间，也不证明2.4秒动态保持。",
+          "review_focus": "本张从已采用镜10的完整同向底板进行完整手笔换姿，拟用于镜11的0–2.4秒停笔静态COMPOSITION；之前反向纸面候选不再作为底图。本次检查实际纸顶边、标题和便签是否保持向画右下倾的承接，原红黑文字是否未受编辑损伤，是否已完全移除林岚双手袖口和旧笔残片。仅周启海军蓝袖的一只手独持唯一黑笔，检查全笔正常比例、指掌腕袖连续，以及遮罩边界是否截断、残片或接缝。核心是银灰笔尖指向周五旁空白，尖端与纸面和投影是否有清楚空气间隙，确实未触纸，不能只用没有新增字来证明。逐字读取实际便签换配色、重排版式、周五，日期旁无新签名或墨点，黄底自然。拟裁框x=.5,y=.265625,width=.5,height=.5仅为此前底图建议，请基于新结果确认整笔、握手、腕袖、整张便签和空白区是否都能保留且旧签名在框外；若合适给crop_suggestion，否则给真实新框或说明不能裁。若本地mask边界损伤而供应商原始结果可能可用，请准确指出，不重复旧建议。静态不证明2.4秒动态保持，脸和全房间不在范围。",
+          "narrative_context": {
+            "project_id": "project-564a0137c835",
+            "script_version_id": "project-564a0137c835-script-v2",
+            "script_version": 2,
+            "scene": {
+              "id": "scene-885d61c18b62",
+              "heading": "《按定稿》｜第一场 内景·小会议室·周三傍晚",
+              "summary": "周三傍晚，主管周启要求已签字的设计定稿更换配色与版式，仍须明早交付。林岚指出重做需要两天，在修改便签上写下周五并请他确认。周启不愿改变交期，接笔却没有签字，亲手揭下修改便签，恢复原定稿；林岚确认明早交付。"
+            },
+            "lines": []
+          },
+          "implementation_preferences": [
+            "具体握姿和悬停高度可调整；必要的是同向承接、主管独持笔、可辨未触纸及日期未签，不要求逐像素配准。"
+          ],
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [
+            {
+              "asset_version_id": "asset-version-87934a481075",
+              "label": "拟取9:16局部与完整手笔",
+              "source_width": 1152,
+              "source_height": 2048,
+              "box_pixels": [
+                576,
+                544,
+                1152,
+                1568
+              ]
+            }
+          ],
+          "crop_suggestion": {
+            "region": {
+              "x": 0.5,
+              "y": 0.265625,
+              "width": 0.5,
+              "height": 0.5
+            },
+            "reason": "该范围为576×1024、9:16。已展示的局部确认可保留整张便签、日期右侧空白、现有可见笔杆与尾钮、握指掌腕及一段海军蓝袖口，并将底部旧签名完全排除。它仅解决景别和旧签名入镜问题：源图缺失的笔尖无法靠裁切补回，手背断口、局部接缝和停笔位置问题仍在，裁后预期不构成通过。",
+            "source": {
+              "source_asset_version_id": "asset-version-87934a481075",
+              "source_width": 1152,
+              "source_height": 2048,
+              "box_pixels": [
+                576,
+                544,
+                1152,
+                1568
+              ]
+            }
+          },
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-f9589d56833d"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-33e2632ded3d"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-d57c89b3d1dd"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-069e2d133682"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-e00af3fe58d4"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset",
+            "artifact_id": "asset-8514c45a7c73",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-andingao-11",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "script_version",
+            "artifact_id": "project-564a0137c835-script-v2",
+            "version": 2
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-87934a481075",
+            "version": 8
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f9589d56833d",
+            "version": 4
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-33e2632ded3d",
+            "version": 2
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d57c89b3d1dd",
+            "version": 2
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-069e2d133682",
+            "version": 5
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-e00af3fe58d4",
+            "version": 6
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset",
+              "artifact_id": "asset-8514c45a7c73",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-andingao-11",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-87934a481075",
+              "version": 8
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f9589d56833d",
+              "version": 4
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-33e2632ded3d",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d57c89b3d1dd",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-069e2d133682",
+              "version": 5
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-e00af3fe58d4",
+              "version": 6
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T09:21:00.336399Z",
+      "updated_at": "2026-09-12T09:23:02.061769Z"
+    },
+    {
+      "id": "specialist-turn-2d471db5f8c540119461ba738a66bf54",
+      "sequence": 43,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "asset_id": "asset-8514c45a7c73",
+        "version_id": "asset-version-59b5d165028c",
+        "request": {
+          "shot_id": "shot-andingao-11",
+          "canonical_reference_version_ids": [
+            "asset-version-e00af3fe58d4",
+            "asset-version-33e2632ded3d",
+            "asset-version-d57c89b3d1dd"
+          ],
+          "review_focus": "本张是同次完整手笔换姿的供应商原始结果，未应用本地遮罩。拟供镜11的0–2.4秒停笔静态COMPOSITION；不可把遮罩合成87934a481075的断笔、手背切口和背景接缝直接套用。请实际检查唯一黑笔是否完整，黑杆、黑夹、尾钮、银灰尖端比例正常，海军蓝袖口的一只成年男性手独持，指掌腕袖连续，林岚两只手及灰蓝袖是否移除干净。核心是笔尖在周五旁空白上方且尖端、纸面与投影有可辨分离，不能仅用未新增字证明未触纸。核对红字换配色、重排版式、黑字周五，日期旁无姓名、勾画或墨点；便签仍贴在同一A4，纸边、标题基线和便签保持镜10向画右下倾的承接，黄底及恢复的蓝白纸面、木桌自然。全图原签名允许暂时存在，最终局部须排除。若原图可用，基于真实完整手笔位置给9:16 crop_suggestion，保留整便签、空白、完整笔及必要腕袖，排除旧签名；不要机械沿用旧裁框。若仍未建立悬停或同向承接，请说明可保留部分及最小导演覆盖取舍，不再建议只补笔尖或重复旧圈。静态不证明持续悬停、脸部或整室拓扑。",
+          "narrative_context": {
+            "scene_id": "scene-885d61c18b62"
+          },
+          "implementation_preferences": [
+            "具体握姿、悬停高度和横向位置可优化；必要的是同向承接、主管独持同一支笔、可辨未触纸及日期未签，不要求逐像素配准。"
+          ]
+        }
+      },
+      "reason": "停笔候选的局部遮罩截断了笔和手背；先检查同次已落盘的供应商原图，判断能否保留完整像素，不重复生成。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.4,
+          "issues": [
+            {
+              "code": "PEN_TIP_TARGET_MISMATCH",
+              "severity": "major",
+              "message": "笔尖朝画左，位于黄色便签左下方的蓝色印刷区上方，明显远离“周五”右侧的黄色空白。当前姿态可读为抬着笔，但没有建立镜11明确要求的“笔已到新日期旁、欲签而未落笔”状态。日期旁没有新增墨迹不能替代这一位置关系，裁切也无法修正。",
+              "repair_layer": "POSE_EDIT_OR_LEADER_REPLAN",
+              "category": "CONTACT_CONTINUITY"
+            }
+          ],
+          "summary": "本张原图中的黑笔完整：黑杆、黑夹、尾钮及小型银灰尖端均可见，与母版没有明显形制矛盾。画内仅有一只成年右手独持，指掌、手背、腕部和海军蓝袖口连接自然；未见断笔、手背切口或桌纸拼接线。林岚双手及灰蓝袖没有可见残留，恢复的木桌纹理与蓝白纸面连贯。\n黄色便签仍贴在同一A4上，红字“换配色”“重排版式”、黑字“周五”清楚，日期右侧未见姓名、勾画或墨点。纸边、标题基线及便签保持向画右下倾的方向，与镜10承接相容。纸底旧签名仍在，按本次全幅底图用途允许保留，可由下述裁框排除。\n银灰尖端轮廓清楚，笔下有偏下分离的柔影，支持静态抬笔读感；核心不足是笔尖停在便签左下的蓝色区域，而不是新日期旁。因此可保留完整手笔、干净底图与同向纸面，但不能直接用于当前镜11的停笔职责。\n取舍上，维持镜11现有设计需整体调整手、笔、必要腕袖连接及投影，而非只补笔尖；新握姿与笔尾容纳空间尚未确定，不提供狭小编辑圈。若优先复用，Leader可考虑改为“接稳后持笔未写、日期留白同框”的过渡构图，代价是弱化“即将在周五旁签字”的动作含义，须同步调整镜11描述，不能视为原用途已通过。本次不证明持续悬停、接笔动态、脸部身份或整室拓扑。",
+          "review_focus": "本张是同次完整手笔换姿的供应商原始结果，未应用本地遮罩。拟供镜11的0–2.4秒停笔静态COMPOSITION；不可把遮罩合成87934a481075的断笔、手背切口和背景接缝直接套用。请实际检查唯一黑笔是否完整，黑杆、黑夹、尾钮、银灰尖端比例正常，海军蓝袖口的一只成年男性手独持，指掌腕袖连续，林岚两只手及灰蓝袖是否移除干净。核心是笔尖在周五旁空白上方且尖端、纸面与投影有可辨分离，不能仅用未新增字证明未触纸。核对红字换配色、重排版式、黑字周五，日期旁无姓名、勾画或墨点；便签仍贴在同一A4，纸边、标题基线和便签保持镜10向画右下倾的承接，黄底及恢复的蓝白纸面、木桌自然。全图原签名允许暂时存在，最终局部须排除。若原图可用，基于真实完整手笔位置给9:16 crop_suggestion，保留整便签、空白、完整笔及必要腕袖，排除旧签名；不要机械沿用旧裁框。若仍未建立悬停或同向承接，请说明可保留部分及最小导演覆盖取舍，不再建议只补笔尖或重复旧圈。静态不证明持续悬停、脸部或整室拓扑。",
+          "narrative_context": {
+            "project_id": "project-564a0137c835",
+            "script_version_id": "project-564a0137c835-script-v2",
+            "script_version": 2,
+            "scene": {
+              "id": "scene-885d61c18b62",
+              "heading": "《按定稿》｜第一场 内景·小会议室·周三傍晚",
+              "summary": "周三傍晚，主管周启要求已签字的设计定稿更换配色与版式，仍须明早交付。林岚指出重做需要两天，在修改便签上写下周五并请他确认。周启不愿改变交期，接笔却没有签字，亲手揭下修改便签，恢复原定稿；林岚确认明早交付。"
+            },
+            "lines": []
+          },
+          "implementation_preferences": [
+            "具体握姿、悬停高度和横向位置可优化；必要的是同向承接、主管独持同一支笔、可辨未触纸及日期未签，不要求逐像素配准。"
+          ],
+          "candidate_output_layout": null,
+          "region_evidence": [],
+          "crop_suggestion": {
+            "region": {
+              "x": 0.5,
+              "y": 0.285,
+              "width": 0.5,
+              "height": 0.5
+            },
+            "reason": "此9:16裁框约为576×1024像素，可排除左下旧签名和大部分桌面留白，保留完整便签及日期旁空白、完整黑笔、标题和必要的指掌腕袖连接。仅解决景别与旧签名入画问题；裁后笔尖仍在便签左下方，不能据此通过当前镜11，也不会增加源图细节。",
+            "source": {
+              "source_asset_version_id": "asset-version-59b5d165028c",
+              "source_width": 1152,
+              "source_height": 2048,
+              "box_pixels": [
+                576,
+                583,
+                1152,
+                1608
+              ]
+            }
+          },
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-f9589d56833d"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-87934a481075"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-e00af3fe58d4"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-33e2632ded3d"
+            },
+            {
+              "source_project_id": "project-564a0137c835",
+              "asset_version_id": "asset-version-d57c89b3d1dd"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset",
+            "artifact_id": "asset-8514c45a7c73",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-andingao-11",
+            "version": null
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "script_version",
+            "artifact_id": "project-564a0137c835-script-v2",
+            "version": 2
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-59b5d165028c",
+            "version": 7
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f9589d56833d",
+            "version": 4
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-87934a481075",
+            "version": 8
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-e00af3fe58d4",
+            "version": 6
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-33e2632ded3d",
+            "version": 2
+          },
+          {
+            "project_id": "project-564a0137c835",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d57c89b3d1dd",
+            "version": 2
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset",
+              "artifact_id": "asset-8514c45a7c73",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-andingao-11",
+              "version": null
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-59b5d165028c",
+              "version": 7
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f9589d56833d",
+              "version": 4
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-87934a481075",
+              "version": 8
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-e00af3fe58d4",
+              "version": 6
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-33e2632ded3d",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d57c89b3d1dd",
+              "version": 2
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T09:23:22.948824Z",
+      "updated_at": "2026-09-12T09:25:25.740224Z"
+    }
+  ]
+}

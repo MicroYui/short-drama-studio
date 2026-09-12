@@ -1270,7 +1270,8 @@ def test_douyin_long_form_prompts_leave_pacing_to_semantic_reading() -> None:
     assert "不触发代码阈值" in final_read_instructions
     assert "观望、等待、行走或重复证明" in scene_instructions
     assert "导演的通用职责" in scene_instructions
-    assert "拆成可生成、可检查、可剪辑的单元" in scene_instructions
+    assert "转成可见的表演、调度、构图、动作、声音与时间设计" in scene_instructions
+    assert "不为生成方便静默改写故事" in scene_instructions
     assert "scene_pacing_evidence" not in scene_payload
 
 

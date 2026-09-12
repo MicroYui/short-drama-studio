@@ -8,6 +8,7 @@ including when the observing Worker is still busy with other assets.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -53,7 +54,29 @@ def asset_inspection_scope(request: JsonValue) -> dict[str, JsonValue]:
         scope["narrative_context"] = {"dialogue_line_ids": [], **narrative}
     if scope.get("implementation_preferences") == []:
         scope.pop("implementation_preferences")
+    if scope.get("compare_provider_output") is False:
+        scope.pop("compare_provider_output")
+    if scope.get("intended_reference_role") is None:
+        scope.pop("intended_reference_role", None)
     return scope
+
+
+def asset_inspection_reports(
+    arguments: Mapping[str, JsonValue], output: dict[str, JsonValue],
+) -> list[tuple[str, str, dict[str, JsonValue], str]]:
+    """Separate only actual observed candidates; each keeps its source path."""
+    asset_id, version_id = arguments.get("asset_id"), arguments.get("version_id")
+    if not isinstance(asset_id, str) or not isinstance(version_id, str):
+        return []
+    compared = output.get("provider_output_review")
+    reports = [(asset_id, version_id, {key: value for key, value in output.items()
+                if key != "provider_output_review" or not isinstance(compared, dict)}, "/output")]
+    if isinstance(compared, dict):
+        raw_id, number = compared.get("asset_version_id"), compared.get("version")
+        if (compared.get("asset_id") == asset_id and isinstance(raw_id, str) and raw_id
+            and raw_id != version_id and isinstance(number, int) and not isinstance(number, bool) and number > 0):
+            reports.append((asset_id, raw_id, compared, "/output/provider_output_review"))
+    return reports
 
 
 def _observation(
@@ -78,6 +101,7 @@ def _observation(
         scope = asset_inspection_scope(request)
         identity: JsonValue = [turn.tool_name, asset_id, version_id, scope,
                                output.get("narrative_context") if success else None,
+                               output.get("shot_revision") if success else None,
                                "pending" if pending else "saved"]
         body: dict[str, JsonValue] = {"kind": "image_inspection", "asset_id": asset_id,
             "asset_version_id": version_id, "scope": scope, "result": output if success else None}
@@ -118,6 +142,33 @@ def media_turn_observations(
     work: WorkOrder, turn: SpecialistTurnRecord, project_id: str,
 ) -> list[tuple[str, dict[str, JsonValue], set[str], list[ArtifactRef]]]:
     """Project each actual saved use while retaining its original Tool turn."""
+    if (turn.tool_name == "qa.inspect_asset_version" and turn.status == SpecialistTurnStatus.COMPLETED
+        and turn.result is not None and turn.result.get("status") == "SUCCEEDED"):
+        output = _dict(turn.result.get("output"))
+        observations: list[tuple[str, dict[str, JsonValue], set[str], list[ArtifactRef]]] = []
+        reports = asset_inspection_reports(turn.arguments, output)
+        for asset_id, version_id, report, pointer in reports:
+            projected = turn.model_copy(update={
+                "arguments": {**turn.arguments, "asset_id": asset_id, "version_id": version_id},
+                "result": {**turn.result, "output": report},
+            })
+            observation = _observation(work, projected, project_id)
+            if observation is None:
+                continue
+            key, body, related, refs = observation
+            body["source_output_pointer"] = pointer
+            # Paired candidates share a receipt, not a verdict or implicit selection.
+            request = _dict(turn.arguments.get("request"))
+            canonical = request.get("canonical_reference_version_ids")
+            selected = _strings([version_id, *(canonical if isinstance(canonical, list) else [])])
+            evidence = report.get("evidence_references")
+            for item in evidence if isinstance(evidence, list) else []:
+                if isinstance(item, dict) and item.get("source_project_id") == project_id:
+                    selected.update(_strings([item.get("asset_version_id")]))
+            if len(reports) > 1:
+                refs = [ref for ref in refs if ref.artifact_type != "asset_version" or ref.artifact_id in selected]
+            observations.append((key, body, related, refs))
+        return observations
     if turn.tool_name != "artifact.add_reference_entries":
         observation = _observation(work, turn, project_id)
         return [] if observation is None else [observation]

@@ -17,6 +17,25 @@ def generation_cues(shot: ShotPlan) -> list[ShotReferenceCue]:
     return [cue for cue in shot_cues(shot) if cue.usage == "GENERATION"]
 
 
+def generation_bindings_from_cues(document: ProjectDocument, shot: ShotPlan) -> list[ReferenceBinding]:
+    """Project exact saved choices without resolving placeholders or changing prose."""
+    versions = {version.id: asset for asset in document.assets for version in asset.versions}
+    bindings: dict[str, ReferenceBinding] = {}
+    for cue in generation_cues(shot):
+        if cue.asset_version_id is None:
+            continue
+        asset = versions.get(cue.asset_version_id)
+        if asset is None:
+            raise ValueError(f"{shot.id}: unknown selected AssetVersion {cue.asset_version_id}")
+        existing = bindings.get(cue.asset_version_id)
+        if existing is None:
+            bindings[cue.asset_version_id] = ReferenceBinding(
+                kind=asset.kind, target_id=cue.asset_version_id, purpose=cue.purpose)
+        elif cue.purpose not in existing.purpose:
+            existing.purpose = f"{cue.purpose}；{existing.purpose}"[:500]
+    return list(bindings.values())
+
+
 def project_legacy_references(document: ProjectDocument) -> None:
     """Enrich the returned view only; old files/trace do not acquire invented spans."""
     versions = {version.id: asset for asset in document.assets for version in asset.versions}
@@ -27,6 +46,7 @@ def project_legacy_references(document: ProjectDocument) -> None:
         if plan is None:
             continue
         existing = {cue.asset_version_id for cue in shot_cues(shot)}
+        explicit_subjects = {cue.subject_asset_id for cue in shot_cues(shot)}
         for binding in plan.bindings:
             asset = versions.get(binding.target_id)
             if asset is None or binding.target_id in existing:
@@ -36,6 +56,8 @@ def project_legacy_references(document: ProjectDocument) -> None:
                 continue
             subject_id = next((pack.subject_asset_id for pack in document.reference_packs
                                if any(entry.asset_version_id == version.id for entry in pack.entries)), asset.id)
+            if subject_id in explicit_subjects or asset.id in explicit_subjects:
+                continue
             shot.references.append(ShotReferenceCue(
                 id=f"{shot.id}-imported-{version.id}", subject_asset_id=subject_id,
                 asset_version_id=version.id, alias=f"{asset.name}_{len(shot.references) + 1}",
@@ -48,8 +70,6 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
     """Validate occurrences and make explicit bindings authoritative for generation."""
     assets = {asset.id: asset for asset in document.assets}
     versions = {version.id: (asset, version) for asset in document.assets for version in asset.versions}
-    bindings: list[ReferenceBinding] = []
-    used_versions: set[str] = set()
     used_ids: set[str] = set()
     aliases: dict[str, tuple[str, str | None]] = {}
     errors: list[str] = []
@@ -106,18 +126,9 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
                 errors.append(f"{location}: 同一镜头中不同图片需要不同引用名称; "
                               f"subject/media={target!r}, earlier={aliases[cue.alias]!r}")
             aliases[cue.alias] = target
-            if cue.usage == "EDITORIAL":
-                continue
-            asset, _version = versions[cue.asset_version_id]
-            if cue.asset_version_id not in used_versions:
-                bindings.append(ReferenceBinding(kind=asset.kind, target_id=cue.asset_version_id, purpose=cue.purpose))
-                used_versions.add(cue.asset_version_id)
-            else:
-                binding = next(item for item in bindings if item.target_id == cue.asset_version_id)
-                if cue.purpose not in binding.purpose:
-                    binding.purpose = f"{cue.purpose}；{binding.purpose}"[:500]
     if errors:
         raise ValueError("\n".join(errors))
+    bindings = generation_bindings_from_cues(document, shot)
     plan = next((item for item in document.reference_plan if item.shot_id == shot.id), None)
     if plan is None:
         plan = ReferencePlanEntry(shot_id=shot.id, bindings=[], capability_valid=True, validation_notes=[])
@@ -138,9 +149,20 @@ def assert_current_script_structure(document: ProjectDocument, shot: ShotPlan) -
         raise ValueError("SCRIPT_STRUCTURE_STALE: 剧本正文已修改，请先按当前正文同步此场次的台词和分镜，再生成视频。")
 
 
-def assert_generation_references(document: ProjectDocument, shot: ShotPlan, media: list[H3MediaInput]) -> None:
+def assert_generation_references(
+    document: ProjectDocument, shot: ShotPlan, media: list[H3MediaInput], *, require_all: bool = True,
+) -> None:
+    """Default expansion needs all cues; an explicit request selects its own ordered media.
+
+    Caller resolves each selected version/subject/file against current project truth.
+    Unselected authoring references remain in prose and never become editorial implicitly.
+    """
     assert_current_script_structure(document, shot)
+    if not require_all:
+        return
     available = {item.asset_version_id for item in media}
     missing = {cue.asset_version_id for cue in generation_cues(shot) if cue.asset_version_id and cue.asset_version_id not in available}
     if missing:
-        raise ValueError("SHOT_REFERENCES_STALE: 当前文案绑定的生成参考没有全部进入请求，请按最新镜头引用重新编译；剪辑用素材应明确标为EDITORIAL。")
+        raise ValueError(f"SHOT_REFERENCES_STALE: {shot.id} default input is missing current generation references: "
+                         + ", ".join(sorted(missing))
+                         + ". Supply media_inputs for an explicit ordered request selection, or use all current references by default.")

@@ -85,6 +85,7 @@ class LanguagePromptCompileRequest(DomainModel):
     media_inputs: list[H3MediaInput] = Field(
         default_factory=list[H3MediaInput],
         max_length=12,
+        description="The exact ordered media selected for this compilation. Unselected prose references remain saved; their omission does not change their usage or prove coverage. Use prepare_h3_group with media_inputs omitted for automatic current-reference expansion.",
     )
 
     @model_validator(mode="after")

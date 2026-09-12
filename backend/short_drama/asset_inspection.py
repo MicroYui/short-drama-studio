@@ -8,15 +8,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from short_drama.h3_models import H3RouteAssetPreparation
-from short_drama.image_models import ImageGenerationTask, ImageRegion, parse_image_size
+from short_drama.image_models import ImageGenerationTask, ImageRegion, ImageTaskStatus, parse_image_size
+from short_drama.image_edit_results import AssetImageEditResultRequest
 from short_drama.image_edit_guides import (
-    ImageEditGuideRegion, ImageGuideArrow, validate_edit_guide_geometry,
+    AssetImageEditGuideRequest, ImageEditGuideRegion, ImageGuideArrow, validate_edit_guide_geometry,
 )
 from short_drama.image_plane_composite import (
     AssetImagePlaneCompositeRequest, validate_plane_composite_geometry,
@@ -137,7 +138,7 @@ class AssetInspectionContextError(ValueError):
 ImplementationPreference = Annotated[str, Field(min_length=1, max_length=500)]
 
 
-class SemanticAssetReview(DomainModel):
+class SemanticImageReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue], max_length=16)
@@ -145,6 +146,7 @@ class SemanticAssetReview(DomainModel):
     review_focus: str | None = None
     narrative_context: AssetInspectionNarrativeEvidence | None = None
     implementation_preferences: list[ImplementationPreference] = Field(default_factory=list[ImplementationPreference], max_length=8)
+    shot_revision: int | None = Field(default=None, ge=1)
     candidate_output_layout: AssetLayoutProfile | None = None
     region_evidence: list[AssetInspectionRegionEvidence] = Field(
         default_factory=list[AssetInspectionRegionEvidence], max_length=6,
@@ -199,8 +201,23 @@ class SemanticAssetReview(DomainModel):
             return None
 
 
+class ComparedAssetReview(SemanticImageReview):
+    """One independently observed, runtime-bound original of the same masked edit."""
+
+    asset_id: str
+    asset_version_id: str
+    version: int = Field(ge=1)
+    image_task_id: str
+
+
+class SemanticAssetReview(SemanticImageReview):
+    provider_output_review: ComparedAssetReview | None = Field(default=None,
+        description="Independent review of the explicitly requested same-task registered raw image. Null when it was not observed; never transfers the main candidate's verdict or selects either image.")
+
+
 def _asset_review_output_schema(
     *, crop_available: bool, edit_guide_available: bool, plane_available: bool,
+    comparison_capabilities: tuple[bool, bool, bool] | None = None,
 ) -> dict[str, Any]:
     """Ask only for model-authored observations and currently executable advice.
 
@@ -210,8 +227,9 @@ def _asset_review_output_schema(
     """
     schema = SemanticAssetReview.model_json_schema()
     properties = schema["properties"]
-    for field in ("review_focus", "narrative_context", "implementation_preferences",
-                  "candidate_output_layout", "region_evidence", "evidence_references"):
+    runtime_fields = ("review_focus", "narrative_context", "implementation_preferences", "shot_revision",
+                      "candidate_output_layout", "region_evidence", "evidence_references")
+    for field in runtime_fields:
         properties.pop(field)
     definitions = schema.pop("$defs", {})
     definitions["AssetCropSuggestion"]["properties"].pop("source")
@@ -223,6 +241,19 @@ def _asset_review_output_schema(
     ):
         if not available:
             properties[field] = {"type": "null", "description": "Unavailable for the actual image inputs."}
+    if comparison_capabilities is None:
+        properties.pop("provider_output_review")
+    else:
+        compared = definitions["ComparedAssetReview"]
+        for field in (*runtime_fields, "asset_id", "asset_version_id", "version", "image_task_id"):
+            compared["properties"].pop(field)
+            if field in compared.get("required", []):
+                compared["required"].remove(field)
+        for field, available in zip(("crop_suggestion", "edit_guide_suggestion", "plane_composite_suggestion"), comparison_capabilities):
+            if not available:
+                compared["properties"][field] = {"type": "null"}
+        properties["provider_output_review"] = {"$ref": "#/$defs/ComparedAssetReview"}
+        schema.setdefault("required", []).append("provider_output_review")
 
     def references(value: Any) -> set[str]:
         if isinstance(value, dict):
@@ -263,6 +294,10 @@ class AssetVersionInspectionRequest(DomainModel):
         default=None,
         description="Only set when this version is intended for one concrete shot.",
     )
+    intended_reference_role: ImageReferenceRole | Literal["FIRST_FRAME", "LAST_FRAME"] | None = Field(default=None,
+        description="Typed intended use for this observation, e.g. COMPOSITION versus FIRST_FRAME/LAST_FRAME. Does not change saved Shot cues or relax identity, physical structure or story continuity. Omit when the actual selected Shot cue already specifies it.")
+    compare_provider_output: bool = Field(default=False,
+        description="Optionally inspect this masked EDIT final and its already registered same-task raw image in one visual call, with separate per-version verdicts. Requires that exact raw local file; does not derive, select or approve either image.")
     canonical_reference_version_ids: list[str] = Field(
         default_factory=list[str],
         max_length=8,
@@ -851,6 +886,83 @@ def resolve_asset_inspection_narrative_context(
     )
 
 
+def resolve_inspection_provider_output(
+    asset: Asset, version: AssetVersion, task: ImageGenerationTask | None,
+) -> AssetVersion:
+    """Resolve the registered original by exact task provenance, never by latest/file name."""
+    if (task is None or task.asset_id != asset.id or task.project_id != asset.project_id
+        or task.output_version_id != version.id or task.status != ImageTaskStatus.SUCCEEDED
+        or not task.request.mask_version_id or not task.provider_output_path):
+        raise AssetInspectionContextError("compare_provider_output requires the completed masked EDIT final and its registered raw candidate")
+    raw = next((item for item in asset.versions if item.id == task.provider_output_version_id), None)
+    if (raw is None or raw.id == version.id or raw.source is None
+        or raw.source.model != "saved-image-edit-result-v1"
+        or not raw.source.source_uri or not raw.source.prompt):
+        raise AssetInspectionContextError("compare_provider_output: same-task registered raw provenance is unavailable")
+    try:
+        provenance = AssetImageEditResultRequest.model_validate_json(raw.source.prompt)
+    except ValidationError as exc:
+        raise AssetInspectionContextError("compare_provider_output: invalid registered raw provenance") from exc
+    if (provenance.image_task_id != task.id or provenance.mode != "PROVIDER_OUTPUT"
+        or Path(raw.source.source_uri).expanduser().resolve() != Path(task.provider_output_path).expanduser().resolve()
+        or raw.media_type.value != "IMAGE" or raw.external_url is not None
+        or not raw.local_path or not Path(raw.local_path).is_file()
+        or raw.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+        or raw.freshness != Freshness.CURRENT):
+        raise AssetInspectionContextError("compare_provider_output: exact registered raw is mismatched, unavailable, rejected or stale")
+    return raw
+
+
+def _inspection_geometry(version: AssetVersion) -> tuple[tuple[int, int] | None, bool, bool]:
+    size = _local_candidate_visible_size(version)
+    crop = (size is not None and version.approval_status in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+            and version.freshness == Freshness.CURRENT)
+    guide = False
+    if crop and size is not None and version.local_path:
+        with Image.open(version.local_path) as opened:
+            try:
+                parse_image_size(f"{size[0]}x{size[1]}")
+            except ValueError:
+                pass
+            else:
+                guide = opened.getexif().get(274, 1) == 1
+    return size, crop, guide
+
+
+def _inspection_mask_evidence(
+    document: ProjectDocument, task: ImageGenerationTask | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    if task is None or not task.request.mask_version_id:
+        return None, None
+    mask = next((version for asset in document.assets for version in asset.versions
+                 if version.id == task.request.mask_version_id), None)
+    if mask is None or not mask.local_path or not Path(mask.local_path).is_file():
+        return {"available": False, "reason": "The actual local mask file is unavailable."}, None
+    try:
+        with Image.open(mask.local_path) as opened:
+            if (opened.getexif().get(274, 1) != 1 or "A" not in opened.getbands()
+                or opened.width * opened.height > _ANALYSIS_IMAGE_MAX_SOURCE_PIXELS):
+                return {"available": False, "reason": "The actual mask has no usable upright alpha geometry."}, None
+            width, height = opened.size
+            with opened.getchannel("A") as alpha, ImageOps.invert(alpha) as editable, alpha.convert("RGB") as visible:
+                bounds = editable.getbbox()
+                # White preserves, black edits. The original file is never changed.
+                encoded = base64.b64encode(_encode_review_image(visible)).decode("ascii")
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return {"available": False, "reason": "The actual mask pixels could not be read."}, None
+    geometry: dict[str, Any] = {"available": True, "asset_version_id": mask.id,
+        "width": width, "height": height, "editable_bounds_pixels": bounds,
+        "semantics": "Actual mask alpha: black editable, white preserved, gray partial. Bounds enclose all editable pixels; they are not the polygon or a proposed new edit region."}
+    if mask.source is not None and mask.source.model == "pillow-edit-mask-v1" and mask.source.prompt:
+        try:
+            guide = AssetImageEditGuideRequest.model_validate_json(mask.source.prompt)
+        except ValidationError:
+            pass
+        else:
+            geometry["saved_guide"] = guide.model_dump(mode="json")
+    return geometry, f"data:image/jpeg;base64,{encoded}"
+
+
 def inspect_asset_image(
     *,
     document: ProjectDocument,
@@ -865,6 +977,7 @@ def inspect_asset_image(
     request: AssetVersionInspectionRequest | None = None,
 ) -> SemanticAssetReview:
     request = request or AssetVersionInspectionRequest()
+    compared_version = resolve_inspection_provider_output(asset, version, generation_task) if request.compare_provider_output else None
     narrative_context = resolve_asset_inspection_narrative_context(document, request.narrative_context)
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
@@ -920,17 +1033,21 @@ def inspect_asset_image(
         f"{skill_prompt.text} "
         "只返回符合给定 schema 的 JSON。证据引用、检查范围、布局和局部证据由工具运行时附着，"
         "不用重复输出；只填写schema内的观察与可选修复建议。"
-        "crop_suggestion 默认为null。仅当 candidate_creation.local_crop_available 为true，且已看清"
+        + ("各报告使用自己的整图与能力：顶层对应Image 1和candidate_creation；provider_output_review对应"
+           "image_map中provider_output_under_review的整图和provider_output_creation。以下所有裁切、编辑和"
+           "平面建议均按本报告对应整图的尺寸/坐标及能力生成，raw建议不能套用Image 1坐标。"
+           if compared_version is not None else "本报告的整图是Image 1，修复能力见candidate_creation。")
+        + "crop_suggestion 默认为null。仅当对应creation.local_crop_available 为true，且已看清"
         "通过本地裁切能解决的景别、留白或单视图提取问题时，在本次观察中给出一个可用region和reason，"
         "避免只说建议裁切却让后续再看同一图取坐标；实际源版本和像素范围由工具附着。"
-        "region使用Image 1完整候选经EXIF校正后的0—1 x/y/width/height，不使用参考图、追加局部图或"
+        "region使用本报告对应完整候选经EXIF校正后的0—1 x/y/width/height，不使用参考图、追加局部图或"
         "缩略图像素坐标。保留声明必需的头发、肢体、文字及视线空间；以实际源宽高计算裁后画幅。"
         "若源和目标画幅相同，归一化width和height应相同。裁切不能增加细节、改变背景结构或移动主体；"
         "无法兼顾要求或边界看不清时返回null并说明限制，不靠放大凑像素。"
         "建议尚未执行，不能把裁后的预期效果写成当前图已合格，也不能消除其他实际问题。"
-        "edit_guide_suggestion也默认为null。只有candidate_creation.local_edit_guide_available为true，"
+        "edit_guide_suggestion也默认为null。只有对应creation.local_edit_guide_available为true，"
         "已看清候选中的具体问题且适合局部编辑时，才一次给出regions、可选arrows和descriptor；"
-        "编辑源由运行时绑定Image 1候选。坐标均为完整候选EXIF校正后"
+        "编辑源由运行时绑定本报告对应候选。坐标均为该完整候选EXIF校正后"
         "的0—1位置，不能使用参考或局部放大图的坐标。polygon圈出实际要改的范围；如需移动物体，"
         "包含原位置、明确目标位置及必要接触或阴影范围，arrows说明可见特征的目标方向。"
         "姿态选区按Verifier方法覆盖完整移动部位和必要连接，不默认只圈指尖；"
@@ -966,15 +1083,6 @@ def inspect_asset_image(
         "比较不同视角时，区分实际结构变化与透视、遮挡和正常的可见面变化。"
         "某个正面部件在背面不可见，并不证明它缺失或被换成另一种结构；"
         "只有可见证据支持时才报告跨视图结构不一致，不要求不同视角显示相同表面。"
-        "审核镜头关键帧时分两步：先独立识别画面中的主体、必要时的肢体、接触关系、道具"
-        "状态、视线和动作阶段，不预设期望答案；再与显式声明的开始/结束状态比较。"
-        "如果画面明确违背了已声明的左右手、接触侧或动作阶段，报告通用连续性问题。"
-        "如果左右侧或阶段在视觉上含混，不要猜测其正确；只有当该元素被显式要求在画面中"
-        "可见时，才降低评分并建议更清楚的关键帧。若 ShotPlan 显式把演员、手、道具或状态"
-        "放在画外，其缺席就是符合要求的证据；不要强求画面展示它的接触、左右侧、亮灭状态"
-        "或动作阶段，也不要仅因画外状态无法验证就拒绝图像。可以把这个限制写成不影响采用"
-        "的观察项。若关键帧中的可见开始/结束状态与声明相反，或被要求清楚展示的接触或"
-        "左右侧仍含混，应设置 recommended=false；画面美观不能抵消这些制作控制问题。"
         "检查已声明 Style、可见破损、参考表内身份一致性、必需的场景关系、道具形状、构图"
         "可用性，以及多余文字或水印。不要发明要求。recommendation 是可被 Agent 或用户"
         "覆盖的制作建议，不是用户审批条件；使用通用 QA 分类和稳定 issue code。"
@@ -991,6 +1099,30 @@ def inspect_asset_image(
         "身份、外观、场景或道具真相。"
         + review_scope
     )
+    selected_roles = sorted({cue.image_reference_role.value
+        for cue in ([*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)] if shot else [])
+        if cue.asset_version_id == version.id and cue.image_reference_role is not None})
+    intended_role = request.intended_reference_role
+    keyframe_required = (intended_role in {"FIRST_FRAME", "LAST_FRAME"} if intended_role is not None
+        else preparation is not None and preparation.role.value in {"first_frame", "last_frame"})
+    if keyframe_required:
+        instructions += (
+        "审核镜头关键帧时分两步：先独立识别画面中的主体、必要时的肢体、接触关系、道具"
+        "状态、视线和动作阶段，不预设期望答案；再与显式声明的开始/结束状态比较。"
+        "如果画面明确违背了已声明的左右手、接触侧或动作阶段，报告通用连续性问题。"
+        "如果左右侧或阶段在视觉上含混，不要猜测其正确；只有当该元素被显式要求在画面中"
+        "可见时，才降低评分并建议更清楚的关键帧。若 ShotPlan 显式把演员、手、道具或状态"
+        "放在画外，其缺席就是符合要求的证据；不要强求画面展示它的接触、左右侧、亮灭状态"
+        "或动作阶段，也不要仅因画外状态无法验证就拒绝图像。可以把这个限制写成不影响采用"
+        "的观察项。若关键帧中的可见开始/结束状态与声明相反，或被要求清楚展示的接触或"
+        "左右侧仍含混，应设置 recommended=false；画面美观不能抵消这些制作控制问题。"
+        )
+    else:
+        instructions += (
+            "本次未声明硬首尾帧边界，不把软COMPOSITION升级为每个瞬间均可直接起拍的完整关键帧。"
+            "先按当前用途说明可见结构和状态；自定笔尖展示、微小手位或角度的偏差可提出局部设计取舍，"
+            "不单凭这些偏差否决。真实手部破损、物件换手、必需叙事证据或已采用连续性矛盾仍是问题。"
+        )
     resolved_references = list(inspection_references or [])
     resolved_references.extend(
         AssetInspectionReference(
@@ -1008,10 +1140,14 @@ def inspect_asset_image(
         if reference_version.id
         not in {item.version.id for item in resolved_references}
     )
-    reference_images = _inspection_reference_images(resolved_references)
+    reference_images = _inspection_reference_images([
+        reference for reference in resolved_references
+        if compared_version is None or reference.version.id != compared_version.id])
     detail_urls: list[str] = []
     detail_evidence: list[AssetInspectionRegionEvidence] = []
     available_versions = {version.id: version, **{item.version.id: item.version for item in resolved_references}}
+    if compared_version is not None:
+        available_versions[compared_version.id] = compared_version
     for detail in request.regions:
         detail_id = detail.asset_version_id or version.id
         detail_version = available_versions.get(detail_id)
@@ -1033,22 +1169,7 @@ def inspect_asset_image(
         else version.reference_sheet.layout_profile if version.reference_sheet is not None
         else None
     )
-    crop_source_size = _local_candidate_visible_size(version)
-    crop_available = (
-        crop_source_size is not None
-        and version.approval_status in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
-        and version.freshness == Freshness.CURRENT
-    )
-    edit_guide_available = False
-    if crop_available and version.local_path is not None and crop_source_size is not None:
-        with Image.open(version.local_path) as source:
-            # The guide and masked EDIT share the original upright pixel grid.
-            try:
-                parse_image_size(f"{crop_source_size[0]}x{crop_source_size[1]}")
-            except ValueError:
-                pass
-            else:
-                edit_guide_available = source.getexif().get(274, 1) == 1
+    crop_source_size, crop_available, edit_guide_available = _inspection_geometry(version)
     plane_base_size = _local_plane_image_size(version)
     plane_source_sizes: dict[str, tuple[int, int]] = {}
     whole_content_plate_ids: set[str] = set()
@@ -1063,17 +1184,37 @@ def inspect_asset_image(
             if reference.version.text_plate is not None:
                 whole_content_plate_ids.add(reference.version.id)
     plane_available = plane_base_size is not None and bool(plane_source_sizes)
+    compared_size, compared_crop, compared_guide = _inspection_geometry(compared_version) if compared_version else (None, False, False)
+    compared_plane_size = _local_plane_image_size(compared_version) if compared_version else None
+    compared_plane = compared_plane_size is not None and bool(plane_source_sizes)
     instructions += (
         "可选plane_composite_suggestion可直接交给image.composite_plane。仅从image_map中"
-        "local_plane_composite_source.available=true的本次所见精确源图选择，base填写当前候选version_id。"
+        "local_plane_composite_source.available=true的本次所见精确源图选择，base填写本报告对应候选version_id。"
         "坐标按对应整图实际EXIF转正尺寸，不按局部放大图；摄影源明确source_quad，只有"
         "full_image_is_content_plate=true可省略。源角逐点对应目标角，不能两边各按屏幕左上排序。"
         "可用包含完整必要内容的可见纸内共面区域，只改所选quad，不猜遮挡物理角；字形版面同转。"
+        "若建议平面修复，返回现有schema完整可执行的source/target四角和必要保护区，不只写一句可旋转。"
+        "确实不能界定时留null，并在summary说明缺少哪个实际来源、可见边界或保护范围；不编造坐标。"
         "选区、遮挡和混合按方法与schema；需移除的旧纸残留或需改手姿机位时留null，不改变QA结论。"
-        if plane_available else
+        if plane_available or compared_plane else
         "本次没有可用于本地平面合成的基图和已观察来源，plane_composite_suggestion返回null，"
         "不为取得建议追加发现、回读或视觉调用。"
     )
+    mask_evidence, mask_url = _inspection_mask_evidence(document, generation_task)
+    if compared_version is not None:
+        instructions += (
+            "本次同一调用额外显示该masked EDIT已登记的供应商原图。顶层报告只评Image 1最终合成图，"
+            "provider_output_review独立评image_map中provider_output_under_review的整幅原图。"
+            "两图共享当前用途与参考，逐图观察，不能复制结论或以圈外变化数量代替质量判断；两者都不满足也合法。"
+            "分别指出原图已有问题与本地遮罩新增破损，检查原图圈外人物、纸字和道具的实际变化。"
+            "各建议坐标仅针对各自整图，运行时绑定各自版本；未观察或无法归因时明确未知，不自动选用。"
+        )
+    if mask_evidence is not None:
+        instructions += (
+            "candidate_creation.masked_edit.actual_mask与EDIT_MASK图是本次实际旧遮罩；对照新轮廓判断截断，"
+            "它不是新图的有效修复建议。若范围已不足，重新观察连接部位/原目标位置和背景恢复区，"
+            "不能只改描述再返回同一不足几何；范围不可确定时明确缺口。"
+        )
     provider_candidate = next((
         item for item in asset.versions
         if generation_task is not None and item.id == generation_task.provider_output_version_id
@@ -1096,6 +1237,7 @@ def inspect_asset_image(
             "primary_input_version_id": generation_task.request.primary_input_version_id
             or generation_task.request.ordered_input_version_ids()[0],
             "mask_version_id": generation_task.request.mask_version_id,
+            "actual_mask": mask_evidence,
             "local_mask_feather_pixels": generation_task.request.mask_feather_pixels,
             "provider_output_available": bool(
                 generation_task.provider_output_path
@@ -1130,6 +1272,7 @@ def inspect_asset_image(
         "output_schema": _asset_review_output_schema(
             crop_available=crop_available, edit_guide_available=edit_guide_available,
             plane_available=plane_available,
+            comparison_capabilities=(compared_crop, compared_guide, compared_plane) if compared_version else None,
         ),
         "asset": {
             "id": asset.id,
@@ -1144,6 +1287,14 @@ def inspect_asset_image(
         },
         "candidate_creation": creation,
         "review_focus": request.review_focus,
+        "intended_reference_role": intended_role,
+        "selected_candidate_reference_roles": selected_roles,
+        "provider_output_creation": ({
+            "asset_version_id": compared_version.id, "version": compared_version.version,
+            "actual_size": compared_size, "local_crop_available": compared_crop,
+            "local_edit_guide_available": compared_guide, "local_plane_composite_available": compared_plane,
+            "semantics": "Actual uncomposited provider image, independently observed; the saved mask was not applied to this image."
+        } if compared_version is not None else None),
         **({"narrative_context": narrative_context.model_dump(mode="json")}
            if narrative_context is not None else {}),
         **({"implementation_preferences": list(request.implementation_preferences)}
@@ -1221,6 +1372,14 @@ def inspect_asset_image(
                  **evidence.model_dump(mode="json")}
                 for index, evidence in enumerate(detail_evidence)
             ],
+            *([{"image": len(reference_images) + len(detail_urls) + 2,
+                "role": "provider_output_under_review", "asset_id": asset.id,
+                "asset_name": asset.name, "version_id": compared_version.id}]
+                if compared_version is not None else []),
+            *([{"image": len(reference_images) + len(detail_urls) + 2 + int(compared_version is not None),
+                "role": "EDIT_MASK", "version_id": generation_task.request.mask_version_id,
+                "semantics": "Black=editable; white=preserve. Actual old mask, not a new proposed region."}]
+                if mask_url is not None and generation_task is not None else []),
         ],
     }
     output = client.generate_text(
@@ -1230,10 +1389,63 @@ def inspect_asset_image(
             _asset_image_url(version),
             *(url for _reference, url in reference_images),
             *detail_urls,
+            *([_asset_image_url(compared_version)] if compared_version is not None else []),
+            *([mask_url] if mask_url is not None else []),
         ],
         max_output_tokens=16000,
     )
-    result = SemanticAssetReview.model_validate_json(_strip_json_fence(output))
+    parsed = json.loads(_strip_json_fence(output))
+    if not isinstance(parsed, dict):
+        raise ValueError("Asset review output must be an object")
+    parsed = cast(dict[str, Any], parsed)
+    if compared_version is not None and generation_task is not None:
+        compared_output = parsed.get("provider_output_review")
+        if not isinstance(compared_output, dict):
+            raise ValueError("Requested raw comparison requires an independent provider_output_review")
+        parsed["provider_output_review"] = {
+            **cast(dict[str, Any], compared_output), "asset_id": asset.id,
+            "asset_version_id": compared_version.id, "version": compared_version.version,
+            "image_task_id": generation_task.id,
+        }
+    else:
+        parsed.pop("provider_output_review", None)
+    result = SemanticAssetReview.model_validate(parsed)
+    shared_evidence = [SemanticAssetReviewEvidenceReference(source_project_id=item.project_id,
+                       asset_version_id=item.version.id) for item, _url in reference_images]
+    if mask_url is not None and generation_task is not None and generation_task.request.mask_version_id:
+        shared_evidence.append(SemanticAssetReviewEvidenceReference(source_project_id=document.project.id,
+            asset_version_id=generation_task.request.mask_version_id))
+    runtime_fields: dict[str, Any] = {
+        "review_focus": request.review_focus, "candidate_output_layout": output_layout,
+        "narrative_context": narrative_context, "shot_revision": shot.revision if shot is not None else None,
+        "implementation_preferences": list(request.implementation_preferences),
+        "region_evidence": detail_evidence,
+        "evidence_references": shared_evidence,
+    }
+    compared_review = result.provider_output_review
+    if compared_review is not None and compared_version is not None:
+        compared_review = compared_review.model_copy(update={**runtime_fields,
+            **_review_geometry_updates(compared_review, compared_version, compared_size,
+                compared_crop, compared_guide, compared_plane_size, plane_source_sizes, whole_content_plate_ids),
+            "region_evidence": [item for item in detail_evidence if item.asset_version_id != version.id],
+            "evidence_references": [*shared_evidence, SemanticAssetReviewEvidenceReference(
+                source_project_id=document.project.id, asset_version_id=version.id)],
+        })
+    return result.model_copy(update={**runtime_fields,
+        **_review_geometry_updates(result, version, crop_source_size, crop_available,
+            edit_guide_available, plane_base_size, plane_source_sizes, whole_content_plate_ids),
+        "provider_output_review": compared_review,
+        "evidence_references": [*shared_evidence, *([SemanticAssetReviewEvidenceReference(
+            source_project_id=document.project.id, asset_version_id=compared_version.id)] if compared_version else [])],
+    })
+
+
+def _review_geometry_updates(
+    result: SemanticImageReview, version: AssetVersion, crop_source_size: tuple[int, int] | None,
+    crop_available: bool, edit_guide_available: bool, plane_base_size: tuple[int, int] | None,
+    plane_source_sizes: dict[str, tuple[int, int]], whole_content_plate_ids: set[str],
+) -> dict[str, Any]:
+    plane_available = plane_base_size is not None and bool(plane_source_sizes)
     suggestion = result.crop_suggestion
     if suggestion is not None and crop_available and crop_source_size is not None:
         width, height = crop_source_size
@@ -1274,14 +1486,8 @@ def inspect_asset_image(
                 plane = None
     else:
         plane = None
-    return result.model_copy(update={
-        "review_focus": request.review_focus, "candidate_output_layout": output_layout,
-        "narrative_context": narrative_context,
-        "implementation_preferences": list(request.implementation_preferences),
-        "region_evidence": detail_evidence, "crop_suggestion": suggestion,
-        "edit_guide_suggestion": edit_guide,
-        "plane_composite_suggestion": plane,
-    })
+    return {"crop_suggestion": suggestion, "edit_guide_suggestion": edit_guide,
+            "plane_composite_suggestion": plane}
 
 
 def _local_plane_image_size(version: AssetVersion) -> tuple[int, int] | None:

@@ -109,7 +109,9 @@ def test_masked_review_identifies_registered_raw_without_claiming_to_observe_or_
     assert candidate["approval_status"] == raw.approval_status.value
     assert candidate["freshness"] == raw.freshness.value
     assert candidate["local_file_available"] is raw_available
-    assert len(language.image_urls) == 2  # Current candidate and its existing base reference.
-    assert {item["version_id"] for item in payload["image_map"]} == {task.output_version_id, base.id}
+    assert len(language.image_urls) == 3  # Candidate, existing base, actual old mask; no raw image.
+    assert {item["version_id"] for item in payload["image_map"]} == {task.output_version_id, base.id, _mask.id}
+    assert payload["image_map"][-1]["role"] == "EDIT_MASK"
+    assert result.output is not None and result.output["provider_output_review"] is None
     assert service.get_project(asset.project_id).document == before
     assert len(provider.calls) == 1

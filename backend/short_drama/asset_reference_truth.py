@@ -23,6 +23,7 @@ def resolve_current_asset_media(
     *,
     asset_version_id: str,
     subject_asset_id: str | None,
+    explicit_choice: bool = False,
 ) -> tuple[Asset, AssetVersion]:
     """Resolve an H3 media reference against current explicit project choices.
 
@@ -64,14 +65,13 @@ def resolve_current_asset_media(
         return owner, version
     explicit_image_choice = (
         version.media_type == AssetMediaType.IMAGE
-        and (subject_asset_id is None or subject_asset_id == owner.id)
-        and any(
+        and (explicit_choice or any(
             cue.usage == "GENERATION"
-            and cue.subject_asset_id == owner.id
+            and cue.subject_asset_id == (subject_asset_id or owner.id)
             and cue.asset_version_id == version.id
             for shot in document.shots
             for cue in [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
-        )
+        ))
     )
     if version.approval_status != ApprovalStatus.APPROVED and not (
         explicit_image_choice and version.approval_status == ApprovalStatus.DRAFT
@@ -95,6 +95,8 @@ def resolve_current_asset_media(
         raise AssetReferenceTruthError(
             f"Image AssetVersion {asset_version_id} is not current"
         )
+    if explicit_image_choice and version.local_path is not None and not Path(version.local_path).expanduser().is_file():
+        raise AssetReferenceTruthError(f"Image AssetVersion {asset_version_id} file is missing: {version.local_path}")
     if subject_asset_id is None:
         return owner, version
 
@@ -125,8 +127,11 @@ def resolve_current_asset_media(
         and entry.asset_version_id == version.id
         and (
             entry.lineage_root_version_id is None
-            or canonical is not None
-            and entry.lineage_root_version_id == canonical.id
+            or (
+                _usable_subject_image(document, subject.id, entry.lineage_root_version_id)
+                if explicit_image_choice
+                else canonical is not None and entry.lineage_root_version_id == canonical.id
+            )
         )
         for pack in document.reference_packs
         for entry in pack.entries
@@ -138,7 +143,7 @@ def resolve_current_asset_media(
         and entry.lineage_root_version_id is not None
         for pack in document.reference_packs for entry in pack.entries
     )
-    if explicit_image_choice and (not linked_pack_entry or valid_pack_entry):
+    if explicit_image_choice and ((owner.id == subject.id and not linked_pack_entry) or valid_pack_entry):
         return owner, version
     if not valid_pack_entry:
         raise AssetReferenceTruthError(
@@ -146,3 +151,17 @@ def resolve_current_asset_media(
             "current canonical image nor a current valid ReferencePack entry"
         )
     return owner, version
+
+
+def _usable_subject_image(document: ProjectDocument, subject_id: str, version_id: str) -> bool:
+    """An explicit choice retains its real lineage, independent of the canonical pointer."""
+    subject = next((asset for asset in document.assets if asset.id == subject_id), None)
+    if subject is None:
+        return False
+    root = next((version for version in subject.versions if version.id == version_id), None)
+    return root is not None and root.media_type == AssetMediaType.IMAGE and (
+        root.approval_status in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+        and root.freshness == Freshness.CURRENT
+        and (root.local_path is not None or root.external_url is not None)
+        and (root.local_path is None or Path(root.local_path).expanduser().is_file())
+    )

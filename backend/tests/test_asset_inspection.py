@@ -203,11 +203,9 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert review.recommended is True
     assert "不要追加剧情角色身份" in client.instructions
     assert "交接顺序、左右手或场景连续性要求" in client.instructions
-    assert "审核镜头关键帧时分两步" in client.instructions
-    assert "不要猜测其正确" in client.instructions
-    assert "画面美观不能抵消" in client.instructions
-    assert "若 ShotPlan 显式把演员、手、道具或状态" in client.instructions
-    assert "其缺席就是符合要求的证据" in client.instructions
+    assert "审核镜头关键帧时分两步" not in client.instructions
+    assert "本次未声明硬首尾帧边界" in client.instructions
+    assert "真实手部破损" in client.instructions
     assert "当前制片技能：AI 短剧（本地格式适配）。" in client.instructions
     assert "资产验收的通用职责" in client.instructions
     assert "旧版资产职责" not in client.instructions
@@ -637,6 +635,8 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "crop_suggestion": None,
         "edit_guide_suggestion": None,
         "plane_composite_suggestion": None,
+        "provider_output_review": None,
+        "shot_revision": None,
     }
     assert {item.artifact_type for item in result.artifact_refs} == {
         "asset",

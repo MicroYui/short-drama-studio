@@ -958,9 +958,10 @@ def generation_unit_media_candidates(
                 explicit_count += 1
                 continue
             try:
-                resolve_current_asset_media(document, asset_version_id=cue.asset_version_id,
-                                            subject_asset_id=cue.subject_asset_id)
-                media_type, source = approved[cue.asset_version_id]
+                _owner, version = resolve_current_asset_media(document, asset_version_id=cue.asset_version_id,
+                                            subject_asset_id=cue.subject_asset_id, explicit_choice=True)
+                media_type = version.media_type
+                source = H3MediaSource(local_path=version.local_path) if version.local_path else H3MediaSource(external_url=version.external_url)
                 kind, role = {
                     AssetMediaType.IMAGE: (H3MediaKind.IMAGE, H3MediaRole.REFERENCE_IMAGE),
                     AssetMediaType.VIDEO: (H3MediaKind.VIDEO, H3MediaRole.REFERENCE_VIDEO),
@@ -1941,16 +1942,20 @@ def _reference_selection_media_input(
     used_aliases: set[str],
 ) -> H3MediaInput:
     try:
-        resolve_current_asset_media(
+        _owner, selected_version = resolve_current_asset_media(
             document,
             asset_version_id=selected.asset_version_id,
             subject_asset_id=selected.subject_asset_id,
+            explicit_choice=True,
         )
     except AssetReferenceTruthError as exc:
         raise ValueError(
             f"Reference candidate {selected.candidate_id} no longer matches subject truth: {exc}"
         ) from exc
     approved = approved_inputs.get(selected.asset_version_id)
+    if approved is None and (selected_version.local_path or selected_version.external_url):
+        approved = (selected_version.media_type, H3MediaSource(local_path=selected_version.local_path)
+                    if selected_version.local_path else H3MediaSource(external_url=selected_version.external_url))
     if approved is None:
         raise ValueError(
             f"Reference candidate {selected.candidate_id} no longer has current usable media"
@@ -2368,6 +2373,7 @@ def _refresh_media_inputs(
     inputs: list[H3MediaInput],
     approved: dict[str, tuple[AssetMediaType, H3MediaSource]],
 ) -> list[H3MediaInput]:
+    del approved  # Persisted ordered selections retain their exact usable versions.
     refreshed: list[H3MediaInput] = []
     for item in inputs:
         if item.asset_version_id is None:
@@ -2376,17 +2382,20 @@ def _refresh_media_inputs(
             refreshed.append(item.model_copy(deep=True))
             continue
         try:
-            resolve_current_asset_media(
+            _owner, version = resolve_current_asset_media(
                 document,
                 asset_version_id=item.asset_version_id,
                 subject_asset_id=item.subject_asset_id,
+                explicit_choice=True,
             )
         except AssetReferenceTruthError:
             continue
-        approved_item = approved.get(item.asset_version_id)
-        if approved_item is None:
+        if version.local_path is not None:
+            source = H3MediaSource(local_path=version.local_path)
+        elif version.external_url is not None:
+            source = H3MediaSource(external_url=version.external_url)
+        else:
             continue
-        _media_type, source = approved_item
         refreshed.append(item.model_copy(deep=True, update={"source": source}))
     return refreshed
 

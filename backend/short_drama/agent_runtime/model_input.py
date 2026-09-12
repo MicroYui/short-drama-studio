@@ -69,7 +69,7 @@ def _candidates(payload: dict[str, JsonValue]) -> list[str]:
                 paths.extend(f"/current_plan/steps/{index}/{key}" for key in ("arguments", "instructions") if key in step)
     working = payload.get("working_set")
     if isinstance(working, dict):
-        for key in ("read_observations", "tool_attempt_observations", "completion_handoffs", "media_observations", "saved_tool_result_index", "entities", "tool_checkpoints", "artifact_refs"):
+        for key in ("read_observations", "tool_attempt_observations", "completion_handoffs", "media_observations", "partial_storyboard", "saved_tool_result_index", "entities", "tool_checkpoints", "artifact_refs"):
             values = working.get(key)
             if isinstance(values, list):
                 if key in {"entities", "tool_checkpoints", "artifact_refs"}:
@@ -129,7 +129,7 @@ class ModelInputCompiler:
         count = 0
         snapshot_id: str | None = None
         if current_tokens > threshold or force_compact:
-            collection_fallbacks = {"/working_set/read_observations", "/working_set/tool_attempt_observations", "/working_set/completion_handoffs", "/working_set/media_observations", "/working_set/saved_tool_result_index"}
+            collection_fallbacks = {"/working_set/read_observations", "/working_set/tool_attempt_observations", "/working_set/completion_handoffs", "/working_set/media_observations", "/working_set/partial_storyboard", "/working_set/saved_tool_result_index"}
             candidates = sorted(
                 ((count_text_tokens(json_text(pointer_value(prepared, path))), path) for path in _candidates(prepared)),
                 key=lambda item: (item[1] in collection_fallbacks, -item[0]),

@@ -7904,7 +7904,10 @@ export interface components {
             generation_plan_version_id?: string | null;
             /** Generation Unit Id */
             generation_unit_id?: string | null;
-            /** Media Inputs */
+            /**
+             * Media Inputs
+             * @description The exact ordered media selected for this compilation. Unselected prose references remain saved; their omission does not change their usage or prove coverage. Use prepare_h3_group with media_inputs omitted for automatic current-reference expansion.
+             */
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Method Skill Ids */
             method_skill_ids?: string[];
@@ -10608,7 +10611,10 @@ export interface components {
             image_reference_role?: components["schemas"]["ImageReferenceRole"] | null;
             /** Purpose */
             purpose: string;
-            /** Required Tags */
+            /**
+             * Required Tags
+             * @description Unordered view/state tags. A Beat may omit tags for an alias already declared on this Shot with the same subject and exact media; that unique declaration is inherited on save. Explicitly different tags require a different alias.
+             */
             required_tags?: string[];
             /**
              * Subject Asset Id

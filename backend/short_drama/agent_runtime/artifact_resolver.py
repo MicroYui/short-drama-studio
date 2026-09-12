@@ -1207,7 +1207,7 @@ class ProjectArtifactResolver:
                     ensure_ascii=False,
                 ),
             )
-        if ref.artifact_type == "shot":
+        if ref.artifact_type in {"shot", "shot_plan"}:
             shot = next((item for item in document.shots if item.id == ref.artifact_id), None)
             if shot is not None and (
                 ref.version is None or shot.revision == ref.version

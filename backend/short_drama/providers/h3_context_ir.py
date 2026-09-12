@@ -239,7 +239,7 @@ def compile_h3_context_ir(service: ShortDramaService, project_id: str, request: 
         raise ValueError("Context IR duration must equal the current generation unit")
     media = service._resolve_approved_asset_inputs(document, request.media_inputs)  # pyright: ignore[reportPrivateUsage]
     for shot in shots:
-        assert_generation_references(document, shot, media)
+        assert_generation_references(document, shot, media, require_all=False)
     if request.source_prompt is not None:
         raise ValueError("Context IR consumes canonical source facts directly; select the language compiler for an existing compiled-prompt revision")
     resolution, aspect_ratio = resolve_h3_output_format(route=request.route, resolution=request.resolution or unit.resolution or "768P",

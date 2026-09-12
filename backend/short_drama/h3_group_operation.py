@@ -48,7 +48,11 @@ class H3GroupOperationRequest(DomainModel):
         "reference media stay REFERENCE; a prepared complete first/last frame uses its hard frame route. "
         "Identity cards alone do not establish a shot's staging. A REFERENCE composition image is soft guidance."
     ))
-    media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12)
+    media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12, description=(
+        "Explicit ordered media for this request, at most 9 reference images. Other prose references remain saved but are not sent. "
+        "Omit/null to include all current generation cues and applicable voices; [] explicitly selects no media. "
+        "Choose coverage by actual purpose, not by automatically excluding a reference role."
+    ))
     method_skill_ids: SkillIds | None = None
     revision_instructions: str | None = Field(default=None, min_length=1, max_length=2000)
     source_take_id: str | None = Field(default=None, min_length=1,
@@ -146,7 +150,7 @@ def _identity(request: H3GroupOperationRequest) -> dict[str, JsonValue]:
 
 
 def _source_identity(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    """Film-wide display numbering cannot invalidate an unchanged local clip."""
+    """Ignore display numbering and order of the known per-shot visibility set only."""
     result = deepcopy(source)
     context = result.get("source_context")
     if isinstance(context, dict):
@@ -155,10 +159,38 @@ def _source_identity(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
             for row in shots:
                 if isinstance(row, dict) and isinstance(shot := row.get("locked_shot"), dict):
                     shot.pop("sequence", None)
+                    visible = row.get("visible_asset_ids")
+                    if isinstance(visible, list) and all(isinstance(value, str) for value in visible):
+                        row["visible_asset_ids"] = cast(JsonValue, sorted(set(cast(list[str], visible))))
         previous = context.get("previous_clip_planned_terminal_state")
         if isinstance(previous, dict):
             previous.pop("sequence", None)
     return result
+
+
+def operation_source_staleness_reason(
+    service: ShortDramaService, record: H3GroupOperation, *, media_inputs: list[H3MediaInput],
+) -> str | None:
+    """Recheck the saved group's facts and actual files without compiling or mutating it."""
+    state = record.state
+    if not state.generation_plan_document_id or not state.generation_plan_version_id or not state.generation_unit_id:
+        return "Saved H3 operation is missing its generation-unit source"
+    try:
+        context = service.get_h3_generation_unit_context(record.project_id, H3GenerationUnitContextRequest(
+            generation_plan_document_id=state.generation_plan_document_id,
+            generation_plan_version_id=state.generation_plan_version_id,
+            generation_unit_id=state.generation_unit_id,
+        ))
+        media = service._resolve_approved_asset_inputs(  # pyright: ignore[reportPrivateUsage]
+            service.get_project(record.project_id).document, media_inputs)
+        current: dict[str, JsonValue] = {**record.input_context, "source_context": context.source_context,
+            "media_inputs": [item.model_dump(mode="json") for item in media],
+            "media_file_states": cast(JsonValue, _media_file_states(media))}
+        if _source_identity(record.input_context) != _source_identity(current):
+            return "Current group/media differs from the saved H3 operation source; prepare the current group before submitting"
+    except (ValueError, OSError, KeyError) as exc:
+        return str(exc)
+    return None
 
 
 def _new_operation(service: ShortDramaService, project_id: str, request: H3GroupOperationRequest, group_id: str) -> H3GroupOperation:
@@ -387,6 +419,9 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 if missing:
                     raise ValueError("Current selected references are unavailable: " + ", ".join(sorted(missing)))
                 shots_by_id = {shot.id: shot for shot in document.shots}
+                from short_drama.studio_references import assert_generation_references
+                for shot_id in unit.shot_ids:
+                    assert_generation_references(document, shots_by_id[shot_id], media)
                 media.extend(generation_unit_voice_reference_inputs(document,
                     [shots_by_id[shot_id] for shot_id in unit.shot_ids], selected_media_inputs=media))
             else:
@@ -475,6 +510,14 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 record.state.next_poll_at = None
                 _step(service, record, "PROMPT_COMPILED")
             record.state.phase = "ROUTE_PLANNING"
+            # Compilation may run while the user edits or a selected file changes.
+            # Check the same complete local source again before saving/queueing its result.
+            source_reason = operation_source_staleness_reason(service, record, media_inputs=record.resolved_media_inputs)
+            if source_reason is not None:
+                record.state.status, record.state.next_action = "INPUTS_CHANGED", "PREPARE_CURRENT_SHOT_OR_GROUP"
+                record.state.error = source_reason + "; the draft is retained but no new route/tasks were saved."
+                _persist(service, record)
+                return record.public_response()
             route_plan = _matching_route(service, record)
             if route_plan is None:
                 # The compiler has made the one language call. Route creation is

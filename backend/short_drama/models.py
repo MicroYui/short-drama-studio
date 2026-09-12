@@ -1673,7 +1673,11 @@ class ShotReferenceCue(DomainModel):
         "Readable name without @. Within one Shot, a name identifies one subject and exact media/state. "
         "Use different aliases for a closed-folder composition and its open-page image, even for the same prop."
     ))
-    required_tags: list[str] = Field(default_factory=list[str], max_length=12)
+    required_tags: list[str] = Field(default_factory=list[str], max_length=12, description=(
+        "Unordered view/state tags. A Beat may omit tags for an alias already declared "
+        "on this Shot with the same subject and exact media; that unique declaration "
+        "is inherited on save. Explicitly different tags require a different alias."
+    ))
     purpose: str = Field(min_length=1, max_length=500)
     image_reference_role: ImageReferenceRole | None = Field(default=None, description=(
         "图片实际提供的视觉依据。COMPOSITION 为本镜构图、站位或状态画面；"
@@ -1856,10 +1860,30 @@ class ShotPlan(DomainModel):
                 "Shot timeline beats must cover shot dialogue lines in order; "
                 "one line may span adjacent beats"
             )
+        # A scoped occurrence can rely on its Shot's declaration. Copy only the
+        # omitted tags; never infer a subject, media, or state from another Beat.
+        declarations: dict[str, list[ShotReferenceCue]] = {}
+        for cue in self.references:
+            declarations.setdefault(cue.alias, []).append(cue)
+        normalized_beats: list[ShotTimelineBeat] = []
+        for beat in self.timeline_beats:
+            normalized_cues: list[ShotReferenceCue] = []
+            changed = False
+            for cue in beat.references:
+                owners = declarations.get(cue.alias, [])
+                owner = owners[0] if owners else None
+                if (not cue.required_tags and owner is not None and owner.required_tags
+                        and all((item.subject_asset_id, item.asset_version_id, set(item.required_tags))
+                                == (cue.subject_asset_id, cue.asset_version_id, set(owner.required_tags))
+                                for item in owners)):
+                    cue = cue.model_copy(update={"required_tags": list(owner.required_tags)})
+                    changed = True
+                normalized_cues.append(cue)
+            normalized_beats.append(beat.model_copy(update={"references": normalized_cues}) if changed else beat)
         alias_targets: dict[str, tuple[str, str | None, tuple[str, ...]]] = {}
-        for cues in [self.references, *(beat.references for beat in self.timeline_beats)]:
+        for cues in [self.references, *(beat.references for beat in normalized_beats)]:
             for cue in cues:
-                target = (cue.subject_asset_id, cue.asset_version_id, tuple(cue.required_tags))
+                target = (cue.subject_asset_id, cue.asset_version_id, tuple(sorted(cue.required_tags)))
                 existing = alias_targets.setdefault(cue.alias, target)
                 if existing != target:
                     raise ValueError(
@@ -1867,6 +1891,7 @@ class ShotPlan(DomainModel):
                         f"cue={cue.id!r} alias={cue.alias!r} subject/media/tags={target!r}; "
                         f"earlier={existing!r}. Use distinct aliases for different media or states."
                     )
+        self.timeline_beats = normalized_beats
         return self
 
 

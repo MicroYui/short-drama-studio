@@ -18,7 +18,7 @@ from short_drama.production_contracts import StoryboardDraftBeginRequest
 from short_drama.production_manager import AgentWorkOrderView, LanguageSpecialistAgent, _compact_specialist_tool_result
 from short_drama.tools import ToolCallStatus
 from short_drama.tools.artifact_views import StoryboardMutationSummaryResponse
-from tests.test_harness_tool_context import ScriptedClient, registry
+from tests.test_harness_tool_context import ScriptedClient
 from tests.test_storyboard_incremental_service import (
     _append_all_groups,  # pyright: ignore[reportUnknownVariableType] -- existing unannotated test fixture
     _draft,  # pyright: ignore[reportUnknownVariableType] -- existing unannotated test fixture
@@ -86,7 +86,7 @@ def test_actual_finalize_registry_to_next_worker_uses_saved_shots_and_group_memb
     store.save_work_order(work)
     client = ScriptedClient([json.dumps({"tool_name": "artifact.read_current", "arguments": {
         "project_id": context.project_id}, "reason": "Read a separate required scope"})])
-    agent = LanguageSpecialistAgent(client, registry())
+    agent = LanguageSpecialistAgent(client, service.tool_registry)
     agent.context_compiler = ModelInputCompiler(store)
     agent.execute(AgentWorkOrderView(work_order=work, context=context, system_prompt="Use saved timing directory."))
     payload = json_text(client.payloads[0])

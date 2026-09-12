@@ -11,6 +11,7 @@ from pydantic import JsonValue
 from short_drama.agent_runtime.model_input import json_text
 from short_drama.agent_runtime.completion_saved_results import saved_completion_artifact_refs
 from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
+from short_drama.agent_runtime.partial_storyboard_context import partial_storyboard_context
 from short_drama.agent_runtime.models import (
     ActionRecord, ActionStatus, AgentResultStatus, ArtifactRef, DelegationStatus,
     SpecialistTurnRecord, SpecialistTurnStatus,
@@ -20,6 +21,7 @@ from short_drama.agent_runtime.token_budget import count_text_tokens
 from short_drama.studio_trace import record_trace
 
 if TYPE_CHECKING:
+    from short_drama.models import ProjectDocument
     from short_drama.tools.contracts import ToolDescriptor
 
 
@@ -241,6 +243,7 @@ def leader_read_working_set(
     read_key: Callable[[SpecialistTurnRecord, Mapping[str, JsonValue] | None], str],
     project_result: Callable[[SpecialistTurnRecord], dict[str, JsonValue]],
     token_budget: int = LEADER_READ_TOKEN_BUDGET,
+    document: ProjectDocument | None = None,
 ) -> dict[str, JsonValue]:
     """Keep distinct object/view/page reads; prefer recent bodies, retain all pointers.
 
@@ -296,6 +299,10 @@ def leader_read_working_set(
     artifact_refs.update({ref.identity(): ref for ref in completed_refs})
     media, media_refs = observed_media_handoffs(store, run_id=run_id, project_id=project_id)
     artifact_refs.update({ref.identity(): ref for ref in media_refs})
+    partial, partial_refs = (partial_storyboard_context(store, run_id=run_id, document=document)
+                             if document is not None and document.project.id == project_id else ([], []))
+    artifact_refs.update({ref.identity(): ref for ref in partial_refs})
     return {"read_observations": observations, "completion_handoffs": completions,
+        **({"partial_storyboard": partial} if partial else {}),
         **({"media_observations": media, "media_observation_guidance": MEDIA_OBSERVATION_GUIDANCE} if media else {}),
         "artifact_refs": [ref.model_dump(mode="json") for ref in artifact_refs.values()]}

@@ -1,0 +1,4454 @@
+{
+  "source_project_id": "project-564a0137c835",
+  "work_order_id": "work-order-0bf29deadd554fca94425c96208d37c6",
+  "scope": "Actual unchanged storyboard requests, script and spec; temporary authoring project rebuilt with five original TEXT_REFERENCE assets and no current shots/media/packs. Only generated draft IDs are rebound during replay.",
+  "seed_project": {
+    "project": {
+      "id": "project-564a0137c835",
+      "name": "视频前完整验收 · 第五轮空项目",
+      "parent_project_id": null,
+      "episode_number": 1,
+      "episode_title": "第 1 集",
+      "source_mode": "IDEA_EXPANSION",
+      "run_mode": "AUTO_DRAFT",
+      "production_profile": "AI_SHORT_DRAMA",
+      "preferred_method_skill_ids": [],
+      "creative_direction": "",
+      "content_planning_output": "SCRIPT_AND_SHOTS",
+      "language": "zh-CN",
+      "aspect_ratio": "9:16",
+      "target_duration_seconds": 54.0,
+      "input_text": "请从这个空项目出发，创作并完成一部45–60秒、9:16竖屏、真人摄影质感短剧的视频生成前全部制作准备。现实职场题材，两名成年主要人物，一个主要室内场景；人物、故事、台词、片名和镜头由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前面的信息。对白像真人会说的话，不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面需要清楚的面部与表演，人物和空间统一，动作与对白留出自然可表演的时间。\n\n完成完整剧本、分镜、全部必要人物/场景/道具和剧情状态的原创图片、镜头所需的构图参考、正文与具体媒体的绑定，以及所有生成组可执行的视频输入和提示词路线准备。图片从零制作，不借用其他项目素材。按真实结果判断清晰度、身份、状态和输入是否满足用途；有实际问题就自主修订，保留可用结果。制作细节由你决定，无需逐步询问确认。\n\n如选定路线确实需要声音参考，也在本次资产内准备并核验，不把尚未听到的生成对白当作已验收。\n\n本次停止点是所有视频生成前准备完成。视频参数按2K、9:16准备，允许语言编译和保存生成路线，但不要创建、入队、提交或执行任何视频生成，也不要继续后期声音、剪辑或导出。准备完成后直接结束本次任务，说明已完成内容、实际图片及仍需之后视频验证的动态表现。",
+      "input_images": [],
+      "linked_asset_project_ids": [],
+      "voice_reference_revision": 0,
+      "stage": "SCRIPT_READY",
+      "current_script_version_id": "project-564a0137c835-script-v2",
+      "current_bible_version_id": "project-564a0137c835-bible-v1",
+      "current_manifest_id": null,
+      "created_at": "2026-09-12T07:45:51.288+00:00",
+      "updated_at": "2026-09-12T08:55:17.760416+00:00"
+    },
+    "planning": {
+      "run_id": null,
+      "status": "COMPLETE",
+      "planner": "deterministic-structure-scaffold-v3",
+      "warnings": [
+        "仅建立不补写创意的本地结构骨架；语言创作必须由 AgentRun 持有的 Content Planning Job 逐步完成。"
+      ],
+      "owner_agent_run_id": null,
+      "planning_job_kind": null
+    },
+    "script_versions": [
+      {
+        "id": "project-564a0137c835-script-v1",
+        "project_id": "project-564a0137c835",
+        "version": 1,
+        "source_mode": "IDEA_EXPANSION",
+        "original_text": "",
+        "screenplay_text": "",
+        "spoken_text": "",
+        "subtitle_text": "",
+        "lines": [],
+        "structured_scenes": [],
+        "structure_stale_scene_ids": [],
+        "review_report": null,
+        "review_disposition": null,
+        "final_cold_read_report": null,
+        "ending_contract": null,
+        "story_intent": null,
+        "source_contract": null,
+        "planning_run_id": null,
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "parent_version_id": null,
+        "change_reason": null,
+        "created_at": "2026-09-12T07:45:51.288+00:00"
+      },
+      {
+        "id": "project-564a0137c835-script-v2",
+        "project_id": "project-564a0137c835",
+        "version": 2,
+        "source_mode": "IDEA_EXPANSION",
+        "original_text": "《按定稿》｜第一场 内景·小会议室·周三傍晚\n小会议室里，设计师林岚（女，28岁）坐在百叶窗一侧，主管周启（男，38岁）坐在对面的门侧。黑色中性笔放在林岚右手边。\n\n周启把一张A4纸推到林岚面前。纸上标题是“定稿确认单”，底部“确认：”后已有他的签名“周启”；右上角的黄便签写着两行红字：“换配色”“重排版式”。他点了点便签。\n\n周启：配色和版式再改改，明早交。\n\n林岚伸手接纸，手停在原签名旁，把签字的那一角转向他。\n\n林岚：这版您下午刚签过。\n\n周启瞥了一眼签名，把纸转回去。\n\n周启：签了也能优化嘛。辛苦一下。\n\n林岚的食指从“换配色”移到“重排版式”。\n\n林岚：这两项都换，就是重做了。\n\n周启：你先改着，时间抓紧点。\n\n林岚没有收起纸，抬眼看他。\n\n林岚：原稿明早能交。重做，得两天。\n\n周启原本靠着椅背，听到“两天”，坐直了。\n\n周启：两天？不行，明早就要。\n\n林岚拿起黑笔，在黄便签下半部的空白处写下“周五”，将纸和笔一起推回他面前。\n\n林岚：那要重做，交期得改到周五。您确认一下，我开工。\n\n周启接过笔。笔尖停在“周五”旁边，没有落下。\n\n林岚等着，没有再催。\n\n周启看着新日期，又看了一眼纸底原来的签名。他放下笔，慢慢揭掉整张黄便签，放在自己一侧，把没有便签的确认单推回去。\n\n周启：算了，按定稿。\n\n林岚接过纸，看了一眼重新露出的完整方案，紧绷的肩膀松下来。\n\n林岚：好，明早交。\n\n她把原定稿收回自己面前。桌子对面，写着“周五”的黄便签留在周启手边。",
+        "screenplay_text": "《按定稿》｜第一场 内景·小会议室·周三傍晚\n小会议室里，设计师林岚（女，28岁）坐在百叶窗一侧，主管周启（男，38岁）坐在对面的门侧。黑色中性笔放在林岚右手边。\n\n周启把一张A4纸推到林岚面前。纸上标题是“定稿确认单”，底部“确认：”后已有他的签名“周启”；右上角的黄便签写着两行红字：“换配色”“重排版式”。他点了点便签。\n\n周启：配色和版式再改改，明早交。\n\n林岚伸手接纸，手停在原签名旁，把签字的那一角转向他。\n\n林岚：这版您下午刚签过。\n\n周启瞥了一眼签名，把纸转回去。\n\n周启：签了也能优化嘛。辛苦一下。\n\n林岚的食指从“换配色”移到“重排版式”。\n\n林岚：这两项都换，就是重做了。\n\n周启：你先改着，时间抓紧点。\n\n林岚没有收起纸，抬眼看他。\n\n林岚：原稿明早能交。重做，得两天。\n\n周启原本靠着椅背，听到“两天”，坐直了。\n\n周启：两天？不行，明早就要。\n\n林岚拿起黑笔，在黄便签下半部的空白处写下“周五”，将纸和笔一起推回他面前。\n\n林岚：那要重做，交期得改到周五。您确认一下，我开工。\n\n周启接过笔。笔尖停在“周五”旁边，没有落下。\n\n林岚等着，没有再催。\n\n周启看着新日期，又看了一眼纸底原来的签名。他放下笔，慢慢揭掉整张黄便签，放在自己一侧，把没有便签的确认单推回去。\n\n周启：算了，按定稿。\n\n林岚接过纸，看了一眼重新露出的完整方案，紧绷的肩膀松下来。\n\n林岚：好，明早交。\n\n她把原定稿收回自己面前。桌子对面，写着“周五”的黄便签留在周启手边。",
+        "spoken_text": "配色和版式再改改，明早交。\n这版您下午刚签过。\n签了也能优化嘛。辛苦一下。\n这两项都换，就是重做了。\n你先改着，时间抓紧点。\n原稿明早能交。重做，得两天。\n两天？不行，明早就要。\n那要重做，交期得改到周五。您确认一下，我开工。\n算了，按定稿。\n好，明早交。",
+        "subtitle_text": "配色和版式再改改，明早交。\n这版您下午刚签过。\n签了也能优化嘛。辛苦一下。\n这两项都换，就是重做了。\n你先改着，时间抓紧点。\n原稿明早能交。重做，得两天。\n两天？不行，明早就要。\n那要重做，交期得改到周五。您确认一下，我开工。\n算了，按定稿。\n好，明早交。",
+        "lines": [
+          {
+            "id": "line-andingao-01",
+            "speaker": "周启",
+            "speaker_character_id": "asset-46d67bbac2fc",
+            "original_text": "配色和版式再改改，明早交。",
+            "spoken_text": "配色和版式再改改，明早交。",
+            "subtitle_text": "配色和版式再改改，明早交。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-02",
+            "speaker": "林岚",
+            "speaker_character_id": "asset-c4e7e48e62d3",
+            "original_text": "这版您下午刚签过。",
+            "spoken_text": "这版您下午刚签过。",
+            "subtitle_text": "这版您下午刚签过。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-03",
+            "speaker": "周启",
+            "speaker_character_id": "asset-46d67bbac2fc",
+            "original_text": "签了也能优化嘛。辛苦一下。",
+            "spoken_text": "签了也能优化嘛。辛苦一下。",
+            "subtitle_text": "签了也能优化嘛。辛苦一下。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-04",
+            "speaker": "林岚",
+            "speaker_character_id": "asset-c4e7e48e62d3",
+            "original_text": "这两项都换，就是重做了。",
+            "spoken_text": "这两项都换，就是重做了。",
+            "subtitle_text": "这两项都换，就是重做了。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-05",
+            "speaker": "周启",
+            "speaker_character_id": "asset-46d67bbac2fc",
+            "original_text": "你先改着，时间抓紧点。",
+            "spoken_text": "你先改着，时间抓紧点。",
+            "subtitle_text": "你先改着，时间抓紧点。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-06",
+            "speaker": "林岚",
+            "speaker_character_id": "asset-c4e7e48e62d3",
+            "original_text": "原稿明早能交。重做，得两天。",
+            "spoken_text": "原稿明早能交。重做，得两天。",
+            "subtitle_text": "原稿明早能交。重做，得两天。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-07",
+            "speaker": "周启",
+            "speaker_character_id": "asset-46d67bbac2fc",
+            "original_text": "两天？不行，明早就要。",
+            "spoken_text": "两天？不行，明早就要。",
+            "subtitle_text": "两天？不行，明早就要。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-08",
+            "speaker": "林岚",
+            "speaker_character_id": "asset-c4e7e48e62d3",
+            "original_text": "那要重做，交期得改到周五。您确认一下，我开工。",
+            "spoken_text": "那要重做，交期得改到周五。您确认一下，我开工。",
+            "subtitle_text": "那要重做，交期得改到周五。您确认一下，我开工。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-09",
+            "speaker": "周启",
+            "speaker_character_id": "asset-46d67bbac2fc",
+            "original_text": "算了，按定稿。",
+            "spoken_text": "算了，按定稿。",
+            "subtitle_text": "算了，按定稿。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-andingao-10",
+            "speaker": "林岚",
+            "speaker_character_id": "asset-c4e7e48e62d3",
+            "original_text": "好，明早交。",
+            "spoken_text": "好，明早交。",
+            "subtitle_text": "好，明早交。",
+            "audio_kind": "DIALOGUE"
+          }
+        ],
+        "structured_scenes": [
+          {
+            "id": "scene-885d61c18b62",
+            "heading": "《按定稿》｜第一场 内景·小会议室·周三傍晚",
+            "summary": "周三傍晚，主管周启要求已签字的设计定稿更换配色与版式，仍须明早交付。林岚指出重做需要两天，在修改便签上写下周五并请他确认。周启不愿改变交期，接笔却没有签字，亲手揭下修改便签，恢复原定稿；林岚确认明早交付。",
+            "line_ids": [
+              "line-andingao-01",
+              "line-andingao-02",
+              "line-andingao-03",
+              "line-andingao-04",
+              "line-andingao-05",
+              "line-andingao-06",
+              "line-andingao-07",
+              "line-andingao-08",
+              "line-andingao-09",
+              "line-andingao-10"
+            ],
+            "screenplay_text": "小会议室里，设计师林岚（女，28岁）坐在百叶窗一侧，主管周启（男，38岁）坐在对面的门侧。黑色中性笔放在林岚右手边。\n\n周启把一张A4纸推到林岚面前。纸上标题是“定稿确认单”，底部“确认：”后已有他的签名“周启”；右上角的黄便签写着两行红字：“换配色”“重排版式”。他点了点便签。\n\n周启：配色和版式再改改，明早交。\n\n林岚伸手接纸，手停在原签名旁，把签字的那一角转向他。\n\n林岚：这版您下午刚签过。\n\n周启瞥了一眼签名，把纸转回去。\n\n周启：签了也能优化嘛。辛苦一下。\n\n林岚的食指从“换配色”移到“重排版式”。\n\n林岚：这两项都换，就是重做了。\n\n周启：你先改着，时间抓紧点。\n\n林岚没有收起纸，抬眼看他。\n\n林岚：原稿明早能交。重做，得两天。\n\n周启原本靠着椅背，听到“两天”，坐直了。\n\n周启：两天？不行，明早就要。\n\n林岚拿起黑笔，在黄便签下半部的空白处写下“周五”，将纸和笔一起推回他面前。\n\n林岚：那要重做，交期得改到周五。您确认一下，我开工。\n\n周启接过笔。笔尖停在“周五”旁边，没有落下。\n\n林岚等着，没有再催。\n\n周启看着新日期，又看了一眼纸底原来的签名。他放下笔，慢慢揭掉整张黄便签，放在自己一侧，把没有便签的确认单推回去。\n\n周启：算了，按定稿。\n\n林岚接过纸，看了一眼重新露出的完整方案，紧绷的肩膀松下来。\n\n林岚：好，明早交。\n\n她把原定稿收回自己面前。桌子对面，写着“周五”的黄便签留在周启手边。",
+            "narrative_purpose": "让林岚从被动承受临时加码转为提出可执行取舍，以原签字和具体新交期让周启承担选择；揭便签的行动完成冲突解决，结尾的明早交回收开头交付要求。单篇闭合，不引入第三人或场外救援。",
+            "target_duration_seconds": 54.0,
+            "entry_state": {
+              "setting": "周三傍晚，同一间小会议室；林岚窗侧、周启门侧，隔桌相对。",
+              "character_states": [
+                "林岚是28岁成年女性设计师，面对主管临时追加整版修改。",
+                "周启是38岁成年男性主管，要求配色和版式修改后仍于明早交付。"
+              ],
+              "prop_states": [
+                "同一张定稿确认单底部已有周启签字，开场不是待批准空白单。",
+                "右上黄便签已有红字换配色、重排版式，下半部留白，尚无周五。",
+                "唯一黑色中性笔在林岚右手边桌面。"
+              ],
+              "known_facts": [
+                "周启当天下午已确认现有定稿。"
+              ],
+              "open_threads": [
+                "临时重做要求与明早交期如何取舍。"
+              ]
+            },
+            "exit_state": {
+              "setting": "仍是周三傍晚的同一会议室，时间连续，双方座位不变。",
+              "character_states": [
+                "林岚拿回原定稿，确认明早交付，肩膀放松。",
+                "周启主动撤回本次修改，未批准新交期。"
+              ],
+              "prop_states": [
+                "原签字确认单已揭去黄便签，收回林岚面前。",
+                "黄便签新增黑字周五，整张留在周启一侧桌面。",
+                "黑笔由林岚传给周启，再被周启放在自己一侧；他没有在新日期旁签字。"
+              ],
+              "known_facts": [
+                "原定稿可在明早交，整版重做需要两天。",
+                "本次确定保持明早交期，按原定稿执行，不再重做。"
+              ],
+              "open_threads": []
+            }
+          }
+        ],
+        "structure_stale_scene_ids": [],
+        "review_report": null,
+        "review_disposition": null,
+        "final_cold_read_report": null,
+        "ending_contract": null,
+        "story_intent": null,
+        "source_contract": null,
+        "planning_run_id": null,
+        "approval_status": "APPROVED",
+        "freshness": "CURRENT",
+        "parent_version_id": "project-564a0137c835-script-v1",
+        "change_reason": "当前场次编辑",
+        "created_at": "2026-09-12T07:52:13.577123+00:00"
+      }
+    ],
+    "bible_versions": [
+      {
+        "id": "project-564a0137c835-bible-v1",
+        "project_id": "project-564a0137c835",
+        "version": 1,
+        "characters": [],
+        "locations": [],
+        "props": [],
+        "style": {
+          "medium": "未指定",
+          "genre": "未指定",
+          "cinematography": "未指定",
+          "color": "未指定",
+          "texture": "未指定",
+          "forbidden": []
+        },
+        "approval_status": "APPROVED",
+        "freshness": "CURRENT",
+        "parent_version_id": null,
+        "created_at": "2026-09-12T07:45:51.288+00:00"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset-c4e7e48e62d3",
+        "project_id": "project-564a0137c835",
+        "kind": "CHARACTER",
+        "name": "林岚",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "林岚，28岁成年中国女性，平面设计师；本片唯一女主角。",
+          "tone_or_temperament": "克制、务实，有疲惫感但不怯弱。说话先对事实，关键选择说完整；不冷笑、不用夸张翻白眼表达不满。",
+          "visual_attributes": [
+            "椭圆脸，清晰自然的五官，深棕色眼睛，平直眉",
+            "自然黑色齐肩发扎低马尾，侧边少量碎发",
+            "中等身高、匀称偏瘦体型，真实成年职场女性外观"
+          ],
+          "wardrobe_or_materials": [
+            "浅灰蓝色棉质长袖衬衫，袖口正常扣合，不中途卷袖",
+            "炭灰色直筒长裤，黑色平底鞋",
+            "无明显品牌、无夸张首饰"
+          ],
+          "background_constraints": [
+            "全场在同一间小会议室，坐在会议桌靠百叶窗的一侧",
+            "只与周启对戏，不出现其他同事"
+          ],
+          "texture_constraints": [
+            "真人摄影质感，保留自然皮肤和衣料纹理",
+            "不磨皮成塑料感，不动漫化"
+          ],
+          "continuity_anchors": [
+            "低马尾及服装全场不变",
+            "右手用黑色中性笔在黄便签空白处写下“周五”",
+            "结尾拿回的是去掉修改便签的同一张定稿确认单"
+          ],
+          "named_views_or_zones": [
+            "清晰面部与衬衫领口",
+            "坐姿及桌面手部活动区域"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "本次保存核心文字设定；实际参考图、状态图和构图需求由下游按正文准备。"
+        },
+        "current_version_id": "asset-version-113413910c96",
+        "approved_version_id": null,
+        "versions": [
+          {
+            "id": "asset-version-113413910c96",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "28岁成年中国女性，平面设计师。面对主管临时要求整版重做，先确认旧签字，再提供交付时间与修改范围的可执行选择，不靠争吵改变局面。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T07:50:57.316+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T07:50:57.316+00:00"
+          }
+        ]
+      },
+      {
+        "id": "asset-46d67bbac2fc",
+        "project_id": "project-564a0137c835",
+        "kind": "CHARACTER",
+        "name": "周启",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "周启，38岁成年中国男性，市场部主管，林岚直属上级；本片唯一男主角，不具有隐藏身份。",
+          "tone_or_temperament": "习惯把额外工作说得轻巧，重视自己承诺的交期；被要求承担选择时会迟疑，最终务实让步。不暴怒、不突然转为热情赞美下属。",
+          "visual_attributes": [
+            "略方的脸型，宽额头，浓度适中的直眉，深棕色眼睛",
+            "黑色短发，侧分整齐，无胡须，无眼镜",
+            "中等身高，结实微壮的普通成年男性体型"
+          ],
+          "wardrobe_or_materials": [
+            "深海军蓝长袖衬衫，正常扣领，不打领带",
+            "深灰色西裤，黑色商务休闲皮鞋",
+            "无明显品牌，不佩戴突出的大金表"
+          ],
+          "background_constraints": [
+            "全场在同一间小会议室，坐在会议桌靠磨砂玻璃门的一侧",
+            "只与林岚对戏，不出现老板、客户或其他人"
+          ],
+          "texture_constraints": [
+            "真人摄影质感，保留真实皮肤与衬衫织物细节",
+            "不漫画化反派，不使用夸张奢华造型"
+          ],
+          "continuity_anchors": [
+            "发型服装全场不变",
+            "定稿确认单底部已有他的手写签名“周启”",
+            "接过黑笔后没有签新的交期，最终自己揭下黄便签",
+            "结尾只撤回本次重做要求，不承诺升职、补偿或其他场外结果"
+          ],
+          "named_views_or_zones": [
+            "清晰面部及迟疑反应",
+            "持笔与揭便签的桌面活动区域"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "本次固定身份和表演边界，不预制镜头或媒体。"
+        },
+        "current_version_id": "asset-version-e12bc16714c4",
+        "approved_version_id": null,
+        "versions": [
+          {
+            "id": "asset-version-e12bc16714c4",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "38岁成年中国男性，市场部主管，林岚的直属上级。已经签过定稿，仍想临时改变配色与版式；当重做会改变他坚持的交期时，亲手撤回新增要求。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T07:50:57.316+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T07:50:57.316+00:00"
+          }
+        ]
+      },
+      {
+        "id": "asset-4e0caa4f5e0e",
+        "project_id": "project-564a0137c835",
+        "kind": "LOCATION",
+        "name": "小会议室",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "普通城市公司的小会议室，唯一故事场景，周三傍晚，室内连续时间。",
+          "tone_or_temperament": null,
+          "visual_attributes": [
+            "约12平方米，中央一张长约1.6米的哑光浅木色长方形会议桌",
+            "面对后侧浅灰实墙时，百叶窗在左侧，关闭的磨砂玻璃门在右后侧",
+            "桌子两条长边各有一把灰色办公椅；林岚在窗侧，周启在门侧",
+            "桌面仅放剧情确认单、黄便签与黑笔，空间简洁但有真实使用感"
+          ],
+          "wardrobe_or_materials": [
+            "浅木纹桌面、灰色布面椅、米灰墙面、磨砂玻璃",
+            "普通办公照明，不做豪华总裁办公室"
+          ],
+          "background_constraints": [
+            "无可见或可听的第三人，无走廊人影、人物照片和人形倒影",
+            "无电视、投影或必须新增的电脑屏幕",
+            "门窗位置、桌椅关系全场不变，两人不交换座位"
+          ],
+          "texture_constraints": [
+            "9:16真人摄影质感；自然窗光和柔和室内顶光",
+            "面部曝光清楚，桌面白纸不过曝，玻璃不映出额外人物",
+            "中性偏暖办公色调，真实木纹和墙面，不赛博、不舞台化"
+          ],
+          "continuity_anchors": [
+            "周三傍晚连续一场，不跳时空",
+            "林岚窗侧、周启门侧，两人隔桌相对",
+            "文件在两人之间移动；黑笔从林岚交至周启；黄便签结尾留在周启一侧桌面"
+          ],
+          "named_views_or_zones": [
+            "中央桌面文件交接区",
+            "左侧百叶窗与林岚座位",
+            "右侧周启座位与右后磨砂玻璃门",
+            "后侧浅灰实墙"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "固定单室空间及人物座位；图片覆盖和构图由下游依实际分镜决定。"
+        },
+        "current_version_id": "asset-version-b62ca4b20f97",
+        "approved_version_id": null,
+        "versions": [
+          {
+            "id": "asset-version-b62ca4b20f97",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "当代普通公司内部的小会议室，周三傍晚。唯一主要空间；浅木会议桌居中，左侧百叶窗、后侧浅灰墙、右后侧磨砂玻璃门形成稳定空间锚点。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T07:50:57.316+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T07:50:57.316+00:00"
+          }
+        ]
+      },
+      {
+        "id": "asset-08548f4926f3",
+        "project_id": "project-564a0137c835",
+        "kind": "PROP",
+        "name": "定稿确认单与修改便签",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "全片同一张A4定稿确认单及附着的同一张黄便签，是既有批准、临时变更与撤回变更的实物载体。",
+          "tone_or_temperament": null,
+          "visual_attributes": [
+            "白色竖向A4纸，顶部黑体标题“定稿确认单”",
+            "中段为简洁蓝白色块组成的海报缩略设计，不含品牌、人物或额外剧情文字",
+            "底部黑色“确认：”后已有手写签名“周启”，开场即存在，不是结尾才签",
+            "右上贴一张足够容纳四行短字的方形淡黄便签，不能遮住标题或底部签名",
+            "便签上半部红色手写“换配色”“重排版式”，下半部初始留白"
+          ],
+          "wardrobe_or_materials": [
+            "普通哑光办公打印纸，淡黄色纸质便签，真实墨迹",
+            "纸张平整但非塑料，便签顶部有可揭起的胶边"
+          ],
+          "background_constraints": [
+            "不新增印章、公司标志、费用、责任书或其他证据文件",
+            "文字应准确，必要时下游以准确文字排版与贴合保持可读性，不依赖随机生成小字"
+          ],
+          "texture_constraints": [
+            "真人实拍纸张质感，纸面光照柔和、黑红文字清楚",
+            "禁止无关乱码、签名变化或纸张数量突然增加"
+          ],
+          "continuity_anchors": [
+            "初始状态：确认单签字已在，黄便签只有红色两项修改要求",
+            "中间状态：林岚在同一便签下半部新增黑色手写“周五”，旁边仍有可签名空白",
+            "周启接笔但不签字；不能生成他在新日期旁完成签名的动作或状态",
+            "终态：周启揭下整张黄便签放自己一侧，林岚拿回无便签的原签字确认单",
+            "“周五”来自周三提出的两天重排需求，不代表已经获批延期"
+          ],
+          "named_views_or_zones": [
+            "标题与原签字区",
+            "黄便签初始两项修改文字区",
+            "黄便签新增“周五”的状态区",
+            "便签揭下后的原定稿完整状态"
+          ],
+          "presentation_mode": "PHYSICAL_MASTER",
+          "required_visible_text": [
+            "定稿确认单",
+            "确认：周启",
+            "换配色",
+            "重排版式",
+            "周五"
+          ],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "PROP_MASTER_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "剧情所需文本与状态先保存为文字锚点；“周五”仅在林岚写下后的状态出现，不能提前出现在初始图。"
+        },
+        "current_version_id": "asset-version-a2ca4cf21092",
+        "approved_version_id": null,
+        "versions": [
+          {
+            "id": "asset-version-a2ca4cf21092",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "一张白色A4定稿确认单，底部已有“确认：周启”的黑色手写签字，右上附黄便签，上写红字“换配色”“重排版式”。林岚在便签空白处写“周五”；周启最终揭下便签，恢复原定稿。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T07:50:57.316+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T07:50:57.316+00:00"
+          }
+        ]
+      },
+      {
+        "id": "asset-e6e4c7749c50",
+        "project_id": "project-564a0137c835",
+        "kind": "PROP",
+        "name": "黑色中性笔",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "全片唯一一支黑色按动中性笔，书写墨色为黑色。",
+          "tone_or_temperament": null,
+          "visual_attributes": [
+            "细长哑光黑色笔身，黑色笔夹，小型银灰笔尖",
+            "无品牌文字、无系绳，无需要单独追踪的笔帽"
+          ],
+          "wardrobe_or_materials": [
+            "普通办公塑料笔杆与金属笔尖"
+          ],
+          "background_constraints": [
+            "不增加第二支笔；便签红色修改字为场前已经写好"
+          ],
+          "texture_constraints": [
+            "真实办公文具比例与材质，无发光或夸张装饰"
+          ],
+          "continuity_anchors": [
+            "开场在林岚右手边桌面",
+            "林岚右手写字，随后笔推到周启面前",
+            "周启拿起停顿，不落笔签字；最后将笔放在自己一侧桌面"
+          ],
+          "named_views_or_zones": [
+            "桌面完整笔身",
+            "手持书写时的笔尖"
+          ],
+          "presentation_mode": "PHYSICAL_MASTER",
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "PROP_MASTER_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "保持唯一手持工具的外观和流转一致；不制作媒体。"
+        },
+        "current_version_id": "asset-version-ef9b7e1b6477",
+        "approved_version_id": null,
+        "versions": [
+          {
+            "id": "asset-version-ef9b7e1b6477",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "普通无品牌黑色按动中性笔；林岚用它写“周五”，再递给周启请其确认交期。周启接笔却没有签字，随后放下笔并撤回修改便签。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T07:50:57.316+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T07:50:57.316+00:00"
+          }
+        ]
+      }
+    ],
+    "shots": [],
+    "execution_plan": [],
+    "reference_plan": [],
+    "manifests": [],
+    "editorial_timeline": null,
+    "studio_exports": [],
+    "studio_changes": [],
+    "comfy_workflows": [],
+    "trace_sources": [],
+    "reference_packs": [],
+    "voice_references": [],
+    "repair_history": [],
+    "production_documents": [
+      {
+        "id": "production-document-fdce833348ee",
+        "project_id": "project-564a0137c835",
+        "kind": "production.spec",
+        "title": "Production Spec",
+        "current_version_id": "production-document-version-d5fb6e095753",
+        "versions": [
+          {
+            "id": "production-document-version-d5fb6e095753",
+            "version": 1,
+            "parent_version_id": null,
+            "payload": {
+              "project_id": "project-564a0137c835",
+              "script_version_id": "project-564a0137c835-script-v2",
+              "bible_version_id": "project-564a0137c835-bible-v1",
+              "title": "按定稿",
+              "production_scope": "全项目完成视频生成前全部准备：完整剧本、分镜、从零原创且经过实际观察的必要人物、场景、道具及剧情状态图片、镜头构图参考、正文与具体媒体绑定，以及全部生成组可执行的视频输入和提示词路线。本编剧分工仅交付完整剧本、核心文字设定和制作规格，不制作分镜或媒体。禁止创建、入队、提交或执行任何视频生成及视频探针，不进入后期声音、剪辑或导出。",
+              "production_mode": "中文现实职场AI短剧，9:16竖屏，真人摄影质感。视频按2K准备；允许语言编译与保存生成路线，准备工具必须关闭视频入队。图片从零原创，不借用其他项目素材。",
+              "genre_and_setting": "当代现实职场；单篇闭合。周三傍晚，一间普通公司小会议室内，28岁女设计师林岚与38岁男主管周启隔桌相对。主管要求已签定稿重做却坚持明早交，设计师把修改范围和交期的取舍交回主管，主管最终亲手撤回修改。",
+              "language": "zh-CN",
+              "aspect_ratio": "9:16",
+              "target_duration_seconds": 54.0,
+              "duration_intent": "用户要求45–60秒，取54秒为编排目标，替代项目原有300秒初始默认值。根据已保存十句对白及递纸、写字、停笔、揭便签和反应，自然表演预估约50–56秒；这是文本估计，不是实测视频时长。",
+              "duration_contract": {
+                "target_seconds": 54.0,
+                "target_origin": "USER_DECLARED",
+                "authority": "TARGET_LED",
+                "acceptable_range_seconds": {
+                  "minimum_seconds": 45.0,
+                  "maximum_seconds": 60.0
+                },
+                "source_fidelity_policy": "PRESERVE_STORY_COMMITMENTS",
+                "mismatch_resolution": "REVISE_SCRIPT",
+                "decision_basis": "45–60秒范围来自用户；54秒中心值由Agent依据完整单场的自然对话、手部行动与迟疑反应选择。不得继承300秒默认值，不以抢对白、快放表演或删除必要因果满足时长。若下游实际编排超出范围，局部调整冗余，不改变已签定稿、重做需要两天、主管拒绝延期并主动撤回修改的故事承诺。",
+                "rhythm_shape": [],
+                "user_overridable": true
+              },
+              "master_audio_binding_version_id": null,
+              "visual": {
+                "medium_lock": "9:16真人摄影质感，清楚的成年人物面部、真实皮肤与衣料纹理、自然可表演的动作；禁止漫画化、塑料磨皮和舞台式夸张。",
+                "style_brief": [
+                  "普通职场空间与克制表演；情绪释放来自主管亲手揭下修改便签，不用胜利光效或第三人喝彩。",
+                  "保持林岚低马尾、灰蓝衬衫与炭灰长裤，周启黑色侧分短发、海军蓝衬衫与深灰西裤。",
+                  "林岚固定在窗侧，周启固定在门侧；保留浅木会议桌、左侧百叶窗、后侧浅灰实墙及右后磨砂玻璃门的空间关系。",
+                  "纸上原签字、黄便签修改要求及后写的周五承担因果信息；确保对应状态文字准确可读，不让字幕遮挡关键纸面和手部动作。",
+                  "构图参考和人物身份参考由下游按具体镜头用途分别准备；身份参考不自动等于首帧。"
+                ],
+                "color_palette": [
+                  "中性偏暖办公环境",
+                  "浅木色与米灰",
+                  "灰蓝及海军蓝服装",
+                  "淡黄便签上的红黑文字"
+                ],
+                "lighting_intent": "周三傍晚连续时间，柔和自然窗光结合普通室内顶光；面部曝光清晰，白纸不过曝，玻璃不映出额外人物。",
+                "forbidden_elements": [
+                  "可见或可听的第三名人物、背景人影及人形倒影",
+                  "神秘身份、场外权威救援或巧合解围",
+                  "豪华总裁办公室、突变服装或交换座位",
+                  "周五在林岚书写前已经出现",
+                  "周启在新交期旁完成签字",
+                  "文件、便签或黑笔数量突增及跨段状态复位",
+                  "新增升职、补偿或后续悬念"
+                ]
+              },
+              "audio": {
+                "dialogue_intent": "普通话自然近距离对话，仅使用已保存的十句角色对白；周启先轻描淡写后迟疑让步，林岚克制、务实、说清取舍。不朗读动作段，不新增旁白或第三人声音。给听者反应与接笔停顿留出时间，不抢话。当前未生成或听验对白；声线参考仅在下游选定路线确实需要时准备并实际核验。",
+                "ambience_intent": "轻微办公室底噪，纸张推移、笔尖书写、笔放桌面及揭便签声保持自然且不压对白；不加入同事交谈或场外人物提示。",
+                "bgm_intent": "不以配乐推动或解释反转，优先保留对话与短暂沉默；本次不进行后期声音制作。",
+                "subtitle_intent": "后续字幕依据结构化subtitle_text逐字制作，只包含实际对白，不把动作说明变成字幕或旁白；避开人脸及承担因果的纸面文字。当前未对生成音频做字幕对齐或验收。"
+              },
+              "provider_preference": {
+                "provider": "MiniMax",
+                "model": "MiniMax-H3",
+                "resolution": "2K"
+              },
+              "user_constraints": [
+                "中文现实职场短剧，45–60秒，9:16竖屏，真人摄影质感，视频参数按2K准备。",
+                "两名成年主要人物，一个主要室内场景；片名、故事、对白、人物和镜头由Agent自主决定，无需逐步确认。",
+                "开头尽快明确矛盾，人物通过行动与回应改变局势，转折有前因，结尾回收既有信息。",
+                "人物与空间统一，面部和表演清楚，为动作、对白及反应保留自然时间。",
+                "全部必要图片从零原创，不使用其他项目素材；按实际结果判断身份、清晰度、状态和输入用途。",
+                "允许编译提示词、准备输入并保存生成路线；禁止任何视频任务或探针的创建、入队、提交和执行。",
+                "视频生成前准备全部完成后结束，不进入后期声音、剪辑或导出。"
+              ],
+              "agent_decisions": [
+                "采用单场闭合故事《按定稿》，不增加第三人、第二地点或场外结果。",
+                "主管下午已经签字是开场既有事实；林岚以可执行的交期选择改变局势，而非仅凭签名宣布获胜。",
+                "周三提出重做需要两天，林岚在同一黄便签下半部写周五；这只是请主管确认的选项，不代表延期获批。",
+                "主管接过黑笔但不签新交期，亲手揭下整张修改便签；原定稿回到林岚面前，便签及笔留在主管一侧。",
+                "结尾好，明早交回收开头明早交：交期不变，临时重做要求撤回。",
+                "人物、场景、道具外观及连续性以关联的五项当前核心资产brief为准。"
+              ],
+              "notes": [
+                "当前已保存的是完整剧本、结构化对白和五项文字核心资产；这些文字资产不是已经生成或观察过的图片。",
+                "2K是后续视频输入与路线的目标规格，不代表已有2K视频，也不代表已核验动态表现或生成对白。",
+                "后续仍须通过实际视频检验口型、声线、对白可懂度、手部书写、纸笔交接、揭便签、视线及动作连续性；本次禁止为此运行视频探针。",
+                "下游准备时不要把停笔生成成签字，不要把待确认周五解释成已经同意延期；关键道具状态须与具体镜头时段一致。"
+              ]
+            },
+            "source_artifact_refs": [
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "script_version",
+                "artifact_id": "project-564a0137c835-script-v2",
+                "version": 2
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "bible_version",
+                "artifact_id": "project-564a0137c835-bible-v1",
+                "version": 1
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-113413910c96",
+                "version": 1
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-e12bc16714c4",
+                "version": 1
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-b62ca4b20f97",
+                "version": 1
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-a2ca4cf21092",
+                "version": 1
+              },
+              {
+                "project_id": "project-564a0137c835",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-ef9b7e1b6477",
+                "version": 1
+              }
+            ],
+            "origin": "AGENT",
+            "created_at": "2026-09-12T07:53:14.828+00:00"
+          }
+        ]
+      }
+    ],
+    "master_audio_document_id": null,
+    "audio_structure_document_id": null,
+    "timed_text_document_id": null,
+    "production_spec_document_id": "production-document-fdce833348ee",
+    "storyboard_document_id": null,
+    "asset_plan_document_id": null,
+    "generation_plan_document_id": null,
+    "output_slots": [
+      {
+        "id": "production.spec.current",
+        "revision": 1,
+        "current_artifact_ref": {
+          "project_id": "project-564a0137c835",
+          "artifact_type": "production_spec",
+          "artifact_id": "production-document-fdce833348ee",
+          "version": 1
+        },
+        "previous_artifact_refs": [],
+        "revision_history": [],
+        "invalidation_reason": null,
+        "producer_agent_run_id": null,
+        "producer_work_order_id": null,
+        "updated_at": "2026-09-12T07:53:14.828+00:00"
+      }
+    ]
+  },
+  "turns": {
+    "2": {
+      "tool_name": "shot.begin_storyboard_draft",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "seed": {
+            "project_id": "project-564a0137c835",
+            "title": "《按定稿》完整分镜",
+            "script_version_id": "project-564a0137c835-script-v2",
+            "bible_version_id": "project-564a0137c835-bible-v1",
+            "production_spec_document_id": "production-document-fdce833348ee",
+            "production_spec_version_id": "production-document-version-d5fb6e095753",
+            "scene_nodes": [
+              {
+                "id": "sb-scene-andingao-01",
+                "scene_id": "scene-885d61c18b62",
+                "sequence": 1,
+                "continuity_in": [
+                  "周三傍晚，同一小会议室。林岚坐百叶窗侧、周启坐门侧，隔浅木桌相对。",
+                  "开场唯一A4确认单已有黑色原签名“确认：周启”；右上黄便签仅有红字“换配色”“重排版式”，下半部空白。唯一黑色中性笔在林岚右手边。"
+                ],
+                "continuity_out": [
+                  "林岚拿回揭去便签的原签字定稿，确认明早交付。",
+                  "新增黑字“周五”的黄便签与黑笔留在周启一侧，周启始终没有签新日期。"
+                ],
+                "notes": [
+                  "全片固定桌边对话轴：关系镜头林岚画左窗侧，周启画右门侧；单人镜头林岚看画右，周启看画左。桌面插入机位仍在同侧，不镜像纸面或交换座位。",
+                  "服装沿用林岚灰蓝衬衫、低马尾和炭灰长裤，周启海军蓝衬衫、黑侧分短发和深灰西裤；侧窗柔光与普通顶光连续，无第三人或人形倒影。"
+                ]
+              }
+            ],
+            "timing_notes": [
+              "按自然演读十句对白、动作与反应估算：开场与原签字10.6秒，两项重做6秒，交期取舍7.2秒，写新日期与递笔11秒，接笔未签及沉默7秒，撤回修改与闭合结尾12.2秒，合计54秒。",
+              "时间是导演纸面可表演性估算，未生成或听验音视频。对白不加速，书写不要求逐笔准确成字；用真实落笔动作接准确完成状态。实际动态、中文稳定性、口型和最终时长仍须后续视频验证。"
+            ],
+            "notes": [
+              "本工单只保存完整分镜与ClipGroup，不制作图片、声音或视频，不创建视频任务或探针，不进入后期。",
+              "现有资产仅确认文字设定；参考字段保存主体、用途与所需状态，精确媒体保持空值。身份卡不充当首帧。构图参考需求写入各镜camera及组说明，后续依据实际原创图片绑定。",
+              "每个组可凭原创身份、空间、道具状态及构图参考独立准备；不把未来视频Take或抽帧设为必需输入。供应商单次时长限制由路线编译处理。",
+              "纸面准确文字需要分别准备开场无周五、写后周五未签、揭后原定稿与独立便签三个状态。文字观察镜头以无手遮挡的准确平面状态为输入，不承诺后期追踪贴字或逐笔动画兜底。"
+            ]
+          },
+          "source_artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-fdce833348ee",
+              "version": 1
+            }
+          ],
+          "origin": "AGENT"
+        }
+      }
+    },
+    "3": {
+      "tool_name": "shot.append_storyboard_groups",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "draft_document_id": "production-document-2458c416ac05",
+          "base_version_id": "production-document-version-cc720327c740",
+          "origin": "AGENT",
+          "work_unit": {
+            "id": "wu-andingao-conflict",
+            "title": "第一场：临时重做与交期冲突",
+            "source_range": {
+              "id": "range-andingao-01-07",
+              "scene_ids": [
+                "scene-885d61c18b62"
+              ],
+              "script_line_ids": [
+                "line-andingao-01",
+                "line-andingao-02",
+                "line-andingao-03",
+                "line-andingao-04",
+                "line-andingao-05",
+                "line-andingao-06",
+                "line-andingao-07"
+              ],
+              "description": "从周启推来带修改便签的已签定稿，到周启拒绝重做所需的两天；尚未写周五。"
+            },
+            "objective": "迅速建立矛盾、人物关系、原签名和两项修改的证据，保留自然表演和听者反应。",
+            "continuity_context": [
+              "周三傍晚，林岚坐窗侧，周启坐门侧；两人始终隔桌相对。",
+              "双人机位置于会议桌同一短边：林岚画左、周启画右；正反打留在该轴线同侧。",
+              "唯一A4底部已签周启；右上黄便签只有红字换配色、重排版式，下半部空白；唯一黑笔初始在林岚右手边。"
+            ],
+            "constraints": [
+              "仅两名成年人物，无旁白、第三人或人形倒影。",
+              "9:16真人摄影质感、按2K准备；当前不制作任何视频或探针。",
+              "引用为待制备需求，未选图片不填写媒体版本。"
+            ],
+            "completion_criteria": [
+              "前七句对白逐字覆盖。",
+              "签名与修改要求有可辨认证据镜头。",
+              "人物、纸张与黑笔状态能够接续写周五段落。"
+            ]
+          },
+          "groups": [
+            {
+              "work_unit_id": "wu-andingao-conflict",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 1,
+              "source_range": {
+                "id": "range-andingao-g01",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-01",
+                  "line-andingao-02",
+                  "line-andingao-03"
+                ],
+                "description": "推来临时修改要求，林岚指出下午刚签过，周启将改动轻描淡写为优化。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-01",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 1,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 4,
+                  "narrative_purpose": "第一句即给出改配色和版式却仍须明早交的冲突，同时建立双方位置和纸张来源。",
+                  "visual": "@小会议室内，@林岚坐窗侧画左，低马尾、灰蓝衬衫；@周启坐门侧画右，侧分短发、海军蓝衬衫。他把@初始确认单推向她并点黄便签。@黑色中性笔仍在她右手边桌面。只出现两人，玻璃门无第三人人影。",
+                  "framing": "9:16双人中景，机位在桌的同一短边斜看；两张脸在上半部、递纸区在下半部。纸面文字本镜不承担精读。",
+                  "camera": "固定眼平略俯的@会议室关系构图；窗侧在画左、门侧在画右。柔和窗光与顶光连续，纸不过曝，不为同时拍全房间退成远景。",
+                  "audio_intent": "周启画内说：配色和版式再改改，明早交。林岚只听不张嘴。轻微办公室底噪与纸滑声，无配乐强调、无其他人声。",
+                  "dialogue_line_ids": [
+                    "line-andingao-01"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "purpose": "待制备空场景母版；普通浅木桌、百叶窗、灰墙和磨砂门，提供空间与光向，不自动代表演员入画。",
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": null,
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "待制备林岚身份与灰蓝衬衫参考；本镜须认清成年面部和窗侧位置。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": null,
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "purpose": "待制备周启身份与海军蓝衬衫参考；说话人是门侧主管。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "asset_version_id": null,
+                      "alias": "初始确认单",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@初始确认单"
+                      },
+                      "required_tags": [
+                        "已签周启",
+                        "便签两项红字",
+                        "周五未写"
+                      ],
+                      "purpose": "待制备初态：同一A4底部已有确认：周启，黄便签下半留白；不得提前出现周五。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "asset_version_id": null,
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "purpose": "待制备唯一无品牌黑色按动笔母版；本镜仅在林岚右手边，不被拿起。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "会议室关系构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@会议室关系构图"
+                      },
+                      "purpose": "待制备双人关系构图：左林岚右周启、隔桌、两张面部清楚、下方留递纸区；软构图参考而非身份卡或硬首帧。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.2,
+                      "visual": "两人已坐定，纸在周启近手处。",
+                      "framing": "双人中景",
+                      "camera": "固定",
+                      "action": "周启手接触纸边，开始朝林岚方向推。林岚视线落向纸。",
+                      "performance": "周启像交代日常小事，不预演后来的迟疑。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻底噪、纸开始擦桌。"
+                    },
+                    {
+                      "start_seconds": 0.2,
+                      "end_seconds": 3.8,
+                      "visual": "纸移到两人之间偏林岚一侧，黄便签可见。",
+                      "framing": "双人中景",
+                      "camera": "固定",
+                      "action": "周启推到她可接的位置，手指点一次便签后离开；林岚伸手接纸。",
+                      "performance": "周启轻描淡写说完要求；林岚先听，不抢话。",
+                      "dialogue_line_ids": [
+                        "line-andingao-01"
+                      ],
+                      "sound": "周启画内完整说第一句；纸声低于对白。"
+                    },
+                    {
+                      "start_seconds": 3.8,
+                      "end_seconds": 4,
+                      "visual": "林岚的手到达纸底签字附近。",
+                      "framing": "双人中景",
+                      "camera": "固定",
+                      "action": "她控制住纸边，接下镜签名证据。",
+                      "dialogue_line_ids": [],
+                      "sound": "对白收尾后的短空隙。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧画左，周启门侧画右，隔桌坐定。",
+                    "eyeline": "周启看向画左的林岚；林岚先看画右的周启再垂眼看纸。",
+                    "prop_state_in": "周启面前的A4已签名，便签仅两行红字；黑笔在林岚右手边。",
+                    "prop_state_out": "纸移至林岚面前可触范围；便签和原签名均未变化；黑笔未动。",
+                    "action_in": "周启手接触纸边。",
+                    "action_out": "林岚开始接住纸，手到签名附近。"
+                  },
+                  "transition_out": "按林岚接纸动作切纸面证据，不重新演一遍完整推纸。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "竖屏双人中景只交代关系，不要求同时精读三处纸面文字；需后续实图确认两张脸及递纸区均有空间。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-02",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 2,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.8,
+                  "narrative_purpose": "让观众看见这不是未批准方案：原签名已存在，而新增要求只有两项。",
+                  "visual": "@初始确认单在浅木桌上占据画面主体，标题“定稿确认单”、底部“确认：周启”和右上黄便签的红字“换配色”“重排版式”可辨认；便签下半仍空白。@林岚的灰蓝袖口和手进入，停在签名旁，不遮住姓名。只见手，不要求人物面部入画。",
+                  "framing": "9:16纸面近特写，略俯斜拍；整张A4及少量桌面入画，重点保留底部签字与便签，不拍极小局部导致失去两者关系。",
+                  "camera": "固定@原签名证据构图，从同一轴线侧俯拍。纸初始朝林岚方向可读，轻转仅为将签字角朝周启呈示，不做无依据的180度翻转。",
+                  "audio_intent": "林岚画外说：这版您下午刚签过。两人脸均不入画，手部不承担口型；纸摩擦声自然。",
+                  "dialogue_line_ids": [
+                    "line-andingao-02"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "asset_version_id": null,
+                      "alias": "初始确认单",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@初始确认单"
+                      },
+                      "required_tags": [
+                        "已签周启",
+                        "便签两项红字",
+                        "周五未写"
+                      ],
+                      "purpose": "待制备并实看准确可读纸面初态；签名是开场已有内容，不是本镜签下。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": null,
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "本镜仅需林岚灰蓝袖口与成年手部的服装连续性，不要求额外正脸参考进入画面。",
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "asset_version_id": null,
+                      "alias": "原签名证据构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@原签名证据构图"
+                      },
+                      "purpose": "待制备纸面证据构图：标题、原签名、两行红字及空白下半部有足够像素，手停在签名旁而不盖字；不是漂浮后期贴字方案。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.2,
+                      "visual": "纸面到达稳定可读位置，原签字与便签同框。",
+                      "framing": "纸面近特写",
+                      "camera": "固定",
+                      "action": "接上林岚手碰纸边，不重放推纸。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻纸声。"
+                    },
+                    {
+                      "start_seconds": 0.2,
+                      "end_seconds": 2.6,
+                      "visual": "签名保持露出，便签没有周五。",
+                      "framing": "纸面近特写",
+                      "camera": "固定",
+                      "action": "林岚手停在原签名旁，轻轻把签字角转向周启，保留一段稳定阅读时间。",
+                      "performance": "以已有事实提醒对方，不敲纸或夸张指责。",
+                      "dialogue_line_ids": [
+                        "line-andingao-02"
+                      ],
+                      "sound": "林岚画外完整说第二句。"
+                    },
+                    {
+                      "start_seconds": 2.6,
+                      "end_seconds": 2.8,
+                      "visual": "签字角仍朝向周启。",
+                      "framing": "纸面近特写",
+                      "camera": "固定",
+                      "action": "林岚停住纸，等待回应。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "两人坐位不变；灰蓝袖口从窗侧进入，周启在门侧画外。",
+                    "eyeline": "两人均看纸上的原签名；本镜不显示脸。",
+                    "prop_state_in": "林岚刚接住初态A4；黑笔仍在她右手边画外。",
+                    "prop_state_out": "签字角稍向周启呈示，原签名未变，便签只有两项红字。",
+                    "action_in": "林岚手在签字附近控制纸边。",
+                    "action_out": "纸停止转动，等周启回应。"
+                  },
+                  "transition_out": "切周启看完签字的反应与回应，纸的回转在下镜可见。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "实际图片须核对中文、纸面朝向与遮挡。可用准确物理纸面状态制作构图；不假定动态透视跟踪或自动写字后期已具备。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-03",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 3,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.8,
+                  "narrative_purpose": "表现周启承认签过但仍继续加码，不让原签名自行解决冲突。",
+                  "visual": "@周启门侧坐着，海军蓝衬衫，脸与近桌前臂清楚。他瞥过@初始确认单的原签名，将纸轻转回便于林岚阅读的位置，身体仍带靠椅的松弛。林岚在画外。",
+                  "framing": "9:16腰部以上中近景，脸是重点，下沿保留回转纸边所需桌面；不要求精读纸中文字。",
+                  "camera": "固定@门侧桌边构图，周启朝画左说话，背景为灰墙与门侧局部，延续窗光方向。",
+                  "audio_intent": "周启画内说：签了也能优化嘛。辛苦一下。林岚不发声；不要加嘲笑、叹气台词或配乐讽刺。",
+                  "dialogue_line_ids": [
+                    "line-andingao-03"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": null,
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "purpose": "待制备周启清楚面部与海军蓝衬衫身份参考，保持38岁成年主管外观。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "asset_version_id": null,
+                      "alias": "初始确认单",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@初始确认单"
+                      },
+                      "purpose": "纸边行动需沿用已签原稿与未写日期便签状态；本镜不重复要求文字精读。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "门侧桌边构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@门侧桌边构图"
+                      },
+                      "purpose": "待制备或复用门侧桌边中近景构图，清楚面部并给前臂和纸边留空间；与开场同侧轴线。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.2,
+                      "visual": "周启眼神仍落在签字角。",
+                      "framing": "腰部以上中近景",
+                      "camera": "固定",
+                      "action": "他看完签名，手接近纸边。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    },
+                    {
+                      "start_seconds": 0.2,
+                      "end_seconds": 3.6,
+                      "visual": "周启脸清楚，手和纸边在画面下沿。",
+                      "framing": "腰部以上中近景",
+                      "camera": "固定",
+                      "action": "他将纸轻转回去、松手，视线从纸回到林岚；回转与前半句并行，后半句仍自然靠着椅背。",
+                      "performance": "把整版改动说得很轻，辛苦一下是结束商量的惯性口吻，不狞笑。",
+                      "dialogue_line_ids": [
+                        "line-andingao-03"
+                      ],
+                      "sound": "周启完整说第三句，保留句间小停顿。"
+                    },
+                    {
+                      "start_seconds": 3.6,
+                      "end_seconds": 3.8,
+                      "visual": "周启等林岚接下任务。",
+                      "framing": "中近景",
+                      "camera": "固定",
+                      "action": "手离开纸边，纸不再移动。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧，林岚窗侧画外，双方均未换座。",
+                    "eyeline": "周启由下看签名转为看画左的林岚。",
+                    "prop_state_in": "纸的签字角稍朝周启；笔在林岚右手边。",
+                    "prop_state_out": "纸转回朝林岚可读、仍在她面前；便签无周五，笔未动。",
+                    "action_in": "周启正在看林岚示意的旧签字。",
+                    "action_out": "周启已放开纸，仍略靠椅背。"
+                  },
+                  "transition_out": "切林岚指出两项修改范围。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "脸与前臂同框须采用中近景而非紧胸部近景；实际图只需认人物与纸位置，不要求边缘小字清楚。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-01",
+                "title": "已签定稿仍被临时加改",
+                "shot_ids": [
+                  "shot-andingao-01",
+                  "shot-andingao-02",
+                  "shot-andingao-03"
+                ],
+                "duration_seconds": 10.6,
+                "generation_intent": "依次完成关系中景、纸面证据和主管回应。三句原对白各只发声一次；第二镜林岚画外说话。推纸、转签字角、转回纸的因果连续，原签字从开场即存在。按自然表演估算10.6秒，不是声画实测。",
+                "transition_intent": "推纸动作接证据特写，继而切主管回应；不可把转纸剪成签字或让便签提前写有周五。",
+                "continuity_in": [
+                  "林岚窗侧、周启门侧；唯一笔在林岚右手边。",
+                  "已签原稿带两项红字黄便签，下半留白。"
+                ],
+                "visible_changes": [
+                  "周启把纸推向林岚。",
+                  "林岚展示原签字，周启看后把纸转回。"
+                ],
+                "continuity_out": [
+                  "纸仍在林岚面前，原签名、两项要求和空白下半部都未变化。",
+                  "周启仍靠椅，笔未动。"
+                ],
+                "reference_notes": [
+                  "缺图：两人身份、空会议室、初始纸面、黑笔母版，以及关系/纸面证据/门侧桌边构图。",
+                  "所有媒体版本留空，只是参考需求，未完成实图绑定或视觉检查。",
+                  "不用未来视频Take作必需输入；组时长依内容确定，实际供应商限制由后续路线编译处理。"
+                ]
+              },
+              "handoff_notes": [
+                "开场第一句立即给出改动与明早交期，镜2补足下午已签的证据。",
+                "纸面准确文字要在物理状态与构图图片中核对，不把尚未执行的后期贴字当作已解决。"
+              ]
+            },
+            {
+              "work_unit_id": "wu-andingao-conflict",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 2,
+              "source_range": {
+                "id": "range-andingao-g02",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-04",
+                  "line-andingao-05"
+                ],
+                "description": "林岚逐项指出等于重做，周启仍要求先改、抓紧。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-04",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 4,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.2,
+                  "narrative_purpose": "让林岚具体指出两项要求的范围，而非空泛抱怨。",
+                  "visual": "@林岚窗侧坐着，脸在上半画面清楚，@初始确认单在下方桌面。她的食指由便签第一行移到第二行，再看向主管；不把纸收起来。",
+                  "framing": "9:16腰部以上中景，兼容脸、前臂及近侧纸面。红字内容已由镜2交代，本镜重点为逐项指示和表情。",
+                  "camera": "固定@窗侧桌边构图，林岚看向画右，百叶窗局部在左后，不拍全房间。",
+                  "audio_intent": "林岚画内说：这两项都换，就是重做了。周启画外只听。无旁白。",
+                  "dialogue_line_ids": [
+                    "line-andingao-04"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": null,
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "待制备清楚面部及低马尾、灰蓝衬衫身份参考。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "asset_version_id": null,
+                      "alias": "初始确认单",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@初始确认单"
+                      },
+                      "required_tags": [
+                        "便签两项红字",
+                        "周五未写"
+                      ],
+                      "purpose": "沿用初始纸面，手指两项而不遮挡全部便签；下半仍空白。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "窗侧桌边构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@窗侧桌边构图"
+                      },
+                      "purpose": "待制备窗侧桌边中景，脸及指向便签的前臂同框；不以胸部特写硬塞完整桌面。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.2,
+                      "visual": "林岚看便签，纸保持原位。",
+                      "framing": "腰部以上中景",
+                      "camera": "固定",
+                      "action": "她食指落到第一项旁边，不盖住整行。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    },
+                    {
+                      "start_seconds": 0.2,
+                      "end_seconds": 3,
+                      "visual": "指示动作与面部在同一画面。",
+                      "framing": "腰部以上中景",
+                      "camera": "固定",
+                      "action": "食指由换配色移至重排版式附近，随后停住，抬眼看周启。",
+                      "performance": "平实说明工作量，重做二字说清楚但不拔高嗓门。",
+                      "dialogue_line_ids": [
+                        "line-andingao-04"
+                      ],
+                      "sound": "林岚完整说第四句。"
+                    },
+                    {
+                      "start_seconds": 3,
+                      "end_seconds": 3.2,
+                      "visual": "林岚仍面对周启。",
+                      "framing": "中景",
+                      "camera": "固定",
+                      "action": "纸未被收起，指示手自然停在纸旁。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧画左向右，周启门侧画外。",
+                    "eyeline": "林岚看便签后看画右的周启。",
+                    "prop_state_in": "纸朝林岚可读，便签下半空白，笔在她右手边。",
+                    "prop_state_out": "纸与笔均未移动，无新增文字。",
+                    "action_in": "林岚听完优化说法。",
+                    "action_out": "她指出两项等于重做，等周启回答。"
+                  },
+                  "transition_out": "切周启仍回避工作量的回应。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "指两行是连续简短动作，不需要两张硬姿态图；实图须保留面部和前臂空间。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-05",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 5,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.8,
+                  "narrative_purpose": "周启不接工作范围的问题，继续把时间压力交给林岚。",
+                  "visual": "@周启门侧胸部近景，仍略靠椅背，对画外林岚说话；双手、纸和笔不要求入画。",
+                  "framing": "9:16胸部近景，清楚眼神、嘴部和肩部，背景门侧虚化但方向不变。",
+                  "camera": "固定@门侧面部构图，人物朝画左；与林岚近景形成互补视线，不跨轴。",
+                  "audio_intent": "周启画内说：你先改着，时间抓紧点。保持日常施压语气，不加额外命令。",
+                  "dialogue_line_ids": [
+                    "line-andingao-05"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": null,
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "purpose": "待制备周启清楚近景身份，延续海军蓝衬衫、黑色侧分短发。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "门侧面部构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@门侧面部构图"
+                      },
+                      "purpose": "待制备可复用门侧面部构图，向画左的互补视线和同一窗光；画外道具不加入本镜模型参考。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.1,
+                      "visual": "周启看林岚，不查看纸。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "保持略靠椅的姿势。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    },
+                    {
+                      "start_seconds": 0.1,
+                      "end_seconds": 2.7,
+                      "visual": "周启面部清楚。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "对林岚说话，不增加指点、起身或拿笔等动作。",
+                      "performance": "想直接结束讨论，语速自然稍利落，不急速吞字。",
+                      "dialogue_line_ids": [
+                        "line-andingao-05"
+                      ],
+                      "sound": "周启完整说第五句。"
+                    },
+                    {
+                      "start_seconds": 2.7,
+                      "end_seconds": 2.8,
+                      "visual": "周启等她行动。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "话说完，仍未坐直。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧；林岚窗侧画外。",
+                    "eyeline": "周启看画左的林岚。",
+                    "prop_state_in": "画外纸在林岚面前、笔在她右手边；便签无周五。",
+                    "prop_state_out": "画外道具状态不变。",
+                    "action_in": "周启听见重做判断。",
+                    "action_out": "仍略靠椅背，把任务往前催。"
+                  },
+                  "transition_out": "切林岚提出具体交付选项。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "本镜不需要纸、笔或林岚面部图片作为可见主体输入；口型与听感尚待未来视频验证。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-02",
+                "title": "两项都换就是重做",
+                "shot_ids": [
+                  "shot-andingao-04",
+                  "shot-andingao-05"
+                ],
+                "duration_seconds": 6,
+                "generation_intent": "林岚用指两项的动作说明工作范围，再切主管回避问题的近景。第四、第五句各完整发声一次，共6秒为自然演读和动作估计。",
+                "transition_intent": "从有手部动作的中景到主管近景，维持林岚向右、周启向左的视线。",
+                "continuity_in": [
+                  "纸在林岚面前，原签名未变，黄便签下半空白。",
+                  "周启仍略靠椅。"
+                ],
+                "visible_changes": [
+                  "林岚逐项指出两项要求，周启仍催时间。"
+                ],
+                "continuity_out": [
+                  "林岚没有收起纸或拿笔。",
+                  "双方座位与道具状态均未改变。"
+                ],
+                "reference_notes": [
+                  "缺图：窗侧桌边中景和门侧面部构图；同机位后镜可复用，不逐姿态制作硬边界图。",
+                  "全部引用仍为需求，没有实际图片版本或未来Take依赖。"
+                ]
+              },
+              "handoff_notes": [
+                "本组不重复整版精读，只承接前组已建立的两项红字。"
+              ]
+            },
+            {
+              "work_unit_id": "wu-andingao-conflict",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 3,
+              "source_range": {
+                "id": "range-andingao-g03",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-06",
+                  "line-andingao-07"
+                ],
+                "description": "林岚明确原稿明早可交、重做需要两天；周启坐直并拒绝两天。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-06",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 6,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 4.2,
+                  "narrative_purpose": "把抽象冲突转成可执行的二选一，为写周五和请主管确认建立因果。",
+                  "visual": "@林岚窗侧胸部近景，没有离座，抬眼稳稳看着周启。纸仍摊在她面前但在画外，不额外把手与整张A4塞进近景。",
+                  "framing": "9:16胸部近景，完整脸、肩和低马尾轮廓，表情清楚不过度极近。",
+                  "camera": "固定@窗侧面部构图，林岚朝画右，左侧柔窗光与前镜一致。",
+                  "audio_intent": "林岚画内说：原稿明早能交。重做，得两天。保留两种选择之间的停顿，周启画外不抢话。",
+                  "dialogue_line_ids": [
+                    "line-andingao-06"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": null,
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "待制备林岚清楚近景身份，低马尾与灰蓝衬衫一致。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "窗侧面部构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@窗侧面部构图"
+                      },
+                      "purpose": "待制备可复用窗侧近景，向画右的视线、百叶窗局部和一致光向；不需要画外纸笔入模。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.2,
+                      "visual": "林岚视线抬到周启脸上。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "她没有收纸，停住要接任务的动作。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    },
+                    {
+                      "start_seconds": 0.2,
+                      "end_seconds": 4,
+                      "visual": "林岚脸保持清楚，神态认真而不挑衅。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "保持坐姿，把两个交付条件说清；重做前后用自然停顿而非加速。",
+                      "performance": "她要对方理解实际工作量，不求争吵获胜；说两天时仍平稳。",
+                      "dialogue_line_ids": [
+                        "line-andingao-06"
+                      ],
+                      "sound": "林岚完整说第六句，原稿与重做两部分之间留自然停顿。"
+                    },
+                    {
+                      "start_seconds": 4,
+                      "end_seconds": 4.2,
+                      "visual": "林岚等回答。",
+                      "framing": "胸部近景",
+                      "camera": "固定",
+                      "action": "不补解释，不拿笔。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧；周启门侧画外。",
+                    "eyeline": "林岚看画右的周启。",
+                    "prop_state_in": "纸未收、日期未写、黑笔仍在林岚右手边，均在画外。",
+                    "prop_state_out": "纸和笔保持未动。",
+                    "action_in": "林岚刚指出重做，听完催促。",
+                    "action_out": "她明确两种交付条件，停下来等回答。"
+                  },
+                  "transition_out": "在两天信息落下后切周启坐直的反应。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "须保证第六句完整自然发声及句间停顿；4.2秒为纸面估算，不是已测得的音轨。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-07",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 7,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3,
+                  "narrative_purpose": "周启拒绝改变交期的反应触发下一步书面确认，把选择责任推回给他。",
+                  "visual": "@周启在门侧从略靠椅背变为坐直，面部从随意转为认真，坚持明早要。双手和纸笔留在画外，不新增敲桌。",
+                  "framing": "9:16胸部中近景，头顶和胸前留坐直变化的空间，避免运动后额头被裁。",
+                  "camera": "固定@门侧坐直构图，沿用镜5门侧机位方向并留身体前移余量；朝画左，不突然换仰角。",
+                  "audio_intent": "周启画内说：两天？不行，明早就要。问句后有短停顿；语气比前面着急，但不靠吼叫、抢速压缩。",
+                  "dialogue_line_ids": [
+                    "line-andingao-07"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": null,
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "purpose": "周启面部与海军蓝衬衫身份参考，延续镜5。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": null,
+                      "alias": "门侧坐直构图",
+                      "field": "camera",
+                      "text_anchor": {
+                        "exact": "@门侧坐直构图"
+                      },
+                      "purpose": "待制备或复用有坐直余量的门侧近景构图；不为靠椅、半直、全直制作一串配准图。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.3,
+                      "visual": "周启从略靠椅背转为坐直。",
+                      "framing": "胸部中近景",
+                      "camera": "固定",
+                      "action": "听见两天后身体前移，接到对话时完成坐直。",
+                      "performance": "事情开始影响他坚持的交期。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻微衣料椅声，不夸张。"
+                    },
+                    {
+                      "start_seconds": 0.3,
+                      "end_seconds": 2.9,
+                      "visual": "周启坐直看着林岚，脸仍清楚。",
+                      "framing": "胸部中近景",
+                      "camera": "固定",
+                      "action": "完整说出拒绝，问句后短停顿；不拿笔、不碰纸。",
+                      "performance": "两天带意外，不行明确，明早就要落在交期上。",
+                      "dialogue_line_ids": [
+                        "line-andingao-07"
+                      ],
+                      "sound": "周启完整说第七句。"
+                    },
+                    {
+                      "start_seconds": 2.9,
+                      "end_seconds": 3,
+                      "visual": "周启目光停在林岚身上。",
+                      "framing": "胸部中近景",
+                      "camera": "固定",
+                      "action": "等待她给出方案。",
+                      "dialogue_line_ids": [],
+                      "sound": "底噪。"
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启仍门侧，林岚仍窗侧画外。",
+                    "eyeline": "周启看画左的林岚。",
+                    "prop_state_in": "纸与笔在林岚一侧画外，便签下半空白。",
+                    "prop_state_out": "道具未动；下一镜才拿笔写周五。",
+                    "action_in": "周启仍略靠椅，刚听见两天。",
+                    "action_out": "已坐直，坚持明早交。"
+                  },
+                  "transition_out": "对白结束后切林岚拿笔与书写，不把她的书写提前到两天被拒绝之前。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "坐直与开口可部分并行，不将三个身体微状态锁为必需图片；后续视频才验证真实动作节奏。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-03",
+                "title": "原稿明早交，重做得两天",
+                "shot_ids": [
+                  "shot-andingao-06",
+                  "shot-andingao-07"
+                ],
+                "duration_seconds": 7.2,
+                "generation_intent": "用稳定正反近景表现林岚提出取舍、周启听完两天后坐直拒绝。第六、第七句各一次；7.2秒是带停顿与反应的估算，不是音视频验收。",
+                "transition_intent": "先让两天信息完整落下，再切主管反应；不做每句换角度的炫技。",
+                "continuity_in": [
+                  "林岚未收纸，周启仍略靠椅。",
+                  "笔尚未拿起，便签下半无周五。"
+                ],
+                "visible_changes": [
+                  "林岚明确原稿明早可交、重做需要两天。",
+                  "周启坐直并坚持明早。"
+                ],
+                "continuity_out": [
+                  "周启坐直，等林岚回应。",
+                  "纸笔仍在林岚一侧，为下一组写日期提供起点。"
+                ],
+                "reference_notes": [
+                  "缺图：窗侧面部近景、门侧留坐直余量的近景，可与同方向镜头共用构图母版。",
+                  "组间是语义连续性要求，不是对未来Take的必需依赖；实际单次时长边界留给路线编译。"
+                ]
+              },
+              "handoff_notes": [
+                "本批七镜共23.8秒；后续写周五、递笔、停笔等待和揭便签闭合仍须继续完成。"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "4": {
+      "tool_name": "shot.append_storyboard_groups",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "draft_document_id": "production-document-2458c416ac05",
+          "base_version_id": "production-document-version-4410ce9858e7",
+          "origin": "AGENT",
+          "work_unit": {
+            "id": "sb-work-andingao-middle",
+            "title": "把重做与交期的选择交回主管",
+            "source_range": {
+              "id": "sb-range-andingao-middle",
+              "scene_ids": [
+                "scene-885d61c18b62"
+              ],
+              "script_line_ids": [
+                "line-andingao-08"
+              ],
+              "description": "林岚拿笔在同一便签上写周五，将纸笔推回，请周启确认。周启接笔却停在新日期旁；林岚等待，周启看新日期及旧签名。",
+              "starts_after": "周启：两天？不行，明早就要。",
+              "ends_before": "他放下笔，慢慢揭掉整张黄便签"
+            },
+            "objective": "用可见书写起点、准确日期完成状态、真实接笔及沉默表演，让观众理解新交期只是待确认的选择，并未获批。",
+            "continuity_context": [
+              "纸与唯一黑笔在林岚一侧；便签下半部尚无周五。",
+              "周启已坐直。林岚窗侧、周启门侧，座位不变。",
+              "底部原有确认：周启始终保留，不能变成新交期签字。"
+            ],
+            "constraints": [
+              "不改第八句原文，不新增催促或旁白。",
+              "不要求逐笔准确成字全程无切镜；不能省略是谁写下日期。",
+              "不得以未来视频Take或抽帧作为必需输入。"
+            ],
+            "completion_criteria": [
+              "书写、纸笔交接、新日期无签字及两人等待反应均有独立可读覆盖。",
+              "第八句在镜9与镜10及实际有声时段使用同一来源ID，一次连续发声。",
+              "组4设计11秒，组5设计7秒；均为表演估算。"
+            ],
+            "ordering_guidance": "接前七镜，先动作，再请确认，最后让沉默和主管视线承接撤回修改的决定。"
+          },
+          "groups": [
+            {
+              "work_unit_id": "sb-work-andingao-middle",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 4,
+              "source_range": {
+                "id": "sb-range-andingao-04",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-08"
+                ],
+                "description": "林岚拿黑笔写周五，再把纸和笔交到周启面前，请他确认改变交期。",
+                "starts_after": "两天？不行，明早就要。",
+                "ends_before": "笔尖停在“周五”旁边，没有落下。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-08",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 8,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.6,
+                  "narrative_purpose": "清楚交代林岚主动把两天具体化为新日期；写前便签仍只有两项红字修改要求。",
+                  "visual": "在@小会议室浅木桌面，@林岚的灰蓝袖口和双手进入纸面局部。@定稿确认单与修改便签仍在她面前：底部旧签字保留，右上黄便签下半部空白。她从右手边桌面拿起唯一的@黑色中性笔，另一手轻扶纸边，笔尖落到便签下半部开始写日期。镜内不要求观众同时看脸或读完整方案。",
+                  "framing": "9:16桌面手部近景；包括便签、纸边与取笔起点，便签不被书写手完全挡住；不强求完整双臂。",
+                  "camera": "从会议桌前端一侧略俯拍，固定。镜头顺应纸张当前朝向，字面不过度压扁；不横越人物对话轴，不追随手指做多余运动。",
+                  "audio_intent": "无对白。轻微取笔及真实笔尖摩擦声，办公室底噪连续。这里的书写声只是声音设计，未制作或听验。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "浅木桌面材质与窗侧来光；本镜不需要整个房间同时入画。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "灰蓝袖口与手臂服装连续；本镜不使用人物头像冒充桌面首帧。"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "原签字保留",
+                        "两项红字",
+                        "周五尚未写入"
+                      ],
+                      "purpose": "需要同一确认单的写前状态，黄便签下半部留白；镜头构图图尚待制作与绑定。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "唯一无品牌黑色按动中性笔，取自林岚右手边；保持实际采用的持笔手连续。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 1.1,
+                      "visual": "@林岚的灰蓝袖口位于纸旁，@黑色中性笔尚在她右手边；@定稿确认单与修改便签上的两行红字及其下方空白可见。",
+                      "framing": "纸面与取笔点的手部近景。",
+                      "camera": "固定略俯。",
+                      "action": "她用书写手接触并拿起笔，另一手轻扶纸边；纸不离桌，不增加第二支笔。",
+                      "performance": "动作利落但不带挑衅，先解决问题而非摆出胜利姿态。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻微触笔声和室内底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "取笔者的灰蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "桌面待取的同一黑笔。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "写前状态，不能预先出现周五。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 1.1,
+                      "end_seconds": 3.6,
+                      "visual": "笔尖接触@定稿确认单与修改便签的黄便签下半部，@林岚保持自然书写姿态。",
+                      "framing": "保持便签及持筆接触可见的近景。",
+                      "camera": "固定，不推到只剩笔尖而失去书写者线索。",
+                      "action": "笔尖真实接触便签并开始写“周五”，书写持续到切点；不要求在此镜不切地展示两字全部笔画。",
+                      "performance": "稳定、务实，不写完后停成刻意展示的照片。",
+                      "dialogue_line_ids": [],
+                      "sound": "短促连续的书写声，跨切到下一镜开头收束。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "从下半部空白开始书写；完整日期结果由镜10覆盖。"
+                        },
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "同一书写者与袖口，不换人代写。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "双方仍坐原位；画内只见林岚手臂，周启在对面画外。",
+                    "eyeline": "林岚看便签，周启画外看她书写。",
+                    "prop_state_in": "确认单在林岚面前，原签名存在；黄便签仅有换配色、重排版式两行红字；黑笔在林岚右手边。",
+                    "prop_state_out": "林岚持笔在便签下半部书写中，另一手扶纸，纸和便签没有分离。",
+                    "action_in": "接周启拒绝两天交期，林岚决定提供待确认的新日期。",
+                    "action_out": "书写动作尚在收束，切到本人面部，完成部分可画外承接。"
+                  },
+                  "transition_out": "书写动作与笔声连续切林岚近景；不是从空白便签直接跳到主管持笔。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "后续实际动态须验证持笔接触和写前无周五。可用镜9遮蔽非关键笔画，不要求模型一边逐笔写准中文一边保全所有文字；不能用静态字幕贴在移动纸上冒充已解决。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-09",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 9,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.8,
+                  "narrative_purpose": "把书写转为林岚对主管的明确选择；近景读到她是平静地设定工作条件，而不是争吵。",
+                  "visual": "@小会议室窗侧的@林岚胸上近景，低马尾、灰蓝衬衫与柔和窗光保持一致。她先低眼完成画面下方的书写，随后抬眼看向画右的周启，开口说明重做就得改交期。画内不出现主管正脸，不要求此景别同时看清纸张和整只手。",
+                  "framing": "胸上近景，完整脸部和肩线可读，给朝画右的视线留空间。",
+                  "camera": "与既有对话轴同侧的林岚单人机位，眼平固定；背景保留窗侧材质，不纳入门侧全景。",
+                  "audio_intent": "开头约0.8秒书写声结束。林岚开始第八句：“那要重做，交期得改到周五。您确认一下，我开工。”本镜发声到第一句号附近，后半句在下一镜由她画外连续说完，只念一次，不重起整句。",
+                  "dialogue_line_ids": [
+                    "line-andingao-08"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "窗侧座位背景与同一傍晚光向；空场母图可提供空间，不等于此镜构图。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "清楚的成年面部、低马尾及灰蓝领口。已有原创身份图可在后续精确绑定，本条当前保存需求。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.8,
+                      "visual": "@林岚低眼看画外下方的便签，嘴唇未发声。",
+                      "framing": "胸上近景。",
+                      "camera": "固定。",
+                      "action": "画面下方的书写收束，她视线从桌面抬到周启；拿笔的手留在画外，不要求展示额外归位姿态。",
+                      "performance": "抬眼平静，没有先露出得意笑容。",
+                      "dialogue_line_ids": [],
+                      "sound": "上一镜笔声短暂延续后停止。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "书写者面部及抬眼反应。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.8,
+                      "end_seconds": 3.8,
+                      "visual": "@林岚看着画右的主管，表情清醒克制。",
+                      "framing": "胸上近景，肩线自然。",
+                      "camera": "固定，以视线和语气完成变化。",
+                      "action": "她说出第八句前半部分，手中的纸笔暂留画外；到自然句内停顿切纸面。",
+                      "performance": "把重做与周五作为可执行条件陈述，音量不提高，不逼迫或抢话。",
+                      "emotion": "平静而明确。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚近距离普通话，后续声音跨镜连续；无旁白、无配乐顶起。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "本时段唯一画内发声者。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧，周启门侧画外；两人座位不变。",
+                    "eyeline": "林岚从下看便签转为看画右的周启；与主管近景保持互补视线。",
+                    "prop_state_in": "同一支笔在林岚书写手中，便签书写尚在收束。",
+                    "prop_state_out": "便签下半部已由林岚写好黑字周五；她仍持笔，纸未交出。新日期旁没有周启签字。",
+                    "action_in": "接书写中切点。",
+                    "action_out": "她继续同一句对白，准备把纸笔推回主管面前。"
+                  },
+                  "transition_out": "在第八句自然句内停顿处切纸笔近景，后半句由林岚画外继续；镜9和镜10必须在同一ClipGroup。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "实际生成后需听辨第八句是否一次自然发声，避免跨镜重复。此镜不承担纸面准确成字的验证。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-10",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 10,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.6,
+                  "narrative_purpose": "看清周五已写在原便签上，并看清纸笔从林岚交到主管手中；交接不等于批准新交期。",
+                  "visual": "@定稿确认单与修改便签的写后状态占据桌面近景：黄便签上方红字“换配色”“重排版式”，下方新增黑字“周五”，日期旁仍空白，纸底旧“确认：周启”保留。@林岚灰蓝袖口从窗侧送来纸与@黑色中性笔；@周启海军蓝袖口从门侧接笔。先见日期结果，再见手接触、接稳、松手，笔不凭空换主人。",
+                  "framing": "9:16较高俯角桌面近景，包含同一A4、便签、两侧前臂及笔的交接区域，不含面部。选择能正读便签、区分旧签名位置的纸面构图，关键文字不被字幕或手掌长时间盖住。",
+                  "camera": "桌前端同侧固定略高俯拍。灰蓝袖来自窗侧、海军蓝袖来自门侧，保持既有两人关系；不为逐字放大而在交接中跳轴。",
+                  "audio_intent": "承接镜9，林岚画外说完第八句后半部分；她是唯一发声者，画内周启不代说。纸张滑动声、接笔轻响自然，末尾短静默。",
+                  "dialogue_line_ids": [
+                    "line-andingao-08"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "原签字保留",
+                        "周五已写",
+                        "新日期未签"
+                      ],
+                      "purpose": "需要准确写后状态及手部交接构图；用实际纸面图验证字形、大小、朝向，不以文字说明冒充可读实图。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "送纸笔者的灰蓝袖口与上一镜写字手连续。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "同一黑笔从林岚持有到周启接稳；不锁死可调整的手别，但采用后相邻镜须接续。"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "海军蓝长袖袖口识别接笔者；不要求无必要的正脸同时入画。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.7,
+                      "visual": "@定稿确认单与修改便签上黑字周五已经写好，日期旁未签，旧签名仍在纸底。",
+                      "framing": "写后纸面近景，便签与旧签名分属不同位置。",
+                      "camera": "固定俯角，短暂停留供辨认结果。",
+                      "action": "纸仍在林岚一侧，笔已离开纸面，未凭空更换文件。",
+                      "performance": "画内只见自然持物，不要求手指逐字指读。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚画外继续同一条对白，不重复镜9已说的部分。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "准确周五完成状态，红字和旧签名不变。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.7,
+                      "end_seconds": 3,
+                      "visual": "@林岚将纸推向门侧，同时把@黑色中性笔的可握笔杆送向@周启伸来的手；同一张@定稿确认单与修改便签随之到主管面前。",
+                      "framing": "保持两侧手、整支笔与便签可见的桌面近景。",
+                      "camera": "固定，不在接触瞬间切走。",
+                      "action": "纸贴桌面滑过去，林岚仍持笔，周启先握住可握笔杆，接稳后林岚松手并撤开；不让两只手同时穿过笔杆，也不靠纸滑动带着无人持握的笔漂移。",
+                      "performance": "她是在邀请确认，不把笔强塞入对方手；他接笔带一点迟疑。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚画外说完第八句；纸与桌面轻擦声不盖过对白。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "送出纸笔的灰蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "交接接触、接稳、松手的同一黑笔。"
+                        },
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "接笔者的海军蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "写后同一纸张滑向周启，便签仍贴在纸上。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 3,
+                      "end_seconds": 3.6,
+                      "visual": "@周启独自持有@黑色中性笔，写有周五的便签已在他面前。",
+                      "framing": "同一手部近景。",
+                      "camera": "固定，保留交接结果。",
+                      "action": "林岚的手已退出交接区；周启把笔尖朝向日期旁空白，但尚未落笔。",
+                      "performance": "动作从接笔自然减速。",
+                      "dialogue_line_ids": [],
+                      "sound": "对白结束，留下室内底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "确认笔已由主管接稳。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "接稳后的笔尖朝向下一镜日期旁，尚不接触纸。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧，周启门侧；画内以不同袖口和两侧来手确认关系。",
+                    "eyeline": "两人均看纸笔；面部不入画。",
+                    "prop_state_in": "周五已写在同一便签下半部；纸在林岚一侧、黑笔在她手中，旧签字不变。",
+                    "prop_state_out": "纸在周启面前，便签仍贴纸上；周启独自持笔，林岚已松手，日期旁无新字。",
+                    "action_in": "接第八句中途切入写后结果。",
+                    "action_out": "周启将笔尖移向新日期旁空白，进入犹豫。"
+                  },
+                  "transition_out": "顺笔尖接下一镜局部近景；本句已在本组结束，不跨组拆同一句话。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "纸笔交接的接触顺序与文字保持均须以后续动态实测。准确字版可用于准备静态纸面输入，不能承诺用无跟踪静态叠图修复移动、遮挡中的书写。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-04",
+                "title": "写下周五，请主管确认",
+                "shot_ids": [
+                  "shot-andingao-08",
+                  "shot-andingao-09",
+                  "shot-andingao-10"
+                ],
+                "duration_seconds": 11,
+                "generation_intent": "先以手部覆盖林岚拿笔并落笔书写，再切本人近景让剩余笔画在画外自然完成，最后以准确写后纸面和完整接笔证据接续。第八句原文保持一次发声，在镜9和镜10跨切连续，不从每个Shot重新读整句。11秒为自然表演估计，不是音画实测。任何后续输入编排不得删去林岚书写的因果或把周五变成已经获批的交期。",
+                "transition_intent": "写字声桥接8到9；对白桥接9到10；交接完成后切停笔，保留静默。",
+                "continuity_in": [
+                  "纸与黑笔在林岚一侧，便签下半部空白。",
+                  "旧确认签名已有；周启坐直，拒绝两天交期。"
+                ],
+                "visible_changes": [
+                  "林岚取笔并在同一便签写日期。",
+                  "便签出现黑字周五。",
+                  "纸与唯一黑笔由林岚交到周启面前及手中。"
+                ],
+                "continuity_out": [
+                  "周启已接稳笔但未签新日期。",
+                  "便签仍贴在原签字确认单右上角，日期旁保持空白。"
+                ],
+                "reference_notes": [
+                  "需要写前状态、写后未签状态、手部交接构图与林岚单人近景构图；具体媒体尚待逐用途绑定。",
+                  "身份与空场参考只贡献各自身份、服装和空间，不能自动当作镜头首帧。",
+                  "不要求一张图覆盖所有演员正脸、桌面文字及完整动作；纸面镜头用袖口识别操作者。",
+                  "输入使用已准备的身份、空间、道具与必要构图图片，不依赖未来Take或视频抽帧。单次Provider限制由后续路线编译处理。"
+                ]
+              },
+              "handoff_notes": [
+                "第八句自然发声约5.2秒：镜9约3秒，镜10约2.3秒；组内另留取笔、书写、抬眼、交接及收束时间。具体语气与边界需以后续实际声画验证。",
+                "书写不承诺每个中文笔画无切镜完成；镜8证明作者与落笔，镜9声音承接，镜10证明准确结果。",
+                "纸、笔的手别可随可用实际构图局部协调；不能改变由林岚写、由周启接且未签的事实。"
+              ]
+            },
+            {
+              "work_unit_id": "sb-work-andingao-middle",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 5,
+              "source_range": {
+                "id": "sb-range-andingao-05",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [],
+                "description": "周启笔尖停在周五旁边，没有落下；林岚等待不催。周启看新日期，再看纸底原签名。",
+                "starts_after": "周启接过笔。",
+                "ends_before": "他放下笔，慢慢揭掉整张黄便签"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-11",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 11,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.4,
+                  "narrative_purpose": "让观众明确看见他接笔却没有批准新日期；原有签名不能被误读为签过周五。",
+                  "visual": "@周启的海军蓝袖口与持笔手在画内，@黑色中性笔笔尖停在@定稿确认单与修改便签的“周五”旁边空白上方。便签上方两项红字仍在，日期旁没有签名或勾画。纸底旧签名不挤进本镜，前后证据镜已经建立它的位置。",
+                  "framing": "便签及持笔手特写，日期文字和笔尖与纸面之间的微小间隙可辨；手背不能全遮住周五。",
+                  "camera": "接上一镜的桌面方向，稍收紧景别，固定；不将停笔拍成正在写字的运动模糊。",
+                  "audio_intent": "无对白。没有书写声，只留底噪及自然呼吸；不用心跳、悬疑音效解释心理。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "与镜10同一接笔手和海军蓝袖口。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "唯一黑笔停在纸面上方，禁止落笔。"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "周五已写",
+                        "新日期未签"
+                      ],
+                      "purpose": "需要写后未签状态的停笔构图，日期旁留白是本镜证据。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 2.4,
+                      "visual": "@黑色中性笔由周启握着，笔尖悬于@定稿确认单与修改便签的周五旁，空白处始终未留下墨迹。",
+                      "framing": "便签与持笔手特写。",
+                      "camera": "固定。",
+                      "action": "接笔后本要确认的动作减速并停住；没有笔尖触纸或签字，仅允许自然持握微动。",
+                      "performance": "犹豫由没有落笔体现，不要求明显颤抖或夸张攥拳。",
+                      "dialogue_line_ids": [],
+                      "sound": "安静办公室底噪，无笔尖书写声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "同一笔在纸面上方停止。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "周五旁无签字的持续可读状态。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧持笔，林岚窗侧画外；两人不换座。",
+                    "eyeline": "周启画外看新日期。",
+                    "prop_state_in": "纸在周启面前，笔已经接稳；周五已写，日期旁未签。",
+                    "prop_state_out": "全部纸面文字不变，笔尖停在纸面上方，没有新增签字。",
+                    "action_in": "接镜10笔尖转向新日期空白处。",
+                    "action_out": "笔仍由周启持有，尚未放下。"
+                  },
+                  "transition_out": "切林岚等待反应，让无声压力延续；不能借切镜默认主管已签字。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "模型可能自动完成签名；后续须明确检查笔尖间隙、无书写音及日期旁未新增墨迹。静态停笔图仅是状态输入，不证明动态保持。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-12",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 12,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.1,
+                  "narrative_purpose": "让林岚用等待而不是额外解释维持选择边界，给观众读懂主管迟疑的空间。",
+                  "visual": "@小会议室窗侧的@林岚胸上近景。她看着画右的周启，嘴唇闭合，肩膀仍略紧，不伸手把纸收回来，也没有补一句催促。桌面与手处于画外。",
+                  "framing": "胸上近景，完整表情与肩线可见。",
+                  "camera": "沿用镜9的窗侧单人机位，眼平固定，不另改仰俯角制造胜负。",
+                  "audio_intent": "无对白、无旁白；静默与办公室底噪延续，林岚不替画外周启发声。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "与镜9相同窗侧背景及柔和傍晚光向。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "同一林岚面部、发型及领口，构图可复用镜9的关系，不需另造手部微状态。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 2.1,
+                      "visual": "@林岚保持看向主管的视线，嘴唇闭合。",
+                      "framing": "胸上近景。",
+                      "camera": "固定。",
+                      "action": "她等对方决定，不点头代替同意、不伸手、不再催。",
+                      "performance": "自然呼吸，紧绷尚未解除；不做胜利微笑，也不僵成定格。",
+                      "emotion": "有分寸的坚定与等待。",
+                      "dialogue_line_ids": [],
+                      "sound": "室内底噪连续。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "等待者的真实面部反应。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧画内，周启门侧画外。",
+                    "eyeline": "林岚看画右周启，方向与镜9一致。",
+                    "prop_state_in": "纸笔在周启一侧，他仍持笔未签；便签仍贴在确认单上。",
+                    "prop_state_out": "道具保持画外既有状态，不能借此切镜新增签字或撤下便签。",
+                    "action_in": "林岚说完请确认后等待。",
+                    "action_out": "她继续等待，把决定交给周启。"
+                  },
+                  "transition_out": "视线切周启的反应近景。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "需以后续面部动态确认自然等待而非木偶定格；当前只是2.1秒表演估算。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-13",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 13,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.5,
+                  "narrative_purpose": "让周启亲自权衡新日期和自己的旧确认，转折来自既有约束，而非突来外力。",
+                  "visual": "@小会议室门侧的@周启胸上近景，海军蓝衬衫、黑色侧分短发与既有身份一致。他先垂眼看桌上新日期，再让视线移向同张纸底的旧签名，停半拍；抬头前已不再坚持。纸面不入画，其可读证据由镜2、镜10与镜11承担，不强行让近景脸和整页文字同时清晰。",
+                  "framing": "胸上近景，眉眼、下颌和肩线清楚，朝画左留视线空间。",
+                  "camera": "既有对话轴同侧的门侧单人机位，眼平固定；保持周启向画左看林岚的互补方向。",
+                  "audio_intent": "无对白。只留自然呼吸与房间底噪，不添加内心旁白或场外提示。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "门侧灰墙与磨砂门背景关系；玻璃不能映出第三人。"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "已知可用成年主管脸部身份与海军蓝领口，单人面部构图需按本镜准备并绑定。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 1.4,
+                      "visual": "@周启垂眼看桌面，视线从便签区域移向纸底旧签名所在处。",
+                      "framing": "胸上近景，不显示纸。",
+                      "camera": "固定。",
+                      "action": "他先看新日期，再看原确认所在的位置；用一次自然的眼神和轻微头部变化交代比较，不连做多次扫视。",
+                      "performance": "从催促别人转为意识到自己必须承担交期变化，眉眼收住而非夸张羞愧。",
+                      "dialogue_line_ids": [],
+                      "sound": "静默。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "主管权衡中的可见反应，纸面证据由相邻镜头支持。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 1.4,
+                      "end_seconds": 2.5,
+                      "visual": "@周启稍停，紧绷的下颌放松一点，目光仍落在纸上。",
+                      "framing": "同一胸上近景。",
+                      "camera": "固定。",
+                      "action": "做出撤回临时修改的决定，持笔手仍在画外；放笔动作留给下一镜明确呈现。",
+                      "performance": "让步是务实取舍，不演成被威胁、愤怒或突然讨好。",
+                      "dialogue_line_ids": [],
+                      "sound": "自然呼吸与办公室底噪，不预先响起放笔声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "主管决定前的短暂停顿。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧，林岚窗侧画外；座位和光线连续。",
+                    "eyeline": "周启先下看新日期，再看同纸底部旧签名，抬眼方向应为画左。",
+                    "prop_state_in": "周启仍持唯一黑笔；同一便签已写周五但未签，仍贴在原确认单上。",
+                    "prop_state_out": "道具状态保持不变；还没有放笔或揭便签。",
+                    "action_in": "接林岚等待的反打。",
+                    "action_out": "决定撤回修改，下一镜从他仍持笔开始。"
+                  },
+                  "transition_out": "按其下看视线切手部，明确呈现放笔再揭便签的动作顺序。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "眼神本身不能证明纸上内容，须与已设计证据镜连续使用；不新增旧剧本不存在的铺垫。实际面部反应可读性仍待视频验证。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-05",
+                "title": "接笔却不签，等待一个选择",
+                "shot_ids": [
+                  "shot-andingao-11",
+                  "shot-andingao-12",
+                  "shot-andingao-13"
+                ],
+                "duration_seconds": 7,
+                "generation_intent": "以2.4秒未落笔证据、2.1秒林岚等待、2.5秒主管权衡组成无对白段。静默有具体内容，不新增对白或内心旁白。所有动作都保持新日期未获签字、便签仍在纸上、主管仍持笔；下一组才放笔并亲手撤回修改。",
+                "transition_intent": "停笔特写切等待者，再反打作决定的人；固定机位保持现实职场语气，不使用胜利光效或夸张推拉。",
+                "continuity_in": [
+                  "周启已接笔，纸在他面前，周五已写且未签。",
+                  "林岚在窗侧等答复，未收纸。"
+                ],
+                "visible_changes": [
+                  "笔尖在日期旁停住而未落下。",
+                  "林岚安静等待。",
+                  "周启比较新日期与旧签字，收回坚持。"
+                ],
+                "continuity_out": [
+                  "笔仍在周启手中，便签仍贴纸上，文字不变。",
+                  "周启决定撤回修改，尚未执行揭签。"
+                ],
+                "reference_notes": [
+                  "需要镜11停笔未签状态构图、镜12林岚等待近景、镜13周启门侧近景；人物身份与空间可复用现有可用母图。",
+                  "近景不要求整桌、完整手臂和两张正脸同时出现。纸面由特写负责，表情由人物近景负责。",
+                  "现阶段保存参考需求，不宣称具体镜头图片已经完成绑定。无需未来视频Take作为任何必需输入。"
+                ]
+              },
+              "handoff_notes": [
+                "本组没有对白，空source_line列表是有意保留剧本无声动作，不是漏台词。",
+                "7秒的停笔与反应是导演表演估算；若后续实际节奏冗长，可局部收短重复停顿，但必须保留未签新日期的证据和林岚等待。",
+                "镜13末还没放笔，镜14须从周启持笔状态接起，不能直接出现已揭下便签。"
+              ]
+            }
+          ],
+          "source_artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-fdce833348ee",
+              "version": 1
+            }
+          ]
+        }
+      }
+    },
+    "6": {
+      "tool_name": "shot.append_storyboard_groups",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "draft_document_id": "production-document-2458c416ac05",
+          "base_version_id": "production-document-version-4410ce9858e7",
+          "origin": "AGENT",
+          "work_unit": {
+            "id": "sb-work-andingao-middle",
+            "title": "把重做与交期的选择交回主管",
+            "source_range": {
+              "id": "sb-range-andingao-middle",
+              "scene_ids": [
+                "scene-885d61c18b62"
+              ],
+              "script_line_ids": [
+                "line-andingao-08"
+              ],
+              "description": "林岚拿笔在同一便签上写周五，将纸笔推回，请周启确认。周启接笔却停在新日期旁；林岚等待，周启看新日期及旧签名。",
+              "starts_after": "周启：两天？不行，明早就要。",
+              "ends_before": "他放下笔，慢慢揭掉整张黄便签"
+            },
+            "objective": "用可见书写起点、准确日期完成状态、真实接笔及沉默表演，让观众理解新交期只是待确认的选择，并未获批。",
+            "continuity_context": [
+              "纸与唯一黑笔在林岚一侧；便签下半部尚无周五。",
+              "周启已坐直。林岚窗侧、周启门侧，座位不变。",
+              "底部原有确认：周启始终保留，不能变成新交期签字。"
+            ],
+            "constraints": [
+              "不改第八句原文，不新增催促或旁白。",
+              "不要求逐笔准确成字全程无切镜；不能省略是谁写下日期。",
+              "不得以未来视频Take或抽帧作为必需输入。"
+            ],
+            "completion_criteria": [
+              "书写、纸笔交接、新日期无签字及两人等待反应均有独立可读覆盖。",
+              "第八句在镜9与镜10及实际有声时段使用同一来源ID，一次连续发声。",
+              "组4设计11秒，组5设计7秒；均为表演估算。"
+            ],
+            "ordering_guidance": "接前七镜，先动作，再请确认，最后让沉默和主管视线承接撤回修改的决定。"
+          },
+          "groups": [
+            {
+              "work_unit_id": "sb-work-andingao-middle",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 4,
+              "source_range": {
+                "id": "sb-range-andingao-04",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-08"
+                ],
+                "description": "林岚拿黑笔写周五，再把纸和笔交到周启面前，请他确认改变交期。",
+                "starts_after": "两天？不行，明早就要。",
+                "ends_before": "笔尖停在“周五”旁边，没有落下。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-08",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 8,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.6,
+                  "narrative_purpose": "清楚交代林岚主动把两天具体化为新日期；写前便签仍只有两项红字修改要求。",
+                  "visual": "在@小会议室浅木桌面，@林岚的灰蓝袖口和双手进入纸面局部。@定稿确认单与修改便签仍在她面前：底部旧签字保留，右上黄便签下半部空白。她从右手边桌面拿起唯一的@黑色中性笔，另一手轻扶纸边，笔尖落到便签下半部开始写日期。镜内不要求观众同时看脸或读完整方案。",
+                  "framing": "9:16桌面手部近景；包括便签、纸边与取笔起点，便签不被书写手完全挡住；不强求完整双臂。",
+                  "camera": "从会议桌前端一侧略俯拍，固定。镜头顺应纸张当前朝向，字面不过度压扁；不横越人物对话轴，不追随手指做多余运动。",
+                  "audio_intent": "无对白。轻微取笔及真实笔尖摩擦声，办公室底噪连续。这里的书写声只是声音设计，未制作或听验。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "浅木桌面材质与窗侧来光；本镜不需要整个房间同时入画。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "灰蓝袖口与手臂服装连续；本镜不使用人物头像冒充桌面首帧。"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "原签字保留",
+                        "两项红字",
+                        "周五尚未写入"
+                      ],
+                      "purpose": "需要同一确认单的写前状态，黄便签下半部留白；镜头构图图尚待制作与绑定。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "唯一无品牌黑色按动中性笔，取自林岚右手边；保持实际采用的持笔手连续。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 1.1,
+                      "visual": "@林岚的灰蓝袖口位于纸旁，@黑色中性笔尚在她右手边；@定稿确认单与修改便签上的两行红字及其下方空白可见。",
+                      "framing": "纸面与取笔点的手部近景。",
+                      "camera": "固定略俯。",
+                      "action": "她用书写手接触并拿起笔，另一手轻扶纸边；纸不离桌，不增加第二支笔。",
+                      "performance": "动作利落但不带挑衅，先解决问题而非摆出胜利姿态。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻微触笔声和室内底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "取笔者的灰蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "桌面待取的同一黑笔。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "required_tags": [
+                            "原签字保留",
+                            "两项红字",
+                            "周五尚未写入"
+                          ],
+                          "purpose": "写前状态，不能预先出现周五。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 1.1,
+                      "end_seconds": 3.6,
+                      "visual": "笔尖接触@定稿确认单与修改便签的黄便签下半部，@林岚保持自然书写姿态。",
+                      "framing": "保持便签及持筆接触可见的近景。",
+                      "camera": "固定，不推到只剩笔尖而失去书写者线索。",
+                      "action": "笔尖真实接触便签并开始写“周五”，书写持续到切点；不要求在此镜不切地展示两字全部笔画。",
+                      "performance": "稳定、务实，不写完后停成刻意展示的照片。",
+                      "dialogue_line_ids": [],
+                      "sound": "短促连续的书写声，跨切到下一镜开头收束。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "required_tags": [
+                            "原签字保留",
+                            "两项红字",
+                            "周五尚未写入"
+                          ],
+                          "purpose": "从下半部空白开始书写；完整日期结果由镜10覆盖。"
+                        },
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "同一书写者与袖口，不换人代写。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "双方仍坐原位；画内只见林岚手臂，周启在对面画外。",
+                    "eyeline": "林岚看便签，周启画外看她书写。",
+                    "prop_state_in": "确认单在林岚面前，原签名存在；黄便签仅有换配色、重排版式两行红字；黑笔在林岚右手边。",
+                    "prop_state_out": "林岚持笔在便签下半部书写中，另一手扶纸，纸和便签没有分离。",
+                    "action_in": "接周启拒绝两天交期，林岚决定提供待确认的新日期。",
+                    "action_out": "书写动作尚在收束，切到本人面部，完成部分可画外承接。"
+                  },
+                  "transition_out": "书写动作与笔声连续切林岚近景；不是从空白便签直接跳到主管持笔。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "后续实际动态须验证持笔接触和写前无周五。可用镜9遮蔽非关键笔画，不要求模型一边逐笔写准中文一边保全所有文字；不能用静态字幕贴在移动纸上冒充已解决。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-09",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 9,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.8,
+                  "narrative_purpose": "把书写转为林岚对主管的明确选择；近景读到她是平静地设定工作条件，而不是争吵。",
+                  "visual": "@小会议室窗侧的@林岚胸上近景，低马尾、灰蓝衬衫与柔和窗光保持一致。她先低眼完成画面下方的书写，随后抬眼看向画右的周启，开口说明重做就得改交期。画内不出现主管正脸，不要求此景别同时看清纸张和整只手。",
+                  "framing": "胸上近景，完整脸部和肩线可读，给朝画右的视线留空间。",
+                  "camera": "与既有对话轴同侧的林岚单人机位，眼平固定；背景保留窗侧材质，不纳入门侧全景。",
+                  "audio_intent": "开头约0.8秒书写声结束。林岚开始第八句：“那要重做，交期得改到周五。您确认一下，我开工。”本镜发声到第一句号附近，后半句在下一镜由她画外连续说完，只念一次，不重起整句。",
+                  "dialogue_line_ids": [
+                    "line-andingao-08"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "窗侧座位背景与同一傍晚光向；空场母图可提供空间，不等于此镜构图。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "清楚的成年面部、低马尾及灰蓝领口。已有原创身份图可在后续精确绑定，本条当前保存需求。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.8,
+                      "visual": "@林岚低眼看画外下方的便签，嘴唇未发声。",
+                      "framing": "胸上近景。",
+                      "camera": "固定。",
+                      "action": "画面下方的书写收束，她视线从桌面抬到周启；拿笔的手留在画外，不要求展示额外归位姿态。",
+                      "performance": "抬眼平静，没有先露出得意笑容。",
+                      "dialogue_line_ids": [],
+                      "sound": "上一镜笔声短暂延续后停止。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "书写者面部及抬眼反应。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.8,
+                      "end_seconds": 3.8,
+                      "visual": "@林岚看着画右的主管，表情清醒克制。",
+                      "framing": "胸上近景，肩线自然。",
+                      "camera": "固定，以视线和语气完成变化。",
+                      "action": "她说出第八句前半部分，手中的纸笔暂留画外；到自然句内停顿切纸面。",
+                      "performance": "把重做与周五作为可执行条件陈述，音量不提高，不逼迫或抢话。",
+                      "emotion": "平静而明确。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚近距离普通话，后续声音跨镜连续；无旁白、无配乐顶起。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "本时段唯一画内发声者。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧，周启门侧画外；两人座位不变。",
+                    "eyeline": "林岚从下看便签转为看画右的周启；与主管近景保持互补视线。",
+                    "prop_state_in": "同一支笔在林岚书写手中，便签书写尚在收束。",
+                    "prop_state_out": "便签下半部已由林岚写好黑字周五；她仍持笔，纸未交出。新日期旁没有周启签字。",
+                    "action_in": "接书写中切点。",
+                    "action_out": "她继续同一句对白，准备把纸笔推回主管面前。"
+                  },
+                  "transition_out": "在第八句自然句内停顿处切纸笔近景，后半句由林岚画外继续；镜9和镜10必须在同一ClipGroup。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "实际生成后需听辨第八句是否一次自然发声，避免跨镜重复。此镜不承担纸面准确成字的验证。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-10",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 10,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3.6,
+                  "narrative_purpose": "看清周五已写在原便签上，并看清纸笔从林岚交到主管手中；交接不等于批准新交期。",
+                  "visual": "@定稿确认单与修改便签的写后状态占据桌面近景：黄便签上方红字“换配色”“重排版式”，下方新增黑字“周五”，日期旁仍空白，纸底旧“确认：周启”保留。@林岚灰蓝袖口从窗侧送来纸与@黑色中性笔；@周启海军蓝袖口从门侧接笔。先见日期结果，再见手接触、接稳、松手，笔不凭空换主人。",
+                  "framing": "9:16较高俯角桌面近景，包含同一A4、便签、两侧前臂及笔的交接区域，不含面部。选择能正读便签、区分旧签名位置的纸面构图，关键文字不被字幕或手掌长时间盖住。",
+                  "camera": "桌前端同侧固定略高俯拍。灰蓝袖来自窗侧、海军蓝袖来自门侧，保持既有两人关系；不为逐字放大而在交接中跳轴。",
+                  "audio_intent": "承接镜9，林岚画外说完第八句后半部分；她是唯一发声者，画内周启不代说。纸张滑动声、接笔轻响自然，末尾短静默。",
+                  "dialogue_line_ids": [
+                    "line-andingao-08"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "原签字保留",
+                        "周五已写",
+                        "新日期未签"
+                      ],
+                      "purpose": "需要准确写后状态及手部交接构图；用实际纸面图验证字形、大小、朝向，不以文字说明冒充可读实图。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "送纸笔者的灰蓝袖口与上一镜写字手连续。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "同一黑笔从林岚持有到周启接稳；不锁死可调整的手别，但采用后相邻镜须接续。"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "海军蓝长袖袖口识别接笔者；不要求无必要的正脸同时入画。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.7,
+                      "visual": "@定稿确认单与修改便签上黑字周五已经写好，日期旁未签，旧签名仍在纸底。",
+                      "framing": "写后纸面近景，便签与旧签名分属不同位置。",
+                      "camera": "固定俯角，短暂停留供辨认结果。",
+                      "action": "纸仍在林岚一侧，笔已离开纸面，未凭空更换文件。",
+                      "performance": "画内只见自然持物，不要求手指逐字指读。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚画外继续同一条对白，不重复镜9已说的部分。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "required_tags": [
+                            "原签字保留",
+                            "周五已写",
+                            "新日期未签"
+                          ],
+                          "purpose": "准确周五完成状态，红字和旧签名不变。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.7,
+                      "end_seconds": 3,
+                      "visual": "@林岚将纸推向门侧，同时把@黑色中性笔的可握笔杆送向@周启伸来的手；同一张@定稿确认单与修改便签随之到主管面前。",
+                      "framing": "保持两侧手、整支笔与便签可见的桌面近景。",
+                      "camera": "固定，不在接触瞬间切走。",
+                      "action": "纸贴桌面滑过去，林岚仍持笔，周启先握住可握笔杆，接稳后林岚松手并撤开；不让两只手同时穿过笔杆，也不靠纸滑动带着无人持握的笔漂移。",
+                      "performance": "她是在邀请确认，不把笔强塞入对方手；他接笔带一点迟疑。",
+                      "dialogue_line_ids": [
+                        "line-andingao-08"
+                      ],
+                      "sound": "林岚画外说完第八句；纸与桌面轻擦声不盖过对白。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "送出纸笔的灰蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "交接接触、接稳、松手的同一黑笔。"
+                        },
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "接笔者的海军蓝袖口。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "required_tags": [
+                            "原签字保留",
+                            "周五已写",
+                            "新日期未签"
+                          ],
+                          "purpose": "写后同一纸张滑向周启，便签仍贴在纸上。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 3,
+                      "end_seconds": 3.6,
+                      "visual": "@周启独自持有@黑色中性笔，写有周五的便签已在他面前。",
+                      "framing": "同一手部近景。",
+                      "camera": "固定，保留交接结果。",
+                      "action": "林岚的手已退出交接区；周启把笔尖朝向日期旁空白，但尚未落笔。",
+                      "performance": "动作从接笔自然减速。",
+                      "dialogue_line_ids": [],
+                      "sound": "对白结束，留下室内底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION",
+                          "purpose": "确认笔已由主管接稳。"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "接稳后的笔尖朝向下一镜日期旁，尚不接触纸。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧，周启门侧；画内以不同袖口和两侧来手确认关系。",
+                    "eyeline": "两人均看纸笔；面部不入画。",
+                    "prop_state_in": "周五已写在同一便签下半部；纸在林岚一侧、黑笔在她手中，旧签字不变。",
+                    "prop_state_out": "纸在周启面前，便签仍贴纸上；周启独自持笔，林岚已松手，日期旁无新字。",
+                    "action_in": "接第八句中途切入写后结果。",
+                    "action_out": "周启将笔尖移向新日期旁空白，进入犹豫。"
+                  },
+                  "transition_out": "顺笔尖接下一镜局部近景；本句已在本组结束，不跨组拆同一句话。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "纸笔交接的接触顺序与文字保持均须以后续动态实测。准确字版可用于准备静态纸面输入，不能承诺用无跟踪静态叠图修复移动、遮挡中的书写。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-04",
+                "title": "写下周五，请主管确认",
+                "shot_ids": [
+                  "shot-andingao-08",
+                  "shot-andingao-09",
+                  "shot-andingao-10"
+                ],
+                "duration_seconds": 11,
+                "generation_intent": "先以手部覆盖林岚拿笔并落笔书写，再切本人近景让剩余笔画在画外自然完成，最后以准确写后纸面和完整接笔证据接续。第八句原文保持一次发声，在镜9和镜10跨切连续，不从每个Shot重新读整句。11秒为自然表演估计，不是音画实测。任何后续输入编排不得删去林岚书写的因果或把周五变成已经获批的交期。",
+                "transition_intent": "写字声桥接8到9；对白桥接9到10；交接完成后切停笔，保留静默。",
+                "continuity_in": [
+                  "纸与黑笔在林岚一侧，便签下半部空白。",
+                  "旧确认签名已有；周启坐直，拒绝两天交期。"
+                ],
+                "visible_changes": [
+                  "林岚取笔并在同一便签写日期。",
+                  "便签出现黑字周五。",
+                  "纸与唯一黑笔由林岚交到周启面前及手中。"
+                ],
+                "continuity_out": [
+                  "周启已接稳笔但未签新日期。",
+                  "便签仍贴在原签字确认单右上角，日期旁保持空白。"
+                ],
+                "reference_notes": [
+                  "需要写前状态、写后未签状态、手部交接构图与林岚单人近景构图；具体媒体尚待逐用途绑定。",
+                  "身份与空场参考只贡献各自身份、服装和空间，不能自动当作镜头首帧。",
+                  "不要求一张图覆盖所有演员正脸、桌面文字及完整动作；纸面镜头用袖口识别操作者。",
+                  "输入使用已准备的身份、空间、道具与必要构图图片，不依赖未来Take或视频抽帧。单次Provider限制由后续路线编译处理。"
+                ]
+              },
+              "handoff_notes": [
+                "第八句自然发声约5.2秒：镜9约3秒，镜10约2.3秒；组内另留取笔、书写、抬眼、交接及收束时间。具体语气与边界需以后续实际声画验证。",
+                "书写不承诺每个中文笔画无切镜完成；镜8证明作者与落笔，镜9声音承接，镜10证明准确结果。",
+                "纸、笔的手别可随可用实际构图局部协调；不能改变由林岚写、由周启接且未签的事实。"
+              ]
+            },
+            {
+              "work_unit_id": "sb-work-andingao-middle",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 5,
+              "source_range": {
+                "id": "sb-range-andingao-05",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [],
+                "description": "周启笔尖停在周五旁边，没有落下；林岚等待不催。周启看新日期，再看纸底原签名。",
+                "starts_after": "周启接过笔。",
+                "ends_before": "他放下笔，慢慢揭掉整张黄便签"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-11",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 11,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.4,
+                  "narrative_purpose": "让观众明确看见他接笔却没有批准新日期；原有签名不能被误读为签过周五。",
+                  "visual": "@周启的海军蓝袖口与持笔手在画内，@黑色中性笔笔尖停在@定稿确认单与修改便签的“周五”旁边空白上方。便签上方两项红字仍在，日期旁没有签名或勾画。纸底旧签名不挤进本镜，前后证据镜已经建立它的位置。",
+                  "framing": "便签及持笔手特写，日期文字和笔尖与纸面之间的微小间隙可辨；手背不能全遮住周五。",
+                  "camera": "接上一镜的桌面方向，稍收紧景别，固定；不将停笔拍成正在写字的运动模糊。",
+                  "audio_intent": "无对白。没有书写声，只留底噪及自然呼吸；不用心跳、悬疑音效解释心理。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION",
+                      "purpose": "与镜10同一接笔手和海军蓝袖口。"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "唯一黑笔停在纸面上方，禁止落笔。"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "定稿确认单与修改便签",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@定稿确认单与修改便签"
+                      },
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION",
+                      "required_tags": [
+                        "周五已写",
+                        "新日期未签"
+                      ],
+                      "purpose": "需要写后未签状态的停笔构图，日期旁留白是本镜证据。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 2.4,
+                      "visual": "@黑色中性笔由周启握着，笔尖悬于@定稿确认单与修改便签的周五旁，空白处始终未留下墨迹。",
+                      "framing": "便签与持笔手特写。",
+                      "camera": "固定。",
+                      "action": "接笔后本要确认的动作减速并停住；没有笔尖触纸或签字，仅允许自然持握微动。",
+                      "performance": "犹豫由没有落笔体现，不要求明显颤抖或夸张攥拳。",
+                      "dialogue_line_ids": [],
+                      "sound": "安静办公室底噪，无笔尖书写声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "同一笔在纸面上方停止。"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "定稿确认单与修改便签",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@定稿确认单与修改便签"
+                          },
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION",
+                          "required_tags": [
+                            "周五已写",
+                            "新日期未签"
+                          ],
+                          "purpose": "周五旁无签字的持续可读状态。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧持笔，林岚窗侧画外；两人不换座。",
+                    "eyeline": "周启画外看新日期。",
+                    "prop_state_in": "纸在周启面前，笔已经接稳；周五已写，日期旁未签。",
+                    "prop_state_out": "全部纸面文字不变，笔尖停在纸面上方，没有新增签字。",
+                    "action_in": "接镜10笔尖转向新日期空白处。",
+                    "action_out": "笔仍由周启持有，尚未放下。"
+                  },
+                  "transition_out": "切林岚等待反应，让无声压力延续；不能借切镜默认主管已签字。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "模型可能自动完成签名；后续须明确检查笔尖间隙、无书写音及日期旁未新增墨迹。静态停笔图仅是状态输入，不证明动态保持。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-12",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 12,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.1,
+                  "narrative_purpose": "让林岚用等待而不是额外解释维持选择边界，给观众读懂主管迟疑的空间。",
+                  "visual": "@小会议室窗侧的@林岚胸上近景。她看着画右的周启，嘴唇闭合，肩膀仍略紧，不伸手把纸收回来，也没有补一句催促。桌面与手处于画外。",
+                  "framing": "胸上近景，完整表情与肩线可见。",
+                  "camera": "沿用镜9的窗侧单人机位，眼平固定，不另改仰俯角制造胜负。",
+                  "audio_intent": "无对白、无旁白；静默与办公室底噪延续，林岚不替画外周启发声。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "与镜9相同窗侧背景及柔和傍晚光向。"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "同一林岚面部、发型及领口，构图可复用镜9的关系，不需另造手部微状态。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 2.1,
+                      "visual": "@林岚保持看向主管的视线，嘴唇闭合。",
+                      "framing": "胸上近景。",
+                      "camera": "固定。",
+                      "action": "她等对方决定，不点头代替同意、不伸手、不再催。",
+                      "performance": "自然呼吸，紧绷尚未解除；不做胜利微笑，也不僵成定格。",
+                      "emotion": "有分寸的坚定与等待。",
+                      "dialogue_line_ids": [],
+                      "sound": "室内底噪连续。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "等待者的真实面部反应。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧画内，周启门侧画外。",
+                    "eyeline": "林岚看画右周启，方向与镜9一致。",
+                    "prop_state_in": "纸笔在周启一侧，他仍持笔未签；便签仍贴在确认单上。",
+                    "prop_state_out": "道具保持画外既有状态，不能借此切镜新增签字或撤下便签。",
+                    "action_in": "林岚说完请确认后等待。",
+                    "action_out": "她继续等待，把决定交给周启。"
+                  },
+                  "transition_out": "视线切周启的反应近景。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "需以后续面部动态确认自然等待而非木偶定格；当前只是2.1秒表演估算。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-13",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 13,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 2.5,
+                  "narrative_purpose": "让周启亲自权衡新日期和自己的旧确认，转折来自既有约束，而非突来外力。",
+                  "visual": "@小会议室门侧的@周启胸上近景，海军蓝衬衫、黑色侧分短发与既有身份一致。他先垂眼看桌上新日期，再让视线移向同张纸底的旧签名，停半拍；抬头前已不再坚持。纸面不入画，其可读证据由镜2、镜10与镜11承担，不强行让近景脸和整页文字同时清晰。",
+                  "framing": "胸上近景，眉眼、下颌和肩线清楚，朝画左留视线空间。",
+                  "camera": "既有对话轴同侧的门侧单人机位，眼平固定；保持周启向画左看林岚的互补方向。",
+                  "audio_intent": "无对白。只留自然呼吸与房间底噪，不添加内心旁白或场外提示。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "门侧灰墙与磨砂门背景关系；玻璃不能映出第三人。"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION",
+                      "purpose": "已知可用成年主管脸部身份与海军蓝领口，单人面部构图需按本镜准备并绑定。"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 1.4,
+                      "visual": "@周启垂眼看桌面，视线从便签区域移向纸底旧签名所在处。",
+                      "framing": "胸上近景，不显示纸。",
+                      "camera": "固定。",
+                      "action": "他先看新日期，再看原确认所在的位置；用一次自然的眼神和轻微头部变化交代比较，不连做多次扫视。",
+                      "performance": "从催促别人转为意识到自己必须承担交期变化，眉眼收住而非夸张羞愧。",
+                      "dialogue_line_ids": [],
+                      "sound": "静默。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "主管权衡中的可见反应，纸面证据由相邻镜头支持。"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 1.4,
+                      "end_seconds": 2.5,
+                      "visual": "@周启稍停，紧绷的下颌放松一点，目光仍落在纸上。",
+                      "framing": "同一胸上近景。",
+                      "camera": "固定。",
+                      "action": "做出撤回临时修改的决定，持笔手仍在画外；放笔动作留给下一镜明确呈现。",
+                      "performance": "让步是务实取舍，不演成被威胁、愤怒或突然讨好。",
+                      "dialogue_line_ids": [],
+                      "sound": "自然呼吸与办公室底噪，不预先响起放笔声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION",
+                          "purpose": "主管决定前的短暂停顿。"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧，林岚窗侧画外；座位和光线连续。",
+                    "eyeline": "周启先下看新日期，再看同纸底部旧签名，抬眼方向应为画左。",
+                    "prop_state_in": "周启仍持唯一黑笔；同一便签已写周五但未签，仍贴在原确认单上。",
+                    "prop_state_out": "道具状态保持不变；还没有放笔或揭便签。",
+                    "action_in": "接林岚等待的反打。",
+                    "action_out": "决定撤回修改，下一镜从他仍持笔开始。"
+                  },
+                  "transition_out": "按其下看视线切手部，明确呈现放笔再揭便签的动作顺序。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "眼神本身不能证明纸上内容，须与已设计证据镜连续使用；不新增旧剧本不存在的铺垫。实际面部反应可读性仍待视频验证。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-05",
+                "title": "接笔却不签，等待一个选择",
+                "shot_ids": [
+                  "shot-andingao-11",
+                  "shot-andingao-12",
+                  "shot-andingao-13"
+                ],
+                "duration_seconds": 7,
+                "generation_intent": "以2.4秒未落笔证据、2.1秒林岚等待、2.5秒主管权衡组成无对白段。静默有具体内容，不新增对白或内心旁白。所有动作都保持新日期未获签字、便签仍在纸上、主管仍持笔；下一组才放笔并亲手撤回修改。",
+                "transition_intent": "停笔特写切等待者，再反打作决定的人；固定机位保持现实职场语气，不使用胜利光效或夸张推拉。",
+                "continuity_in": [
+                  "周启已接笔，纸在他面前，周五已写且未签。",
+                  "林岚在窗侧等答复，未收纸。"
+                ],
+                "visible_changes": [
+                  "笔尖在日期旁停住而未落下。",
+                  "林岚安静等待。",
+                  "周启比较新日期与旧签字，收回坚持。"
+                ],
+                "continuity_out": [
+                  "笔仍在周启手中，便签仍贴纸上，文字不变。",
+                  "周启决定撤回修改，尚未执行揭签。"
+                ],
+                "reference_notes": [
+                  "需要镜11停笔未签状态构图、镜12林岚等待近景、镜13周启门侧近景；人物身份与空间可复用现有可用母图。",
+                  "近景不要求整桌、完整手臂和两张正脸同时出现。纸面由特写负责，表情由人物近景负责。",
+                  "现阶段保存参考需求，不宣称具体镜头图片已经完成绑定。无需未来视频Take作为任何必需输入。"
+                ]
+              },
+              "handoff_notes": [
+                "本组没有对白，空source_line列表是有意保留剧本无声动作，不是漏台词。",
+                "7秒的停笔与反应是导演表演估算；若后续实际节奏冗长，可局部收短重复停顿，但必须保留未签新日期的证据和林岚等待。",
+                "镜13末还没放笔，镜14须从周启持笔状态接起，不能直接出现已揭下便签。"
+              ]
+            }
+          ],
+          "source_artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-fdce833348ee",
+              "version": 1
+            }
+          ]
+        }
+      }
+    },
+    "7": {
+      "tool_name": "shot.append_storyboard_groups",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "draft_document_id": "production-document-2458c416ac05",
+          "base_version_id": "production-document-version-1b1100ae08b6",
+          "origin": "AGENT",
+          "work_unit": {
+            "id": "wu-andingao-ending",
+            "title": "主动撤回修改，恢复明早交付",
+            "source_range": {
+              "id": "source-andingao-ending",
+              "scene_ids": [
+                "scene-885d61c18b62"
+              ],
+              "script_line_ids": [
+                "line-andingao-09",
+                "line-andingao-10"
+              ],
+              "description": "承接周启持笔迟疑、林岚沉默等待；周启放笔，亲手揭下便签留在自己侧，推回原定稿。林岚接回纸并确认明早交。",
+              "starts_after": "周启看着新日期，又看了一眼纸底原来的签名。"
+            },
+            "objective": "用可读的放笔—揭签—退回纸张的行动明确周启撤回临时修改，而不是签准新日期；用林岚的放松与原交期对白完成回收。",
+            "continuity_context": [
+              "周启门侧，林岚窗侧，均未换座；近景沿已建立的隔桌视线轴。",
+              "周启仍持唯一黑笔，黄便签仍贴在同一张确认单右上，已有两行红字和黑字周五，没有新签名。",
+              "原确认：周启始终存在于A4纸底部，不被擦除或重新签写。"
+            ],
+            "constraints": [
+              "仅使用最后两句原对白，不加旁白、第三人、胜利特效或悬念。",
+              "不要求未来视频Take作输入；具体图片引用只使用已有精确媒体，未完成的状态及构图保留为需求。"
+            ],
+            "completion_criteria": [
+              "周启放笔后亲手揭下整张便签，便签与笔留自己一侧。",
+              "林岚拿回没有便签的原签字定稿并说好，明早交。",
+              "三镜合计13.7秒，整片55.5秒；仅为设计估算。"
+            ]
+          },
+          "groups": [
+            {
+              "work_unit_id": "wu-andingao-ending",
+              "scene_node_id": "sb-scene-andingao-01",
+              "scene_group_sequence": 6,
+              "source_range": {
+                "id": "source-andingao-group06",
+                "scene_ids": [
+                  "scene-885d61c18b62"
+                ],
+                "script_line_ids": [
+                  "line-andingao-09",
+                  "line-andingao-10"
+                ],
+                "description": "放下笔，亲手撤回便签，退回定稿，确认原交期，定格于双方选择的物件归属。"
+              },
+              "shots": [
+                {
+                  "id": "shot-andingao-14",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 14,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 5.5,
+                  "narrative_purpose": "直接看见周启不签新日期，改为亲手移除修改要求；撤回由他的动作完成。",
+                  "visual": "@小会议室 的浅木桌面近景，只见 @周启衣着 的海军蓝袖口与双手，不要求脸同时入画。@附周五便签的确认单 位于门侧桌面，原签名未变。先把 @黑色中性笔 放在自己一侧并松手，再一手稳定A4纸、一手捏住便签自由边，缓慢揭离整张便签。@揭签后的定稿 露出原方案；@已揭下的周五便签 正面朝上落到笔旁。便签与A4分离的边界、手的牵引和最后落点为注意力中心，不要求此动作镜逐字展示全张文件。",
+                  "framing": "桌面与前臂近景，轻俯；完整覆盖便签、纸上接触点及同侧笔的落点，不含人物全脸。",
+                  "camera": "从桌前端同轴一侧朝门侧桌面轻俯，固定机位。窗侧来光保持一致；不跨到桌后反拍。便签揭起时不追着手摇镜。",
+                  "audio_intent": "无对白。轻微办公室底噪，先有笔落桌的轻响，再有粘胶揭离纸面的细声；不加拟声夸张、叹气台词或胜利配乐。",
+                  "dialogue_line_ids": [],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": "asset-version-af98adea2425",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "purpose": "已选空场母版提供浅木桌面材质、门窗方向和自然办公光线，不提供本镜手物接触。",
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": "asset-version-d57c89b3d1dd",
+                      "alias": "周启衣着",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启衣着"
+                      },
+                      "purpose": "已选全身母图仅提供海军蓝长袖及腕部可见衣着，不复制站姿或空手姿态。",
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "附周五便签的确认单",
+                      "required_tags": [
+                        "周五已写",
+                        "便签仍贴附",
+                        "无新签名"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@附周五便签的确认单"
+                      },
+                      "purpose": "需求：同一原签字A4纸，黄便签上两行红字与黑字周五；周五旁无签名。需绑定实际状态图，不能用初始无周五母版冒充。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "required_tags": [
+                        "黑色按动中性笔"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "purpose": "需求：唯一黑色按动笔的真实母图；本镜先由周启持有，再放在门侧桌面。未绑定具体图片。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "揭签后的定稿",
+                      "required_tags": [
+                        "便签已移除",
+                        "原签名保留"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@揭签后的定稿"
+                      },
+                      "purpose": "需求：同源便签移除后完整方案与原确认签名状态；只作为结果依据，不用静态结果替代亲手揭签动作。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "已揭下的周五便签",
+                      "required_tags": [
+                        "便签已揭下",
+                        "周五",
+                        "无新签名"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@已揭下的周五便签"
+                      },
+                      "purpose": "需求：已脱离A4的同张便签，红字两项修改、黑字周五、无新增签名，不能从纸面复制出第二张。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.8,
+                      "visual": "@附周五便签的确认单 仍完整贴签；@黑色中性笔 从悬停状态移开，笔尖不碰周五旁的纸面。",
+                      "framing": "桌面接触近景",
+                      "camera": "固定轻俯",
+                      "action": "周启将笔放到自己一侧，笔身获得桌面支撑后手指松开。此时便签尚未揭起。",
+                      "performance": "决定不为新交期签字，不做夸张甩笔。",
+                      "dialogue_line_ids": [],
+                      "sound": "轻微笔落桌声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "附周五便签的确认单",
+                          "required_tags": [
+                            "周五已写",
+                            "便签仍贴附",
+                            "无新签名"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@附周五便签的确认单"
+                          },
+                          "purpose": "本时段仍是写有周五但未获签名确认的贴签状态。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "required_tags": [
+                            "黑色按动中性笔"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "purpose": "本时段由周启手持过渡到门侧桌面静置，只有一支笔。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.8,
+                      "end_seconds": 3.9,
+                      "visual": "@周启衣着 的袖口与双手清楚；一手稳定确认单，另一手捏住便签自由边，便签随牵引弯起并逐渐离开纸面。",
+                      "framing": "覆盖两手及便签粘接边的近景",
+                      "camera": "固定，不切换手别",
+                      "action": "笔已放开。一手指腹轻压A4空白边，另一手捏住黄便签自由边并向后揭起，直至整张脱离；稳定纸张的手不能同时持笔。手别由实际可用构图确定并沿本组保持。",
+                      "performance": "动作放慢但不停成多张姿势照，主动撤回而非失手撕落。",
+                      "dialogue_line_ids": [],
+                      "sound": "连续、轻微的揭签声。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "asset_version_id": "asset-version-d57c89b3d1dd",
+                          "alias": "周启衣着",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启衣着"
+                          },
+                          "purpose": "海军蓝长袖连续性；该母图不证明本时段双手接触正确。",
+                          "image_reference_role": "WARDROBE",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 3.9,
+                      "end_seconds": 5.5,
+                      "visual": "@揭签后的定稿 保持原签字；@已揭下的周五便签 被放在门侧笔旁，正面朝上。",
+                      "framing": "纸张分离结果与落点近景",
+                      "camera": "固定，保留结果停留",
+                      "action": "持便签的手将整张便签放在周启一侧并松开，另一手仍可轻扶A4。笔与便签相邻但不叠压文字，A4尚未推回林岚。",
+                      "performance": "动作结束后停半拍，让撤回修改的选择落地。",
+                      "dialogue_line_ids": [],
+                      "sound": "便签轻贴桌面，恢复微弱环境底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "揭签后的定稿",
+                          "required_tags": [
+                            "便签已移除",
+                            "原签名保留"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@揭签后的定稿"
+                          },
+                          "purpose": "本时段显示同一A4纸已无黄便签且原签名保留。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "已揭下的周五便签",
+                          "required_tags": [
+                            "便签已揭下",
+                            "周五",
+                            "无新签名"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@已揭下的周五便签"
+                          },
+                          "purpose": "本时段便签脱离A4并落在周启侧，不允许分裂、复制或消失。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "双方仍各坐原位；仅周启门侧前臂和双手入画。林岚窗侧画外等待，不暗中接触便签。",
+                    "eyeline": "承接周启看完新日期和旧签名后低头操作；本镜不要求眼睛入画。",
+                    "prop_state_in": "周启持黑笔；黄便签贴在同一确认单右上，已有周五但未签字。底部原确认签名存在。",
+                    "prop_state_out": "黑笔与整张已揭便签留在周启侧桌面；A4已无便签，原签名不变，仍在周启面前。",
+                    "action_in": "接续持笔未签的迟疑终态，先放笔而非重新取笔。",
+                    "action_out": "便签已脱离并放稳，周启腾出手准备把原定稿推回。"
+                  },
+                  "transition_out": "动作完成后切周启面部和退纸关系，保留同一桌轴；便签和笔不随A4移动。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "揭起边缘与双手接触需后续真实动态验证；构图需覆盖接触边界，不能仅用无便签结果图替代。静态叠图不能跟踪揭签或恢复手部遮挡。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-15",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 15,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 3,
+                  "narrative_purpose": "周启当面明确按定稿，把决定与退回原件的行动合一。",
+                  "visual": "@小会议室 内，@周启 坐门侧、位于画面右侧，面部三分之二侧正面清楚，看向画左窗侧的 @林岚。构图包含周启上身、两人之间的近段桌面及林岚接纸的手，不要求双方正脸都清晰。周启把 @揭签后的定稿 沿桌面推回窗侧，语气收住，说“算了，按定稿。”此前揭下的便签和笔仍留在他的桌面一侧，不随纸返回。",
+                  "framing": "周启中近景兼桌面动作覆盖；林岚仅画左边缘肩部及接纸手，面部反应留给下一镜。",
+                  "camera": "桌前端同轴侧眼平略俯，固定；周启看画左，下一镜林岚看画右形成互补。保留门侧背景线索，不要求窗门同时出现。",
+                  "audio_intent": "周启在画内自然说原对白：“算了，按定稿。”语气是撤回要求而非赔礼或恼羞。林岚不发声。轻微纸张滑动声不压对白。",
+                  "dialogue_line_ids": [
+                    "line-andingao-09"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": "asset-version-af98adea2425",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "purpose": "保持门侧位置、浅木桌面与统一办公光线；空场母版不是此中近景构图。",
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-46d67bbac2fc",
+                      "asset_version_id": "asset-version-5c749ef40be9",
+                      "alias": "周启",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@周启"
+                      },
+                      "purpose": "已选头像提供周启面部身份及黑色侧分短发；不提供动态口型或坐姿。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": "asset-version-2aff127fa8fb",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "本镜仅用灰蓝长袖、肩部与成年女性体态，不要求参考中的整身或椅子入画。",
+                      "image_reference_role": "WARDROBE",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "揭签后的定稿",
+                      "required_tags": [
+                        "便签已移除",
+                        "原签名保留"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@揭签后的定稿"
+                      },
+                      "purpose": "需求：真实无便签且原签名保留的同源纸张状态；本镜承担退回交接，不逐字重读整页。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 2.3,
+                      "visual": "@周启 的脸清楚，视线由无便签的纸抬向林岚。",
+                      "framing": "中近景含前臂及近段桌面",
+                      "camera": "固定同轴侧",
+                      "action": "周启以指腹推纸向林岚，纸保持桌面支撑。约0.3秒起说本句，到此时段末结束；便签和笔保持在周启侧。",
+                      "performance": "轻收下颌，语气由坚持变成简短务实的决定，不额外笑或训斥。",
+                      "dialogue_line_ids": [
+                        "line-andingao-09"
+                      ],
+                      "sound": "周启原对白一次完整发声，叠轻微纸张滑动。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-46d67bbac2fc",
+                          "asset_version_id": "asset-version-5c749ef40be9",
+                          "alias": "周启",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@周启"
+                          },
+                          "purpose": "本段发声者的面部身份依据；静态参考不代表声音与口型已验收。",
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 2.3,
+                      "end_seconds": 3,
+                      "visual": "@揭签后的定稿 到达画左窗侧；林岚的手接触靠近自己的纸边。",
+                      "framing": "维持原中近景，让桌面交接在下半部可见",
+                      "camera": "固定",
+                      "action": "林岚接触纸边后，周启松开推纸的手。交接以两人接触先后可见为准，不让文件瞬移。",
+                      "performance": "双方都不抢纸、不再解释。",
+                      "dialogue_line_ids": [],
+                      "sound": "对白已结束，只余纸响与办公室底噪。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "揭签后的定稿",
+                          "required_tags": [
+                            "便签已移除",
+                            "原签名保留"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@揭签后的定稿"
+                          },
+                          "purpose": "本段为同一原件退回林岚，仍没有便签。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "周启门侧画右、林岚窗侧画左不变；周启为画面主要人物。",
+                    "eyeline": "周启抬眼朝画左看林岚；林岚从纸看向他，不朝错误一侧回应。",
+                    "prop_state_in": "周启面前A4已无便签；笔和便签都在周启桌边。",
+                    "prop_state_out": "林岚已接触无便签的原定稿，周启已松手；笔、便签未离开门侧。",
+                    "action_in": "接上一镜便签放稳后，周启空出推纸手。",
+                    "action_out": "退回交接完成，林岚下一镜顺势把纸收近。"
+                  },
+                  "transition_out": "对白结束、交接成立后切林岚中近景，沿推纸方向承接，不重复整次退纸。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "竖屏中景同时保留周启面部与纸张接触即可，不强求全桌和双人完整正脸；若实际构图裁去接纸手，应局部调整覆盖而非让原件瞬移。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                },
+                {
+                  "id": "shot-andingao-16",
+                  "project_id": "project-564a0137c835",
+                  "sequence": 16,
+                  "scene_id": "scene-885d61c18b62",
+                  "duration_seconds": 5.2,
+                  "narrative_purpose": "林岚拿回原定稿、放松并确认原交期；以留在主管侧的未获确认新日期回收整场取舍，单篇闭合。",
+                  "visual": "@小会议室 的窗侧，@林岚 中近景清楚显示脸和肩膀，灰蓝衬衫、低马尾保持。她把 @揭签后的定稿 收到自己面前，先看一眼露出的原方案，再抬眼向画右周启说“好，明早交。”肩膀自然放松。对白结束后机位缓慢俯向桌面，脸退出画面：窗侧可见原件已收回的纸边，门侧 @已揭下的周五便签 与 @黑色中性笔 留在原处。最后重心落于便签的“周五”及旁边未写新签名的空白，不强求同一构图还看清全张A4、标题和双方全脸。",
+                  "framing": "前半为林岚胸上中近景兼桌沿，后半连续俯到桌面近景；结尾便签文字有足够画面占比，纸张归属以相对位置和上一镜交接承接。",
+                  "camera": "桌前端同轴侧，林岚先看画右。前2.5秒固定，之后约1.2秒平缓俯拍并适度收近桌面，终点为便签和笔的局部，不环绕、不跨轴；末尾留1.5秒静止阅读。",
+                  "audio_intent": "林岚在画内自然说原对白：“好，明早交。”不扬声炫耀。周启画外无追加台词。对白结束后仅保留轻纸响和办公室底噪，无旁白、字幕金句或片尾悬念提示。",
+                  "dialogue_line_ids": [
+                    "line-andingao-10"
+                  ],
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-4e0caa4f5e0e",
+                      "asset_version_id": "asset-version-af98adea2425",
+                      "alias": "小会议室",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@小会议室"
+                      },
+                      "purpose": "使用已选空间母版的窗侧位置、浅木桌面和连续光线，不复制空场构图。",
+                      "image_reference_role": "SCENE_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-c4e7e48e62d3",
+                      "asset_version_id": "asset-version-f86bf193b3de",
+                      "alias": "林岚",
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@林岚"
+                      },
+                      "purpose": "已选身份母图提供脸、成年外观、可见低马尾及衬衫领口；肩膀放松和说话为本镜动作设计。",
+                      "image_reference_role": "SUBJECT_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "揭签后的定稿",
+                      "required_tags": [
+                        "便签已移除",
+                        "原签名保留"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@揭签后的定稿"
+                      },
+                      "purpose": "需求：无便签原定稿的真实同源状态；林岚收回的不是重做版本。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-08548f4926f3",
+                      "alias": "已揭下的周五便签",
+                      "required_tags": [
+                        "便签已揭下",
+                        "周五",
+                        "无新签名"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@已揭下的周五便签"
+                      },
+                      "purpose": "需求：最终桌面可读便签构图，黑字周五旁没有新签名，便签已经与A4分离；独立便签图不能直接冒充完成的桌面构图。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-e6e4c7749c50",
+                      "alias": "黑色中性笔",
+                      "required_tags": [
+                        "黑色按动中性笔"
+                      ],
+                      "field": "visual",
+                      "text_anchor": {
+                        "exact": "@黑色中性笔"
+                      },
+                      "purpose": "需求：保持唯一黑笔在周启侧的外观与落点，无人再次拿起。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0,
+                      "end_seconds": 0.9,
+                      "visual": "@林岚 看向已接到手的 @揭签后的定稿，面部与肩膀可见。",
+                      "framing": "胸上中近景含桌沿和纸上缘，不要求整张A4",
+                      "camera": "固定眼平略俯",
+                      "action": "承接上一镜已经接触的纸边，将纸收近自己，视线扫过露出的原方案。",
+                      "performance": "确认事情回到可执行状态，肩部先稍停再放松；不提前胜利微笑。",
+                      "dialogue_line_ids": [],
+                      "sound": "收纸轻响。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "asset_version_id": "asset-version-f86bf193b3de",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "purpose": "反应镜头的清楚面部身份依据。",
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION"
+                        },
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "揭签后的定稿",
+                          "required_tags": [
+                            "便签已移除",
+                            "原签名保留"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@揭签后的定稿"
+                          },
+                          "purpose": "林岚检查的是已恢复的原件，手中不带便签。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 0.9,
+                      "end_seconds": 2.5,
+                      "visual": "@林岚 抬眼看画右的周启，脸部不被纸遮挡。",
+                      "framing": "中近景",
+                      "camera": "固定，给表情完整停留",
+                      "action": "纸已收在自己面前，保持不动；抬眼回应原交期。",
+                      "performance": "肩膀放松，务实平静地说完末句，不追加点头台词或笑声。",
+                      "dialogue_line_ids": [
+                        "line-andingao-10"
+                      ],
+                      "sound": "林岚原对白一次完整发声：“好，明早交。”",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-c4e7e48e62d3",
+                          "asset_version_id": "asset-version-f86bf193b3de",
+                          "alias": "林岚",
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@林岚"
+                          },
+                          "purpose": "发声者的脸部身份与造型，不代表声线或口型已有实测结果。",
+                          "image_reference_role": "SUBJECT_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    },
+                    {
+                      "start_seconds": 2.5,
+                      "end_seconds": 5.2,
+                      "visual": "画面缓慢转向桌面，终点清楚看见门侧 @已揭下的周五便签 与 @黑色中性笔；窗侧原件纸边可作归属线索。",
+                      "framing": "由中近景连续转为桌面近景；末尾不再兼顾人物面部",
+                      "camera": "前1.2秒缓俯收近，后1.5秒稳定停留",
+                      "action": "人物与道具不再移动。便签保持正面朝上，红字两项修改仍在，黑字周五旁空白，笔不遮字。A4没有重新贴签。",
+                      "performance": "人物已完成选择，结尾让物件结果自然说明，不再加反应戏。",
+                      "dialogue_line_ids": [],
+                      "sound": "只有低电平环境声；没有额外对白或音乐重拍。",
+                      "references": [
+                        {
+                          "subject_asset_id": "asset-08548f4926f3",
+                          "alias": "已揭下的周五便签",
+                          "required_tags": [
+                            "便签已揭下",
+                            "周五",
+                            "无新签名"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@已揭下的周五便签"
+                          },
+                          "purpose": "终点须实际看清周五及旁边空白，结尾停留1.5秒；准确字形与占比需后续真实构图检查，不承诺静态叠图能跟踪移动镜头。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        },
+                        {
+                          "subject_asset_id": "asset-e6e4c7749c50",
+                          "alias": "黑色中性笔",
+                          "required_tags": [
+                            "黑色按动中性笔"
+                          ],
+                          "field": "visual",
+                          "text_anchor": {
+                            "exact": "@黑色中性笔"
+                          },
+                          "purpose": "最终黑笔仍在周启侧，不能回到林岚手中或自动消失。",
+                          "image_reference_role": "PROP_IDENTITY",
+                          "usage": "GENERATION"
+                        }
+                      ]
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "林岚窗侧不变，周启门侧画外；前半林岚在画左偏中，结尾俯桌面仍保持窗侧与门侧关系。",
+                    "eyeline": "林岚先看纸再朝画右看周启，回应完才由镜头引导观众看桌面，不要求她回头看便签。",
+                    "prop_state_in": "林岚已接触无便签的原定稿，周启已松手；便签和笔留门侧。",
+                    "prop_state_out": "原签字定稿收在林岚面前；周五便签和黑笔仍在周启一侧，周五没有被签准。",
+                    "action_in": "沿上一镜接纸结果顺势收近，不再次从周启手中重接。",
+                    "action_out": "双方仍坐原位；原定稿明早交付，临时修改被撤回，无未闭合事件。"
+                  },
+                  "transition_out": "桌面终点停留后结束单片；不引入新地点、人物、通知、彩蛋或悬念。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "需要后续实际构图确认便签朝向、字形与终点阅读占比；面部、运镜和桌面不能同时塞进紧特写。若连续俯镜不能得到清楚终点，可局部拆成反应镜与结果插入镜，保留对白、总时长余量和物件归属，不以动态贴字兜底。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT"
+                }
+              ],
+              "clip_group": {
+                "id": "clip-andingao-06",
+                "title": "撤回修改，按定稿明早交",
+                "shot_ids": [
+                  "shot-andingao-14",
+                  "shot-andingao-15",
+                  "shot-andingao-16"
+                ],
+                "duration_seconds": 13.7,
+                "generation_intent": "按镜14—16顺序呈现一个连续结尾：周启先放开笔，再亲手揭下完整黄便签并留在自己侧，退回无便签的原签字定稿并说原第九句；林岚接回纸、放松并说原第十句，最后看见周五便签和笔仍在主管侧。对白按当前结构化原文，不新增发声。镜14为手物动作覆盖，镜15为周启面部与退纸关系，镜16为林岚反应及连续俯向桌面的闭合终点。时长按自然动作与语句估计，不要求视频Take作为任何必需输入。",
+                "transition_intent": "承接前组未落笔的迟疑：先放笔声，再揭签声；镜14动作结束切镜15，镜15交接成立切镜16。最后环境声自然结束。",
+                "continuity_in": [
+                  "笔仍由周启持有，周五旁无新签名。",
+                  "便签贴在同一A4右上，原确认签名未变；林岚沉默等待。",
+                  "窗侧林岚、门侧周启，机位不越隔桌对话轴。"
+                ],
+                "visible_changes": [
+                  "黑笔由周启手中落在门侧桌面。",
+                  "周启亲手将完整便签从A4揭离并留在笔旁。",
+                  "原定稿退回林岚并收在她面前。",
+                  "林岚肩膀放松，确认原交期；周五选项没有获准。"
+                ],
+                "continuity_out": [
+                  "原签字定稿没有便签，归林岚。",
+                  "写周五的完整便签及唯一黑笔均留周启侧。",
+                  "双方原座位不变；按原定稿明早交，无悬念。"
+                ],
+                "reference_notes": [
+                  "人物身份、衣着及空场母图已按具体用途绑定到本组相关文字和时段，均不作为硬首帧。",
+                  "仍需真实剧情状态及镜头构图：周五已写但未签的贴签纸、无便签原定稿、揭下的周五便签、黑笔，以及放笔揭签和退纸接触覆盖、结尾桌面阅读构图；已有独立道具图按实际完成结果沿用，不据此宣称镜头合成完成。",
+                  "同一镜内多个状态采用不同别名，避免初始贴签状态与揭签后结果混用；手别不是故事硬要求，但实际选用后须在本组保持。",
+                  "13.7秒是表演设计，非供应商单次输入承诺；单次时长限制由后续路线编译处理，拆分时不得损失揭签、退纸或结尾证据，也不得把未来Take列为准备阶段必需输入。"
+                ]
+              },
+              "handoff_notes": [
+                "整片设计总时长55.5秒：前五组41.8秒，加本组13.7秒。为真实揭签、交接及结尾阅读保留空间，未强塞回54秒。",
+                "全部十句对白到本组覆盖完毕；未改剧本、未生成媒体或视频，也未进行后期。",
+                "本组已存在媒体只证明其保存的身份/服装/空场用途；具体动作、动态文字稳定、对白听感、口型及最终时长仍未通过真实视频验证。"
+              ]
+            }
+          ],
+          "source_artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-fdce833348ee",
+              "version": 1
+            }
+          ]
+        }
+      }
+    },
+    "8": {
+      "tool_name": "shot.finalize_storyboard",
+      "arguments": {
+        "project_id": "project-564a0137c835",
+        "request": {
+          "draft_document_id": "production-document-2458c416ac05",
+          "draft_version_id": "production-document-version-f36579303052",
+          "source_artifact_refs": [
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "script_version",
+              "artifact_id": "project-564a0137c835-script-v2",
+              "version": 2
+            },
+            {
+              "project_id": "project-564a0137c835",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-fdce833348ee",
+              "version": 1
+            }
+          ],
+          "origin": "AGENT"
+        }
+      }
+    }
+  }
+}

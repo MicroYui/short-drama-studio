@@ -77,7 +77,7 @@ from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
     BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result, project_leader_completion_actions,
 )
-from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, asset_inspection_scope, observed_media_handoffs
+from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, asset_inspection_reports, asset_inspection_scope, observed_media_handoffs
 from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
 from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
 from short_drama.studio_trace import record_trace, trace_context
@@ -1571,6 +1571,7 @@ class LanguageProductionPlanner:
     def __init__(self, client: LanguageProviderClient) -> None:
         self._client = client
         self.context_compiler = ModelInputCompiler()
+        self.projects: ProjectDocumentStore | None = None
         self._discovered_schema_ids: dict[str, list[str]] = {}
 
     def propose_plan(
@@ -1665,6 +1666,7 @@ class LanguageProductionPlanner:
                     project_id=context.project_id, tools=tools,
                     read_key=_specialist_read_observation_key,
                     project_result=_specialist_read_observation_result,
+                    document=None if self.projects is None else self.projects.get_project(context.project_id),
                 )
                 payload["working_set"] = read_working_set
                 payload["context"] = project_leader_completion_actions(
@@ -2582,11 +2584,17 @@ def _specialist_working_set(
         fold_storyboard_context(entities, turn, known_versions=storyboard_versions,
             shot_write_revisions=shot_write_revisions, entity_type=SpecialistEntitySnapshot,
             is_write=turn.tool_name in write_tool_ids)
+        _fold_saved_storyboard_directory(entities, turn, known_versions=storyboard_versions,
+                                        is_write=turn.tool_name in write_tool_ids)
 
     progress = _specialist_progress_checkpoint(work_order, progress_entries)
     for ref in progress.artifact_refs:
         artifact_ref_slots[(ref.project_id, ref.artifact_type, ref.artifact_id)] = ref
     if latest_turn is not None:
+        if _saved_storyboard_directory(latest_turn) is not None:
+            for key, entity in list(entities.items()):
+                if entity.kind == "storyboard_directory" and entity.source_sequence == latest_turn.sequence:
+                    entities.pop(key)  # The same exact directory is in latest_handoff.
         # The latest handoff already carries this exact payload.  Keep the
         # whiteboard free of duplicate copies while retaining every other
         # independent observation the Worker still needs for the decision.
@@ -2990,7 +2998,67 @@ def _specialist_turn_handoff(
                 selected_version_ids=selected_version_ids,
             )
         )
+        directory = _saved_storyboard_directory(turn)
+        saved_result = handoff["result"]
+        if compact_write_result and directory is not None:
+            saved_result["output"] = directory
     return handoff
+
+
+def _saved_storyboard_directory(turn: SpecialistTurnRecord) -> dict[str, JsonValue] | None:
+    """The actual typed mutation summary, independent of the latest WRITE wrapper."""
+    if (turn.tool_name not in {"shot.finalize_storyboard", "shot.create_storyboard",
+                               "shot.replace_storyboard", "shot.patch_storyboard"}
+        or turn.result is None or turn.result.get("status") != "SUCCEEDED"):
+        return None
+    # These four mutations return the same typed StoryboardMutationOutput.
+    # Reuse its compact projection without changing patch's normal write_context.
+    compact = _compact_specialist_tool_result("shot.finalize_storyboard", turn.result)
+    output = compact.get("output")
+    summary = output.get("storyboard_summary") if isinstance(output, dict) else None
+    if (not isinstance(output, dict) or not isinstance(summary, dict)
+        or not isinstance(summary.get("shot_directory"), list)
+        or not isinstance(summary.get("clip_group_directory"), list)):
+        return None  # Legacy receipts are addressable; do not reconstruct absent values.
+    return output
+
+
+def _fold_saved_storyboard_directory(
+    entities: dict[tuple[str, str], SpecialistEntitySnapshot], turn: SpecialistTurnRecord,
+    *, known_versions: Mapping[str, int], is_write: bool,
+) -> None:
+    result = turn.result
+    if result is None or result.get("status") != "SUCCEEDED":
+        return
+    output = result.get("output")
+    document = output.get("document") if isinstance(output, dict) else None
+    version = output.get("version") if isinstance(output, dict) else None
+    doc_id = document.get("id") if isinstance(document, dict) else None
+    number = version.get("version") if isinstance(version, dict) else None
+    changed_shots = {ref.artifact_id for ref in _artifact_refs_from_json(result.get("artifact_refs"))
+                     if ref.artifact_type == "shot"} if is_write else set[str]()
+    exact_changes = changed_storyboard_shots(turn)
+    if exact_changes is not None:
+        changed_shots = exact_changes
+    for key, entity in list(entities.items()):
+        if entity.kind != "storyboard_directory":
+            continue
+        old_version = entity.state.get("version")
+        old_number = old_version.get("version") if isinstance(old_version, dict) else None
+        summary = entity.state.get("storyboard_summary")
+        rows = summary.get("shot_directory") if isinstance(summary, dict) else None
+        ids = {cast(str, row.get("shot_id")) for row in rows if isinstance(row, dict)
+               and isinstance(row.get("shot_id"), str)} if isinstance(rows, list) else set[str]()
+        if (changed_shots.intersection(ids) or (doc_id == entity.id and isinstance(number, int)
+            and isinstance(old_number, int) and number > old_number)):
+            entities.pop(key)
+    saved = _saved_storyboard_directory(turn) if is_write else None
+    if (saved is not None and isinstance(doc_id, str) and isinstance(number, int)
+        and number >= known_versions.get(doc_id, 0)):
+        entities[("storyboard_directory", doc_id)] = SpecialistEntitySnapshot(
+            kind="storyboard_directory", id=doc_id, source_tool=turn.tool_name,
+            source_sequence=turn.sequence, state=saved,
+        )
 
 
 def _specialist_request_identifiers(
@@ -3497,16 +3565,15 @@ def _fold_specialist_entities(
             )
 
     if tool_name == "qa.inspect_asset_version" and result.get("status") == ToolCallStatus.SUCCEEDED.value:
-        version_id = arguments.get("version_id")
-        if isinstance(version_id, str) and version_id:
+        for asset_id, version_id, review, output_pointer in asset_inspection_reports(arguments, output):
             request = arguments.get("request")
             # Compare the actual selected inspection scope, not inferred topic
             # names. Explicit defaults are equivalent; ordered references and
             # detail regions remain significant. Future request fields survive.
             scope = asset_inspection_scope(request)
             key = ("asset_review", json.dumps([
-                arguments.get("project_id"), arguments.get("asset_id"), version_id, scope,
-                output.get("narrative_context"),
+                arguments.get("project_id"), asset_id, version_id, scope,
+                review.get("narrative_context"), review.get("shot_revision"),
             ], ensure_ascii=False, sort_keys=True))
             prior = entities.get(key)
             # Keep short display identities, while the private dictionary key
@@ -3523,24 +3590,26 @@ def _fold_specialist_entities(
                 source_sequence=sequence,
                 state={
                     "id": version_id,
-                    "asset_id": arguments.get("asset_id"),
+                    "asset_id": asset_id,
                     "version_id": version_id,
                     "review_scope": scope,
+                    "source_output_pointer": output_pointer,
                     **({"attempt_ref": attempt_ref.model_dump(mode="json")}
                        if attempt_ref is not None else {}),
-                    "recommended": output.get("recommended"),
-                    "score": output.get("score"),
-                    "summary": output.get("summary"),
-                    "issues": output.get("issues"),
-                    "evidence_references": output.get("evidence_references"),
-                    **{field: output[field] for field in ("candidate_output_layout", "region_evidence", "narrative_context")
-                       if field in output},
-                    **({"crop_suggestion": output["crop_suggestion"]}
-                       if output.get("crop_suggestion") is not None else {}),
-                    **({"edit_guide_suggestion": output["edit_guide_suggestion"]}
-                       if output.get("edit_guide_suggestion") is not None else {}),
-                    **({"plane_composite_suggestion": output["plane_composite_suggestion"]}
-                       if output.get("plane_composite_suggestion") is not None else {}),
+                    "recommended": review.get("recommended"),
+                    "score": review.get("score"),
+                    "summary": review.get("summary"),
+                    "issues": review.get("issues"),
+                    "evidence_references": review.get("evidence_references"),
+                    **{field: review[field] for field in ("candidate_output_layout", "region_evidence", "narrative_context",
+                        "review_focus", "implementation_preferences", "shot_revision", "version", "image_task_id")
+                       if field in review},
+                    **({"crop_suggestion": review["crop_suggestion"]}
+                       if review.get("crop_suggestion") is not None else {}),
+                    **({"edit_guide_suggestion": review["edit_guide_suggestion"]}
+                       if review.get("edit_guide_suggestion") is not None else {}),
+                    **({"plane_composite_suggestion": review["plane_composite_suggestion"]}
+                       if review.get("plane_composite_suggestion") is not None else {}),
                 },
             )
 
@@ -5875,6 +5944,7 @@ class ProductionManager:
         planner = self._planner_factory(client)
         if isinstance(planner, LanguageProductionPlanner):
             planner.context_compiler = ModelInputCompiler(self.runtime.store)
+            planner.projects = self.projects
         with trace_context(run_id=prepared.run_id, agent_role="leader", work_order_id=None):
             return planner.propose_plan(
                 context=prepared.context, skill_prompt=compiled.text,
@@ -6075,6 +6145,7 @@ class ProductionManager:
             )
             if isinstance(planner, LanguageProductionPlanner):
                 planner.context_compiler = ModelInputCompiler(self.runtime.store)
+                planner.projects = self.projects
             with trace_context(run_id=run_id, agent_role="leader", work_order_id=None):
                 proposal = planner.propose_plan(
                     context=self.get_run(run_id).context,

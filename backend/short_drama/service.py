@@ -39,6 +39,7 @@ from short_drama.asset_inspection import (
     SourceImageAnalysisRequest,
     analyze_source_image,
     inspect_asset_image,
+    resolve_inspection_provider_output,
 )
 from short_drama.asset_catalog import (
     AssetCatalogImportRequest,
@@ -812,6 +813,7 @@ class ShortDramaService:
             workspace_root=workspace_root,
             config_store=self.h3_config,
             client_factory=h3_client_factory or default_h3_client_factory,
+            source_staleness_checker=self._h3_task_operation_staleness_reason,
         )
         self.image_config = ImageProviderConfigStore(
             database_path.parent / "short-drama-image-provider-settings.json"
@@ -11108,7 +11110,7 @@ class ShortDramaService:
         media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
         from short_drama.studio_references import assert_generation_references
         for current_shot in shots:
-            assert_generation_references(document, current_shot, media_inputs)
+            assert_generation_references(document, current_shot, media_inputs, require_all=False)
         try:
             validate_h3_inputs(
                 route=request.route,
@@ -11495,6 +11497,12 @@ class ShortDramaService:
             raise WorkflowConflictError(f"ImageTask does not describe inspected candidate: {version.id}")
 
         region_versions = {version.id: version, **{item.version.id: item.version for item in inspection_references}}
+        if request.compare_provider_output:
+            try:
+                raw = resolve_inspection_provider_output(asset, version, generation_task)
+            except AssetInspectionContextError as exc:
+                raise WorkflowConflictError(str(exc)) from exc
+            region_versions[raw.id] = raw
         for region in request.regions:
             region_id = region.asset_version_id or version.id
             if region_id not in region_versions:
@@ -12163,9 +12171,6 @@ class ShortDramaService:
         selected_generation_units = None
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
-            if refresh_lightweight_reference_plans(document):
-                document.project.updated_at = utc_now()
-                self.repository.save_project(document)
             if request.generation_plan_document_id is not None:
                 generation_plan = self._current_generation_plan_for_video(
                     document,
@@ -12188,6 +12193,13 @@ class ShortDramaService:
                     raise WorkflowConflictError(
                         "H3 route planning requires at least one GenerationUnit"
                     )
+            target_shot_ids = (
+                {shot_id for unit in selected_generation_units for shot_id in unit.shot_ids}
+                if selected_generation_units is not None
+                else set(request.shot_ids or [shot.id for shot in document.shots])
+            )
+            for shot_id in target_shot_ids:
+                self._require_shot_in_document(document, shot_id)
             shot_directives = [
                 directive.model_copy(
                     update={
@@ -12200,6 +12212,7 @@ class ShortDramaService:
                 else directive
                 for directive in request.shot_directives
             ]
+            references_changed = refresh_lightweight_reference_plans(document, shot_ids=target_shot_ids)
         language_client = None
         if request.use_language_agent:
             api_key = self.language_config.api_key()
@@ -12275,6 +12288,14 @@ class ShortDramaService:
         except (RoutePlanningError, ValueError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
         with self._lock:
+            current = self._require_project_mutation_allowed(project_id)
+            try:
+                validate_route_plan_freshness(plan, current)
+            except RoutePlanningError as exc:
+                raise WorkflowConflictError(str(exc)) from exc
+            if references_changed and refresh_lightweight_reference_plans(current, shot_ids=target_shot_ids):
+                current.project.updated_at = utc_now()
+                self.repository.save_project(current)
             # Independent groups may compile concurrently. Reserve the final
             # ordinal at persistence, after all slow work has completed.
             plan.version = max((item.version for item in self.repository.list_h3_route_plans(project_id)), default=0) + 1
@@ -12578,6 +12599,27 @@ class ShortDramaService:
             result.append((candidate_index, fingerprint, task))
         return result
 
+    def _h3_route_operation_staleness_reason(
+        self, plan: H3ProductionRoutePlan, *, media_inputs: list[H3MediaInput] | None = None,
+    ) -> str | None:
+        if plan.source_operation_id is None:
+            return None
+        from short_drama.h3_group_operation import operation_source_staleness_reason
+
+        operation = self.repository.get_h3_group_operation(plan.source_operation_id)
+        if operation is None or operation.project_id != plan.project_id:
+            return "The H3 route's saved source operation is missing"
+        return operation_source_staleness_reason(self, operation, media_inputs=(
+            media_inputs if media_inputs is not None else [item for decision in plan.decisions for item in decision.media_inputs]))
+
+    def _h3_task_operation_staleness_reason(self, task: GenerationTask, run: H3ProviderRun) -> str | None:
+        # This runs before upload/submission under the Worker task lock. Only
+        # read local facts/stat here; Provider IO remains outside the project lock.
+        with self._lock:
+            plan = next((plan for plan in self.repository.list_h3_route_plans(task.project_id)
+                         if any(task.id in decision.task_ids for decision in plan.decisions)), None)
+            return self._h3_route_operation_staleness_reason(plan, media_inputs=run.media_inputs) if plan else None
+
     def execute_h3_production_route_plan(
         self,
         project_id: str,
@@ -12595,6 +12637,9 @@ class ShortDramaService:
             )
             try:
                 validate_route_plan_freshness(plan, document)
+                source_reason = self._h3_route_operation_staleness_reason(plan)
+                if source_reason is not None:
+                    raise RoutePlanningError(source_reason)
             except RoutePlanningError as exc:
                 if plan.status != H3RoutePlanStatus.STALE:
                     plan.status = H3RoutePlanStatus.STALE
@@ -12637,7 +12682,7 @@ class ShortDramaService:
                             for covered_id in decision.shot_ids or [decision.shot_id]
                         ])
                         for covered_id in decision.shot_ids or [decision.shot_id]:
-                            assert_generation_references(document, self._require_shot_in_document(document, covered_id), media_inputs)
+                            assert_generation_references(document, self._require_shot_in_document(document, covered_id), media_inputs, require_all=False)
                         validate_h3_probe(
                             route=decision.route,
                             prompt=decision.prompt,
@@ -15436,7 +15481,7 @@ class ShortDramaService:
         )
         try:
             from short_drama.studio_references import assert_generation_references
-            assert_generation_references(document, shot, media_inputs)
+            assert_generation_references(document, shot, media_inputs, require_all=False)
             validate_h3_probe(
                 route=request.route,
                 prompt=prompt,
@@ -15471,6 +15516,7 @@ class ShortDramaService:
                     document,
                     asset_version_id=media.asset_version_id,
                     subject_asset_id=media.subject_asset_id,
+                    explicit_choice=True,
                 )
             except AssetReferenceTruthError as exc:
                 raise WorkflowConflictError(

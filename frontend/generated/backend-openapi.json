@@ -14384,6 +14384,7 @@
             "title": "Generation Unit Id"
           },
           "media_inputs": {
+            "description": "The exact ordered media selected for this compilation. Unselected prose references remain saved; their omission does not change their usage or prove coverage. Use prepare_h3_group with media_inputs omitted for automatic current-reference expansion.",
             "items": {
               "$ref": "#/components/schemas/H3MediaInput"
             },
@@ -22320,6 +22321,7 @@
             "type": "string"
           },
           "required_tags": {
+            "description": "Unordered view/state tags. A Beat may omit tags for an alias already declared on this Shot with the same subject and exact media; that unique declaration is inherited on save. Explicitly different tags require a different alias.",
             "items": {
               "type": "string"
             },
