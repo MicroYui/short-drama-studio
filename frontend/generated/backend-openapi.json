@@ -798,6 +798,17 @@
             "title": "Findings",
             "type": "array"
           },
+          "result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
+          },
           "status": {
             "$ref": "#/components/schemas/AgentResultStatus"
           }
@@ -17321,6 +17332,16 @@
               }
             ]
           },
+          "project_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedProjectProductionSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "spec": {
             "$ref": "#/components/schemas/ProductionSpecContent-Output"
           },
@@ -20345,6 +20366,37 @@
           "force_api_generations"
         ],
         "title": "RuntimePolicyResponse",
+        "type": "object"
+      },
+      "SavedProjectProductionSettings": {
+        "additionalProperties": false,
+        "description": "Project fields actually saved with a ProductionSpec, not request intent.",
+        "properties": {
+          "aspect_ratio": {
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "target_duration_seconds": {
+            "title": "Target Duration Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "language",
+          "aspect_ratio",
+          "target_duration_seconds"
+        ],
+        "title": "SavedProjectProductionSettings",
         "type": "object"
       },
       "SceneContinuitySummary": {

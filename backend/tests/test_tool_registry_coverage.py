@@ -299,22 +299,22 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "不生成媒体" in descriptors[
         "artifact.create_production_spec"
     ].description
-    for tool_id in (
-        "artifact.create_production_spec",
-        "artifact.replace_production_spec",
-        "artifact.get_production_spec",
-        "artifact.create_production_document",
-        "artifact.revise_production_document",
-        "artifact.get_production_document",
-        "artifact.list_production_documents",
-        "artifact.get_asset_plan",
-        "shot.create_storyboard",
-        "shot.replace_storyboard",
-        "shot.patch_storyboard",
-        "shot.finalize_storyboard",
-        "shot.get_storyboard",
-    ):
-        assert descriptors[tool_id].version == 2
+    for tool_id, version in {
+        "artifact.create_production_spec": 3,
+        "artifact.replace_production_spec": 3,
+        "artifact.get_production_spec": 2,
+        "artifact.create_production_document": 2,
+        "artifact.revise_production_document": 2,
+        "artifact.get_production_document": 2,
+        "artifact.list_production_documents": 2,
+        "artifact.get_asset_plan": 2,
+        "shot.create_storyboard": 2,
+        "shot.replace_storyboard": 2,
+        "shot.patch_storyboard": 2,
+        "shot.finalize_storyboard": 3,
+        "shot.get_storyboard": 2,
+    }.items():
+        assert descriptors[tool_id].version == version, tool_id
     for tool_id in (
         "artifact.create_production_spec",
         "artifact.replace_production_spec",

@@ -191,18 +191,28 @@ def test_runner_slow_leader_allows_worker_completion_and_starts_new_successor(tm
                 initial = _plan("fast", "slow", "medium", "known-successor", complete=False)
                 initial["steps"][-1]["depends_on"] = ["medium"]
                 return initial
-            if str(payload.get("reason", "")).startswith("这些 Worker"):
+            # Worker completion and local-plan completion both expose saved
+            # handoffs and unfinished carried work; neither means the goal is done.
+            handoffs = payload["working_set"]["completion_handoffs"]
+            completed_ids = {item["work_order_id"] for item in handoffs if item["status"] == "COMPLETED"}
+            carried_ids = [work_id for work_id in payload["current_plan"]["carried_work_order_ids"]
+                           if work_id not in completed_ids]
+            if carried_ids:
                 supplement_events.append(str(payload["reason"]))
                 run = service.agent_runtime.store.get_run(str(payload["context"]["run_id"]))
                 assert run is not None
-                planned_completion_sets.append(frozenset(run.completion_planned_work_order_ids))
+                claimed = frozenset(run.completion_planned_work_order_ids)
+                assert claimed <= completed_ids, "Consumed results must be visible in the actual Leader input"
+                planned_completion_sets.append(claimed)
                 if len(supplement_events) == 1:
                     leader_started.set()
                     assert release_leader.wait(15)
                     return {"summary": "Prepare the next ready shot.", "goal_complete": False,
                             "steps": [_delegation("successor", after="fast").model_dump(mode="json")]}
                 return {"summary": "No additional ready work yet.", "steps": [], "goal_complete": False,
-                        "carried_work_order_ids": payload["current_plan"]["carried_work_order_ids"]}
+                        "carried_work_order_ids": carried_ids}
+            assert {item["role"] for item in handoffs if item["status"] == "COMPLETED"} == {
+                "fast", "slow", "medium", "known-successor", "successor"}
             return _plan()
         name = str(payload["work_order"]["recipient_role"])
         worker_calls.append(name)

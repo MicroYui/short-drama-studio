@@ -3314,6 +3314,8 @@ export interface components {
             evidence_refs?: components["schemas"]["ArtifactRef"][];
             /** Findings */
             findings?: string[];
+            /** Result Id */
+            result_id?: string | null;
             status: components["schemas"]["AgentResultStatus"];
         };
         /**
@@ -8930,6 +8932,7 @@ export interface components {
         ProductionSpecMutationResponse: {
             document: components["schemas"]["ProductionDocument"];
             output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            project_settings?: components["schemas"]["SavedProjectProductionSettings"] | null;
             spec: components["schemas"]["ProductionSpecContent-Output"];
             version: components["schemas"]["ProductionDocumentVersion"];
         };
@@ -9966,6 +9969,20 @@ export interface components {
         RuntimePolicyResponse: {
             /** Force Api Generations */
             force_api_generations: boolean;
+        };
+        /**
+         * SavedProjectProductionSettings
+         * @description Project fields actually saved with a ProductionSpec, not request intent.
+         */
+        SavedProjectProductionSettings: {
+            /** Aspect Ratio */
+            aspect_ratio: string;
+            /** Id */
+            id: string;
+            /** Language */
+            language: string;
+            /** Target Duration Seconds */
+            target_duration_seconds: number;
         };
         /** SceneContinuitySummary */
         SceneContinuitySummary: {
