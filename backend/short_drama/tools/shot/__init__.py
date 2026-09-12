@@ -50,6 +50,7 @@ from short_drama.tools.artifact_views import (
     storyboard_mutation_summary,
 )
 from short_drama.tools.registry import ToolRegistry
+from short_drama.storyboard_receipts import storyboard_write_context
 
 
 class ShotToolService(Protocol):
@@ -728,8 +729,10 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
         request: StoryboardPatchInput,
     ) -> ToolExecution[StoryboardMutationSummaryResponse]:
         result = service.patch_storyboard(request.project_id, request.request, current_content_edit=True)
+        summary = storyboard_mutation_summary(result)
+        summary.write_context = storyboard_write_context(result)
         return ToolExecution(
-            output=storyboard_mutation_summary(result),
+            output=summary,
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 

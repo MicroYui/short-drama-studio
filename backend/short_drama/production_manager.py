@@ -62,6 +62,10 @@ from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
 from short_drama.agent_runtime.response_normalization import normalize_specialist_tool_payload
+from short_drama.agent_runtime.storyboard_context import (
+    changed_storyboard_shots, fold_storyboard_context, hide_visible_storyboard_entities,
+    storyboard_read_is_stale,
+)
 from short_drama.agent_runtime.asset_plan_context import asset_work_read_is_stale, fold_asset_plan_items
 from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
@@ -2219,6 +2223,7 @@ def _specialist_working_set(
     inspection_report_ids: dict[tuple[str, str], str] = {}
     shot_write_revisions: dict[str, int | None] = {}
     asset_plan_versions: dict[str, int] = {}
+    storyboard_versions: dict[str, int] = {}
     turns_by_id = {turn.id: turn for turn in ordered_turns}
     for turn in ordered_turns:
         compact_result = (
@@ -2336,7 +2341,21 @@ def _specialist_working_set(
                     and not isinstance(changed_scenes, list))
                 changed_shots = output.get("changed_shot_ids")
                 shot_ids: set[str] = {item for item in changed_shots if isinstance(item, str)} if isinstance(changed_shots, list) else set()
-                shot_ids.update(ref.artifact_id for ref in turn_refs if ref.artifact_type == "shot")
+                storyboard_changes = changed_storyboard_shots(turn)
+                if storyboard_changes is None:
+                    shot_ids.update(ref.artifact_id for ref in turn_refs if ref.artifact_type == "shot")
+                else:
+                    shot_ids.update(storyboard_changes)
+                    for ref in turn_refs:
+                        known = (entities.get(("shot", ref.artifact_id))
+                                 or entities.get(("saved_shot", ref.artifact_id))) if ref.artifact_type == "shot" else None
+                        body = known.state.get("shot", known.state) if known is not None else None
+                        known_revision = body.get("revision") if isinstance(body, dict) else None
+                        if ref.version is not None and isinstance(known_revision, int) and known_revision < ref.version:
+                            # This exact revision also disproves a separately
+                            # read body changed by another Writer before the
+                            # patch's parent. It is not part of our write delta.
+                            shot_ids.add(ref.artifact_id)
                 for key in list(entities):
                     if key[0] == "scene" and (all_scenes or key[1] in scene_ids):
                         entities.pop(key)
@@ -2376,6 +2395,9 @@ def _specialist_working_set(
             if turn.tool_name in write_tool_ids and turn_refs:
                 for ref in turn_refs:
                     if ref.artifact_type == "shot":
+                        exact_changes = changed_storyboard_shots(turn)
+                        if exact_changes is not None and ref.artifact_id not in exact_changes:
+                            continue  # Visible references are not a mutation list.
                         entities.pop(("shot", ref.artifact_id), None)
                         entities.pop(("saved_shot", ref.artifact_id), None)
                         shot_write_revisions[ref.artifact_id] = ref.version
@@ -2495,6 +2517,10 @@ def _specialist_working_set(
                 ),
             )
 
+        fold_storyboard_context(entities, turn, known_versions=storyboard_versions,
+            shot_write_revisions=shot_write_revisions, entity_type=SpecialistEntitySnapshot,
+            is_write=turn.tool_name in write_tool_ids)
+
     progress = _specialist_progress_checkpoint(work_order, progress_entries)
     for ref in progress.artifact_refs:
         artifact_ref_slots[(ref.project_id, ref.artifact_type, ref.artifact_id)] = ref
@@ -2532,12 +2558,17 @@ def _specialist_working_set(
             # This report is already in latest_handoff; retain other Takes once.
             entities.pop(("video_inspection", cast(str, report["take_id"])), None)
     for key, observation in list(read_observations.items()):
-        if asset_work_read_is_stale(
+        if (asset_work_read_is_stale(
             observation.tool_name, observation.result, known_versions=asset_plan_versions,
-        ):
+        ) or storyboard_read_is_stale(observation.result, storyboard_versions)):
             # A read-only index can reveal another writer's change too. Keep
             # exact historical snapshots addressable, not as current item facts.
             read_observations.pop(key)
+    visible_storyboard_reads = {observation.source_sequence for observation in read_observations.values()
+        if observation.tool_name in {"shot.get_storyboard", "artifact.get_production_document"}}
+    if latest_turn is not None and latest_turn.tool_name in {"shot.get_storyboard", "artifact.get_production_document"}:
+        visible_storyboard_reads.add(latest_turn.sequence)
+    hide_visible_storyboard_entities(entities, visible_storyboard_reads)
     visible_scene_read_sequences = {
         observation.source_sequence for observation in read_observations.values()
         if observation.tool_name == "artifact.read_current"
@@ -5672,8 +5703,8 @@ class ProductionManager:
             new_ids = [work.id for work in workers if work.status == DelegationStatus.COMPLETED
                        and (work.id in completed_ids or work.id in plan.carried_work_order_ids)
                        and work.id not in snapshot.run.completion_planned_work_order_ids]
-            local_complete = (include_local_plan_completion and bool(plan.steps)
-                              and graph.is_complete(snapshot.actions))
+            local_complete = (include_local_plan_completion
+                              and graph.has_completed_local_work(snapshot.actions))
             if not new_ids and not local_complete and not failure_state:
                 return None
             document = self._require_project(snapshot.run.project_id)
@@ -5887,7 +5918,10 @@ class ProductionManager:
             current = (
                 None
                 if snapshot.current_plan is None
-                else AgentPlanProposal(
+                # A persisted empty wait can outlive its last carried Worker.
+                # This is a current-state view, not a new authored proposal;
+                # keep that truthful transient shape for the next decision.
+                else AgentPlanProposal.model_construct(
                     summary=snapshot.current_plan.summary,
                     steps=snapshot.current_plan.steps,
                     selected_method_skill_ids=(
@@ -6477,9 +6511,11 @@ class ProductionManager:
                 notes.append("Affected work is waiting for the user's requested text review; independent work may continue")
                 break
 
-            local_plan_complete = PlanGraph(plan).is_complete(current.actions)
+            graph = PlanGraph(plan)
+            local_plan_complete = graph.is_complete(current.actions)
+            local_work_complete = graph.has_completed_local_work(current.actions)
             if carried_waiting and (
-                plan.goal_complete or not plan.steps or not local_plan_complete
+                plan.goal_complete or not plan.steps or not (local_plan_complete or local_work_complete)
             ):
                 self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
                 notes.append(
@@ -6491,7 +6527,7 @@ class ProductionManager:
             # New results from a nonempty local plan go back to the Leader even
             # while retained work continues. The Leader can add independent
             # work or explicitly wait with an empty plan that carries it.
-            if local_plan_complete:
+            if local_plan_complete or (local_work_complete and not plan.goal_complete):
                 if not allow_replanning:
                     break
                 if plan.goal_complete:

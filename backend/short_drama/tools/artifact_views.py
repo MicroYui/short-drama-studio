@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import Field, JsonValue
 
+from short_drama.storyboard_receipts import StoryboardWriteContext
+
 from short_drama.models import (
     DomainModel,
     ProductionDocument,
@@ -137,6 +139,7 @@ class StoryboardMutationSummaryResponse(ProductionArtifactMutationSummaryRespons
     """Lightweight canonical Storyboard acknowledgement."""
 
     storyboard: StoryboardMutationSummary
+    write_context: StoryboardWriteContext | None = None
 
 
 class AssetPlanCompactReadResponse(DomainModel):

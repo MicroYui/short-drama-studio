@@ -60,3 +60,16 @@ class PlanGraph:
             and action.status == ActionStatus.SUCCEEDED
         }
         return all(step.id in completed for step in self.revision.steps)
+
+    def has_completed_local_work(self, actions: list[ActionRecord]) -> bool:
+        """A nonempty newly authored slice can finish while carried work runs.
+
+        Inherited actions still participate in dependency and goal completion.
+        Only this continuation trigger excludes their already-owned steps.
+        """
+        inherited_steps = {action.plan_step_id for action in actions
+            if action.plan_step_id is not None and action.id in self._inherited_action_ids and self.owns_action(action)}
+        local_steps = self._step_ids - inherited_steps
+        completed = {action.plan_step_id for action in actions
+            if self.owns_action(action) and action.status == ActionStatus.SUCCEEDED}
+        return bool(local_steps) and local_steps.issubset(completed)
