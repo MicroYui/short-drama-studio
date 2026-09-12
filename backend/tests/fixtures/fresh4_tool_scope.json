@@ -1,0 +1,169 @@
+{
+  "provenance": {
+    "project_id": "project-06116be431fa",
+    "source_fixture": "fresh4-project-scope-failure-fixture.json",
+    "scope": "Original t23/t24 IDs, arguments, reasons and times. Selected source AssetVersion only; local file paths and image task linkage normalized for a synthetic local PNG. No production pixels or Provider calls.",
+    "trace_files": [
+      "20260912T070751059880-70173e42-model.input.json",
+      "20260912T070751060611-bc69d686-model.started.json",
+      "20260912T070751096929-15142da3-model.preflight.json",
+      "20260912T070807146195-890ca79d-model.output.json",
+      "20260912T070808256462-015480bf-model.input.json",
+      "20260912T070808258466-055b6d7f-model.started.json",
+      "20260912T070808291157-fbc0ae35-model.preflight.json",
+      "20260912T070818843285-b85774da-model.output.json"
+    ]
+  },
+  "turns": [
+    {
+      "id": "specialist-turn-d3bb5a7402a84241a5ea10ae72465a7d",
+      "sequence": 23,
+      "tool_name": "image.crop",
+      "arguments": {
+        "project_id": "project-061be431fa",
+        "asset_id": "asset-ead7cce81d77",
+        "request": {
+          "source_asset_version_id": "asset-version-6b9150361102",
+          "region": {
+            "x": 0.51,
+            "y": 0.3,
+            "width": 0.43,
+            "height": 0.45
+          },
+          "descriptor": "打开方案夹右页的两幅入口改造对比草图，原始像素局部裁切。左图双片淡蓝隔断挤占入口通路，右图相同隔断移至侧边、入口通路变直；两图建筑门洞视觉宽度接近，不靠文字说明。只承担纸面图示内容参考，不含完整夹体和整张纸边，不规定入景方向、手势或会议室位置。",
+          "reference_role": "PROP_IDENTITY"
+        }
+      },
+      "reason": "从已实检可用的打开方案夹原图提取两幅对比草图，保留原创像素，作为独立页面内容参考，不再重绘。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T07:08:07.166790Z",
+      "updated_at": "2026-09-12T07:08:07.482668Z"
+    },
+    {
+      "id": "specialist-turn-b093994b6509473e96e7aa1a8dbf5e17",
+      "sequence": 24,
+      "tool_name": "image.crop",
+      "arguments": {
+        "project_id": "project-06116be431fa",
+        "asset_id": "asset-ead7cce81d77",
+        "request": {
+          "source_asset_version_id": "asset-version-6b9150361102",
+          "region": {
+            "x": 0.51,
+            "y": 0.3,
+            "width": 0.43,
+            "height": 0.45
+          },
+          "descriptor": "打开深蓝方案夹右页的两幅原创空间草图原像素裁切：左图双片淡蓝隔断挡窄入口通路、灰色路线绕行；右图相同隔断移至侧边，建筑门洞宽度保持相容，通路敞开直通。仅提供同页对比内容，不提供完整纸边、夹体、人物指页姿态或剧情机位；实际物理打开状态使用来源全图。",
+          "reference_role": "PROP_IDENTITY"
+        }
+      },
+      "reason": "修正上次调用的项目编号，按已有实图检查给出的区域提取完整两幅草图，保留原始像素，不重新生成。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T07:08:18.887513Z",
+      "updated_at": "2026-09-12T07:08:19.268288Z"
+    }
+  ],
+  "source_asset": {
+    "id": "asset-ead7cce81d77",
+    "project_id": "project-06116be431fa",
+    "kind": "PROP",
+    "name": "深蓝色方案夹",
+    "bible_entity_id": null,
+    "brief": {
+      "identity_anchor": "同一个A4尺寸深蓝色硬壳方案夹，内装白色设计草图纸，整场由周宁带来、郑川拿走并翻看、最后还给周宁。",
+      "tone_or_temperament": null,
+      "visual_attributes": [
+        "纯深蓝色哑光封面，薄硬壳，可自然开合",
+        "内有一张同页左右并排的两幅大块简洁空间草图",
+        "草图左图为入口被隔断挤窄，右图为隔断移到侧边后入口敞开",
+        "示意采用黑灰线条及少量淡蓝色隔断块面，不依赖细小标签、数字或精确文字"
+      ],
+      "wardrobe_or_materials": [
+        "哑光硬质封皮，普通白纸，无金属高反光大装饰"
+      ],
+      "background_constraints": [
+        "是人物手中真实实物，不是悬浮界面或画面字幕",
+        "不增加合同、奖状、客户签字或订单结果"
+      ],
+      "texture_constraints": [
+        "真实纸张与封皮质感，尺寸适合普通人单手递还、双手展开"
+      ],
+      "continuity_anchors": [
+        "初始在桌头周宁的主讲位前；郑川拿到自己面前",
+        "试问时摊在两人之间，周宁将对比页转给郑川看并只点一下新入口",
+        "郑川合上后交还；周宁最后在桌头重新打开",
+        "理解解法主要依靠完整对白与人物回应，草图为辅助，不能强迫观众识读细字"
+      ],
+      "named_views_or_zones": [],
+      "presentation_mode": "PHYSICAL_MASTER",
+      "required_visible_text": [],
+      "reference_strategy": "LIGHTWEIGHT",
+      "layout_profile": "LIGHTWEIGHT_SINGLE",
+      "requested_views": [],
+      "strategy_rationale": null
+    },
+    "current_version_id": "asset-version-6b9150361102",
+    "approved_version_id": null,
+    "versions": [
+      {
+        "id": "asset-version-6b9150361102",
+        "version": 7,
+        "origin_type": "LOCAL_DERIVED",
+        "descriptor": "展开方案夹对比页的局部修正版：仅延长右侧草图左前门垛，统一两图建筑开口；保留深蓝夹体、白纸与旧隔断移至侧边的解法。待实际检查后选用。｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。",
+        "media_type": "IMAGE",
+        "local_path": "/fixtures/source.png",
+        "external_url": null,
+        "mime_type": "image/png",
+        "width": 2304,
+        "height": 1536,
+        "duration_seconds": null,
+        "file_size_bytes": 3961574,
+        "parent_version_id": "asset-version-61402999d487",
+        "image_task_id": null,
+        "derivation_references": [
+          {
+            "asset_version_id": "asset-version-b6cc68c7bf9d",
+            "source_project_id": "project-06116be431fa",
+            "reference_role": "COMPOSITION",
+            "reference_authority": "AUTHORITATIVE",
+            "purpose": "原图像任务的实际 primary 输入；本候选未应用本地遮罩保护。",
+            "subject_alias": "深蓝色方案夹"
+          },
+          {
+            "asset_version_id": "asset-version-61402999d487",
+            "source_project_id": "project-06116be431fa",
+            "reference_role": "SUPPORTING_VISUAL",
+            "reference_authority": "AUTHORITATIVE",
+            "purpose": "同一任务的默认遮罩合成结果；不是本候选原像素，也不表示已通过检查。",
+            "subject_alias": "深蓝色方案夹"
+          }
+        ],
+        "reference_sheet": null,
+        "image_crop": null,
+        "text_plate": null,
+        "source": {
+          "source_type": "LOCAL_DERIVED",
+          "source_label": "Provider 原始结果本地候选",
+          "source_uri": "/fixtures/provider-output.png",
+          "original_filename": null,
+          "provider": "local",
+          "provider_asset_id": null,
+          "creator": null,
+          "creator_uri": null,
+          "license_name": null,
+          "license_uri": null,
+          "attribution": null,
+          "stock_import_mode": null,
+          "model": "saved-image-edit-result-v1",
+          "prompt": "{\"image_task_id\":\"image-task-2af3392e413d\",\"mode\":\"PROVIDER_OUTPUT\",\"mask_version_id\":null,\"mask_feather_pixels\":0,\"descriptor\":\"展开方案夹对比页的局部修正版：仅延长右侧草图左前门垛，统一两图建筑开口；保留深蓝夹体、白纸与旧隔断移至侧边的解法。待实际检查后选用。｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。\"}",
+          "created_at": "2026-09-12T07:01:20.015+00:00"
+        },
+        "approval_status": "DRAFT",
+        "review_notes": null,
+        "freshness": "CURRENT",
+        "created_at": "2026-09-12T07:01:20.015+00:00"
+      }
+    ]
+  }
+}

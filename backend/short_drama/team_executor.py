@@ -133,7 +133,11 @@ class LocalTeamExecutor:
             finished = [key for key, (parent, future) in self._background_futures.items()
                         if parent == run_id and future.done()]
             advances = [self._background_futures.pop(key)[1].result() for key in finished]
-            selected = self._select_and_reserve(run_id, blocked_work_order_ids=blocked_work_order_ids)
+            # The caller must classify errors before any new work is claimed.
+            # In particular a failed Tool must not be re-claimed in the same
+            # collection that is about to stop its session.
+            selected = ([] if any(item.error_message for item in advances) else
+                        self._select_and_reserve(run_id, blocked_work_order_ids=blocked_work_order_ids))
             if selected and self._background_pool is None:
                 self._background_pool = ThreadPoolExecutor(max_workers=self._max_workers,
                                                            thread_name_prefix="studio-worker")
@@ -310,7 +314,11 @@ class LocalTeamExecutor:
                 # A long specialist model call should be visible as active work,
                 # rather than leaving the Board at the preceding WAITING handoff.
                 if run.status == AgentRunStatus.WAITING:
-                    self._manager.runtime.set_run_status(run.id, AgentRunStatus.RUNNING)
+                    with self._manager.runtime.run_lock(run.id):
+                        latest_run = self._manager.runtime.store.get_run(run.id)
+                        if latest_run is not None and latest_run.status == AgentRunStatus.WAITING:
+                            execution_boundary()
+                            self._manager.runtime.set_run_status(run.id, AgentRunStatus.RUNNING)
 
                 needs_project_write = self._needs_project_write_lane(current)
                 serialized_project_write = (

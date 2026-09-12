@@ -156,6 +156,8 @@ class StudioAgentRunner:
             job = self._job(job_id)
             if job.status == "pausing":
                 return "User requested pause"
+            if job.status in {"paused", "failed", "completed", "waiting_user"}:
+                return f"Studio job is {job.status}"
             if len(job.pending_messages) > self._processing_messages.get(job_id, 0):
                 return "User input is pending"
             work_id = current_trace_context().get("work_order_id")
@@ -192,6 +194,7 @@ class StudioAgentRunner:
     def _run(self, job_id: str) -> None:
         job = self._job(job_id)
         directory = self.service.workspace_root / job.project_id / "studio-trace" / job.id
+        stopped = threading.Event()
 
         def emit(kind: str, data: dict[str, JsonValue]) -> None:
             self.service.repository.append_studio_event(job.project_id, kind, {"job_id": job_id, **data})
@@ -205,7 +208,9 @@ class StudioAgentRunner:
                         self.service.repository.save_studio_job(current)
 
         try:
-            with production_trace(directory, emit), execution_control(lambda: self._yield_reason(job_id)):
+            with production_trace(directory, emit), execution_control(
+                lambda: "This execution has stopped" if stopped.is_set() else self._yield_reason(job_id)
+            ):
                 # Keep the original request and remove only an untouched legacy
                 # blank-workspace scaffold before asking the Agent to continue.
                 if self.service.studio.remember_initial_request(job.project_id, job.objective):
@@ -220,10 +225,8 @@ class StudioAgentRunner:
                     except Exception as exc:
                         with self.lock:
                             current = self._job(job_id)
-                            if current.status == "pausing":
-                                self._save_state(job_id, "paused", error=str(exc))
-                                return
-                            if is_language_transport_error(exc) and current.retry_attempt < len(self.retry_delays):
+                            stopping = current.status in {"pausing", "paused", "failed", "completed", "waiting_user"}
+                            if not stopping and is_language_transport_error(exc) and current.retry_attempt < len(self.retry_delays):
                                 delay = self.retry_delays[current.retry_attempt]
                                 current.retry_attempt += 1
                                 current.retry_at = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat()
@@ -236,7 +239,14 @@ class StudioAgentRunner:
                                     "attempt": current.retry_attempt, "delay_seconds": delay,
                                     "reason": str(exc), "summary": "连接暂时中断，保留已完成内容并继续当前任务。"})
                                 continue
-                        self._save_state(job_id, "failed", error=str(exc))
+                        if stopping:
+                            stopped.set()
+                            self._drain_started_work(job_id)
+                            if self._job(job_id).status == "pausing":
+                                self._save_state(job_id, "paused", error=str(exc))
+                            return
+                        stopped.set()
+                        self._fail_job(job_id, str(exc))
                         record_trace("chat.assistant", {"text": f"这一步未完成：{exc}。已保存的内容和任务仍在，可以修改要求后继续。", "failed": True})
                         return
         finally:
@@ -244,14 +254,46 @@ class StudioAgentRunner:
                 self.threads.pop(job_id, None)
                 self._processing_messages.pop(job_id, None)
                 current = self._job(job_id)
-                if current.pending_messages and current.status in {"queued", "running", "retrying"}:
+                if current.status == "queued" or (current.pending_messages and current.status in {"running", "retrying"}):
                     self._launch(job_id)
 
+    def _drain_started_work(self, job_id: str) -> None:
+        """Collect already-started work without dispatching or applying a new plan."""
+        job = self._job(job_id)
+        while job.run_id is not None:
+            batch = self.service.team_executor.collect_finished_work(job.run_id)
+            for failure in batch.advances:
+                if failure.error_message:
+                    record_trace("worker.error", {"work_order_id": failure.work_order_id,
+                        "error": failure.error_message, "error_kind": failure.error_kind})
+            planning_active = self._collect_completion_plan(job_id, apply=False)
+            if not batch.active_work_order_ids and not planning_active:
+                return
+            self._wakeups[job_id].wait(0.05)
+            self._wakeups[job_id].clear()
+
+    def _fail_job(self, job_id: str, error: str) -> None:
+        # Close the shared boundary first. Started operations may still save
+        # receipts; their result handoff must preserve this terminal Run state.
+        job = self._save_state(job_id, "failed", error=error)
+        if job.status == "failed" and job.run_id is not None:
+            with self.service.agent_runtime.run_lock(job.run_id):
+                self.service.agent_runtime.set_run_status(job.run_id, AgentRunStatus.FAILED)
+        self._drain_started_work(job_id)
+        if self._job(job_id).status == "pausing":
+            self._save_state(job_id, "paused", error=error)
+
     def _apply_messages(self, job_id: str, run_id: str) -> None:
+        # Input may arrive after the loop's yield check. Do not exempt it from
+        # the shared callback while older Workers/Leader futures still exist.
+        # Return to the normal drain before claiming the message for processing.
+        active = self.service.team_executor.has_active_work(run_id) or job_id in self._completion_planning
         with self.lock:
             messages = list(self._job(job_id).pending_messages)
             if not messages:
                 return
+            if active:
+                raise ExecutionYielded("Pending user input must wait for started work to be collected")
             self._processing_messages[job_id] = len(messages)
         try:
             for message in messages:
@@ -282,9 +324,12 @@ class StudioAgentRunner:
 
     def _execute(self, job_id: str) -> None:
         job = self._job(job_id)
+        if job.status in {"paused", "failed", "completed", "waiting_user"}:
+            self._drain_started_work(job_id)
+            return
         if job.status == "pausing" and (
             job.run_id is None or not self.service.team_executor.has_active_work(job.run_id)
-        ):
+        ) and job_id not in self._completion_planning:
             self._save_state(job_id, "paused")
             return
         if job.run_id is None:
@@ -389,6 +434,8 @@ class StudioAgentRunner:
                     continue
             if self._job(job_id).status == "pausing":
                 self._save_state(job_id, "paused")
+                return
+            if self._job(job_id).status in {"paused", "failed", "completed", "waiting_user"}:
                 return
             self._apply_messages(job_id, run_id)
             planning_active = self._collect_completion_plan(job_id)

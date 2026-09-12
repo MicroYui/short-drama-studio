@@ -17,6 +17,7 @@ from copy import deepcopy
 from datetime import datetime
 import json
 import threading
+import time
 from typing import Annotated, Protocol, cast
 from uuid import uuid4
 
@@ -140,10 +141,13 @@ from short_drama.tools import (
     ToolCallStatus,
     ToolDescriptor,
     ToolEffect,
+    ToolError,
+    ToolErrorDetail,
     ToolExecution,
     ToolRegistry,
     ToolResult,
 )
+from short_drama.tools.feedback import argument_scope
 from short_drama.tools.agent import (
     AgentGetToolAttemptInput,
     AgentGetToolAttemptOutput,
@@ -166,6 +170,17 @@ from short_drama.production_contracts import AssetPlanMutationSummaryResponse
 
 class ProductionManagerError(ValueError):
     """Raised when an Agent run cannot be planned or advanced as requested."""
+
+
+class AgentToolScopeError(ProductionManagerError):
+    """An authored Tool request was refused before its handler could execute."""
+
+    def __init__(self, message: str, *, path: str | None = None,
+                 expected: str | None = None, received: str | None = None) -> None:
+        super().__init__(message)
+        self.path = path
+        self.expected = expected
+        self.received = received
 
 
 class SpecialistResponseProtocolError(ProductionManagerError):
@@ -7188,6 +7203,10 @@ class ProductionManager:
             )
         document = self._require_project(run.project_id)
         self.refresh_project_memory(document)
+        # A started operation may finish after the session stops. Keep its
+        # receipt and Action, but never reopen the terminal run from that receipt.
+        if run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
+            return AgentWorkOrderResultResponse(result=result, run=self.get_run(run.id))
         if request.status == AgentResultStatus.COMPLETED:
             if request.findings or request.decisions:
                 manifest_skill_ids = (
@@ -7287,6 +7306,7 @@ class ProductionManager:
                 raise ProductionManagerError(
                     f"Unknown agent run: {current.parent_run_id}"
                 )
+            self._require_active_worker_run(run)
             stale_reason = self._work_order_stale_reason(
                 current,
                 run.current_plan_revision_id,
@@ -7321,6 +7341,8 @@ class ProductionManager:
             )
         try:
             with self._run_lock(work_order.parent_run_id):
+                execution_boundary()
+                self._require_active_worker_run(self.runtime.snapshot(work_order.parent_run_id).run)
                 self.runtime.begin_work_order(work_order_id)
                 view = self.get_work_order(work_order_id)
                 parent_run = self.runtime.snapshot(work_order.parent_run_id).run
@@ -7545,6 +7567,9 @@ class ProductionManager:
                     )
                 ),
             )
+            run = self.runtime.store.get_run(failed.parent_run_id)
+            if run is not None and run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
+                return next_owner
             self.runtime.set_run_status(
                 failed.parent_run_id,
                 AgentRunStatus.WAITING,
@@ -7568,6 +7593,11 @@ class ProductionManager:
                 ],
             )
             return next_owner
+
+    @staticmethod
+    def _require_active_worker_run(run: AgentRun) -> None:
+        if run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
+            raise ExecutionYielded(f"Agent run is {run.status.value}")
 
     def _return_specialist_failure(
         self,
@@ -7609,6 +7639,9 @@ class ProductionManager:
                     + str(error)
                 ),
             )
+            run = self.runtime.store.get_run(failed.parent_run_id)
+            if run is not None and run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
+                return
             self.runtime.set_run_status(
                 failed.parent_run_id,
                 AgentRunStatus.WAITING,
@@ -7644,6 +7677,8 @@ class ProductionManager:
                 raise ProductionManagerError(
                     f"Unknown agent run: {current.parent_run_id}"
                 )
+            execution_boundary()
+            self._require_active_worker_run(current_run)
             stale_reason = self._work_order_stale_reason(
                 current,
                 current_run.current_plan_revision_id,
@@ -7668,6 +7703,7 @@ class ProductionManager:
             tool_name = turn.tool_name
             arguments = cast(Mapping[str, object], turn.arguments)
 
+        started = time.monotonic()
         try:
             tool_result = self._invoke_scoped_tool(
                 project_id,
@@ -7676,6 +7712,35 @@ class ProductionManager:
                 agent_run_id=parent_run_id,
                 work_order_id=work_order_id,
             )
+        except AgentToolScopeError as exc:
+            # This is a request validation result, not a failed execution. The
+            # original request stays in the same turn for precise correction.
+            tool_result = ToolResult(
+                tool_id=tool_name, status=ToolCallStatus.INVALID_ARGUMENTS,
+                error=ToolError(
+                    kind=type(exc).__name__, phase="VALIDATION", message=str(exc),
+                    scope={"project_id": project_id, "agent_run_id": parent_run_id,
+                           "work_order_id": work_order_id},
+                    details=[ToolErrorDetail(
+                        path=exc.path or "/", code="TOOL_SCOPE_MISMATCH", message=str(exc),
+                        constraints={"expected": exc.expected, "received": exc.received},
+                    )],
+                    suggested_actions=[
+                        "The Tool was not executed. Correct this request using the current "
+                        "project/run and explicitly available references; do not retry unchanged."
+                    ], retryable=False,
+                ),
+            )
+            # Use the same validation-attempt events as Registry schema errors;
+            # no handler ran and no operation-completed receipt is fabricated.
+            call_id = f"tool-{uuid4().hex[:12]}"
+            record_trace("tool.started", {"tool_call_id": call_id, "tool_name": tool_name,
+                "scope": argument_scope(arguments, nested=True), "phase": "VALIDATION",
+                "execution_started": False, "attempt_id": turn_id})
+            record_trace("tool.finished", {"tool_call_id": call_id, "tool_name": tool_name,
+                "status": tool_result.status.value, "elapsed_seconds": round(time.monotonic() - started, 6),
+                "error": str(exc), "error_details": tool_result.error.model_dump(mode="json") if tool_result.error else None,
+                "receipt": None, "execution_started": False, "attempt_id": turn_id})
         except Exception as exc:
             with self._run_lock(parent_run_id):
                 current = self.runtime.store.get_work_order(work_order_id)
@@ -7750,7 +7815,7 @@ class ProductionManager:
             AgentWorkOrderResultRequest(
                 status=AgentResultStatus.PARTIAL,
                 concise_summary=(
-                    f"Tool {tool_name} 已执行并持久化结果："
+                    f"Tool {tool_name} 请求已处理并持久化结果："
                     f"{tool_result.status.value}。"
                 ),
                 findings=findings,
@@ -8563,11 +8628,11 @@ class ProductionManager:
         if tool_name == "project.create":
             explicit_project_id = arguments.get("project_id")
             if explicit_project_id != project_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "project.create requires the preallocated current run project_id"
                 )
             if self.projects.get_project(project_id) is not None:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "project.create is only available before the Agent bootstrap project exists"
                 )
             owner_agent_run_id = arguments.get("owner_agent_run_id")
@@ -8575,7 +8640,7 @@ class ProductionManager:
                 agent_run_id is not None
                 and owner_agent_run_id != agent_run_id
             ):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "project.create owner_agent_run_id must match the current Agent run"
                 )
 
@@ -8585,24 +8650,24 @@ class ProductionManager:
             document = self.projects.get_project(project_id)
             planning = None if document is None else document.planning
             if not isinstance(run_id, str) or planning is None:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.advance requires the current project's persisted planning run"
                 )
             if planning.run_id != run_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.advance must target the current project's planning run"
                 )
             if requested_owner_agent_run_id != agent_run_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.advance owner_agent_run_id must match the current Agent run"
                 )
             if planning.owner_agent_run_id is not None:
                 if agent_run_id is None:
-                    raise ProductionManagerError(
+                    raise AgentToolScopeError(
                         "planning.advance must be executed by its owning Production Manager run"
                     )
                 if planning.owner_agent_run_id != agent_run_id:
-                    raise ProductionManagerError(
+                    raise AgentToolScopeError(
                         "planning.advance must be executed by its owning Agent run"
                     )
 
@@ -8627,23 +8692,23 @@ class ProductionManager:
                     planning_run
                 )
             ):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.resolve_story_verification requires the current "
                     "project's pending verifier handoff"
                 )
             if requested_owner_agent_run_id != agent_run_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.resolve_story_verification owner_agent_run_id must "
                     "match the current Agent run"
                 )
             try:
                 StoryVerificationResolutionDecision(arguments.get("decision"))
             except (TypeError, ValueError) as exc:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.resolve_story_verification requires a valid decision"
                 ) from exc
             if not isinstance(rationale, str) or not rationale.strip():
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.resolve_story_verification requires the Leader's "
                     "semantic rationale"
                 )
@@ -8660,12 +8725,12 @@ class ProductionManager:
             try:
                 revision_origin = ScriptRevisionOrigin(raw_revision_origin)
             except (TypeError, ValueError) as exc:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision requires a valid revision_origin"
                 ) from exc
             raw_evidence_refs = arguments.get("evidence_refs", [])
             if not isinstance(raw_evidence_refs, list):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision evidence_refs must be a list"
                 )
             try:
@@ -8674,53 +8739,53 @@ class ProductionManager:
                     for item in cast(list[object], raw_evidence_refs)
                 ]
             except ValueError as exc:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision evidence_refs are invalid"
                 ) from exc
             if document is None:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision requires an existing project"
                 )
             if requested_owner_agent_run_id != agent_run_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision owner_agent_run_id must match "
                     "the current Agent run"
                 )
             if base_script_version_id != document.project.current_script_version_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision must target the current ScriptVersion"
                 )
             if not isinstance(instruction, str) or not instruction.strip():
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "planning.start_script_revision requires the complete revision instruction"
                 )
             resolver = ProjectArtifactResolver(self.projects)
             for evidence_ref in revision_evidence_refs:
                 if evidence_ref.project_id != project_id:
-                    raise ProductionManagerError(
+                    raise AgentToolScopeError(
                         "planning.start_script_revision evidence must belong to the current project"
                     )
                 if evidence_ref.version is None:
-                    raise ProductionManagerError(
+                    raise AgentToolScopeError(
                         "planning.start_script_revision evidence must pin exact versions"
                     )
                 if resolver.summarize_artifact(
                     ArtifactRef.model_validate(evidence_ref.model_dump(mode="json"))
                 ) is None:
-                    raise ProductionManagerError(
+                    raise AgentToolScopeError(
                         "planning.start_script_revision evidence must resolve exactly"
                     )
             if (
                 revision_origin == ScriptRevisionOrigin.PRODUCTION_CONSTRAINT
                 and not revision_evidence_refs
             ):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "A production-constraint script revision requires exact evidence_refs"
                 )
 
         if tool_name == "agent.read_context":
             if arguments.get("project_id") != project_id or arguments.get("run_id") != agent_run_id:
-                raise ProductionManagerError("agent.read_context must address the current project and run")
+                raise AgentToolScopeError("agent.read_context must address the current project and run")
         if tool_name in {
             "agent.get_tool_attempt",
             "artifact.retry_asset_plan_attempt",
@@ -8730,7 +8795,7 @@ class ProductionManager:
                     arguments.get("attempt_ref")
                 )
             except ValueError as exc:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     f"{tool_name} requires one exact ToolAttemptRef"
                 ) from exc
             ref = attempt_ref
@@ -8773,7 +8838,7 @@ class ProductionManager:
                     and not self_owned_ref
                 )
             ):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     f"{tool_name} can only use a ToolAttemptRef explicitly handed "
                     "to the current WorkOrder or produced by it"
                 )
@@ -8784,8 +8849,9 @@ class ProductionManager:
                 isinstance(explicit_project_id, str)
                 and explicit_project_id != project_id
             ):
-                raise ProductionManagerError(
-                    "Agent Tool calls must target the current run project"
+                raise AgentToolScopeError(
+                    "Agent Tool calls must target the current run project",
+                    path=f"/{key}", expected=project_id, received=explicit_project_id,
                 )
 
         task: GenerationTask | None = None
@@ -8797,7 +8863,7 @@ class ProductionManager:
                 item.project_id for item in (task, image_task) if item is not None
             }
             if any(owner_id != project_id for owner_id in owner_ids):
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "Agent Tool task_id must belong to the current run project"
                 )
 
@@ -8817,12 +8883,12 @@ class ProductionManager:
             if run is None:
                 raise ProductionManagerError(f"Unknown agent run: {agent_run_id}")
             if run.execution_target is None:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     f"Tool {tool_name!r} requires execution target "
                     f"{required_target.value}, but this Agent run has no target"
                 )
             if run.execution_target != required_target:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     f"Tool {tool_name!r} requires execution target "
                     f"{required_target.value}, not {run.execution_target.value}"
                 )
@@ -8831,7 +8897,7 @@ class ProductionManager:
         if isinstance(take_id, str):
             take = self.projects.get_take(take_id)
             if take is not None and take.project_id != project_id:
-                raise ProductionManagerError(
+                raise AgentToolScopeError(
                     "Agent Tool take_id must belong to the current run project"
                 )
 
