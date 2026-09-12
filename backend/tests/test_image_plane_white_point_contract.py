@@ -103,5 +103,5 @@ def test_actual_tool_schema_and_restart_qa_keep_the_selected_layer_tone(tmp_path
     assert json.loads(payload["candidate_creation"]["generation_prompt"]) == request.model_dump(mode="json")
     # QA uses the same nested request schema; no parallel paper-tone metadata is needed.
     qa_field = payload["output_schema"]["$defs"]["ImagePlaneLayer"]["properties"]["source_white_point"]
-    assert qa_field == field
+    assert qa_field == {key: value for key, value in field.items() if key != "title"}
     assert language.calls == 1 and reopened.list_image_tasks(pid).tasks == []

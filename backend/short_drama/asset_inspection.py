@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
+from typing import Any, cast
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import Field, ValidationError, field_validator, model_validator
@@ -150,6 +151,62 @@ class SemanticAssetReview(DomainModel):
             return AssetImagePlaneCompositeRequest.model_validate(value)
         except ValidationError:
             return None
+
+
+def _asset_review_output_schema(
+    *, crop_available: bool, edit_guide_available: bool, plane_available: bool,
+) -> dict[str, Any]:
+    """Ask only for model-authored observations and currently executable advice.
+
+    The public result still includes runtime-attached evidence and coordinates.
+    Keep the full repair contract when its actual image inputs are available;
+    an unavailable optional repair must not load its entire dependency schema.
+    """
+    schema = SemanticAssetReview.model_json_schema()
+    properties = schema["properties"]
+    for field in ("review_focus", "candidate_output_layout", "region_evidence", "evidence_references"):
+        properties.pop(field)
+    definitions = schema.pop("$defs", {})
+    definitions["AssetCropSuggestion"]["properties"].pop("source")
+    definitions["AssetEditGuideSuggestion"]["properties"].pop("source_asset_version_id")
+    for field, available in (
+        ("crop_suggestion", crop_available),
+        ("edit_guide_suggestion", edit_guide_available),
+        ("plane_composite_suggestion", plane_available),
+    ):
+        if not available:
+            properties[field] = {"type": "null", "description": "Unavailable for the actual image inputs."}
+
+    def references(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            mapping = cast(dict[str, Any], value)
+            reference = mapping.get("$ref")
+            found = {reference.removeprefix("#/$defs/")} if isinstance(reference, str) else set[str]()
+            for child in mapping.values():
+                found.update(references(child))
+            return found
+        if isinstance(value, list):
+            return set[str]().union(*(references(child) for child in cast(list[Any], value)))
+        return set()
+
+    reachable = references(schema)
+    pending = list(reachable)
+    while pending:
+        for name in references(definitions[pending.pop()]):
+            if name not in reachable:
+                reachable.add(name)
+                pending.append(name)
+    schema["$defs"] = {name: value for name, value in definitions.items() if name in reachable}
+
+    def omit_titles(value: Any) -> Any:
+        # Titles repeat field names; retain descriptions, constraints and defaults.
+        if isinstance(value, dict):
+            return {key: omit_titles(child) for key, child in cast(dict[str, Any], value).items() if key != "title"}
+        if isinstance(value, list):
+            return [omit_titles(child) for child in cast(list[Any], value)]
+        return value
+
+    return omit_titles(schema)
 
 
 class AssetVersionInspectionRequest(DomainModel):
@@ -775,12 +832,11 @@ def inspect_asset_image(
     instructions = (
         "你是 AI 原生竖屏视频生产管线中的视觉资产检查 Agent。"
         f"{skill_prompt.text} "
-        "只返回符合给定 schema 的 JSON。evidence_references 由工具运行时附着，"
-        "你始终返回空数组，不要自行填写项目或版本 ID。"
-        "region_evidence、review_focus、candidate_output_layout 也由工具附着，分别返回空数组/null/null。"
+        "只返回符合给定 schema 的 JSON。证据引用、检查范围、布局和局部证据由工具运行时附着，"
+        "不用重复输出；只填写schema内的观察与可选修复建议。"
         "crop_suggestion 默认为null。仅当 candidate_creation.local_crop_available 为true，且已看清"
         "通过本地裁切能解决的景别、留白或单视图提取问题时，在本次观察中给出一个可用region和reason，"
-        "避免只说建议裁切却让后续再看同一图取坐标；source返回null，由工具附着实际源版本和像素范围。"
+        "避免只说建议裁切却让后续再看同一图取坐标；实际源版本和像素范围由工具附着。"
         "region使用Image 1完整候选经EXIF校正后的0—1 x/y/width/height，不使用参考图、追加局部图或"
         "缩略图像素坐标。保留声明必需的头发、肢体、文字及视线空间；以实际源宽高计算裁后画幅。"
         "若源和目标画幅相同，归一化width和height应相同。裁切不能增加细节、改变背景结构或移动主体；"
@@ -788,7 +844,7 @@ def inspect_asset_image(
         "建议尚未执行，不能把裁后的预期效果写成当前图已合格，也不能消除其他实际问题。"
         "edit_guide_suggestion也默认为null。只有candidate_creation.local_edit_guide_available为true，"
         "已看清候选中的具体问题且适合局部编辑时，才一次给出regions、可选arrows和descriptor；"
-        "source_asset_version_id返回null，运行时只绑定Image 1候选。坐标均为完整候选EXIF校正后"
+        "编辑源由运行时绑定Image 1候选。坐标均为完整候选EXIF校正后"
         "的0—1位置，不能使用参考或局部放大图的坐标。polygon圈出实际要改的范围；如需移动物体，"
         "包含原位置、明确目标位置及必要接触或阴影范围，arrows说明可见特征的目标方向。"
         "姿态选区按Verifier方法覆盖完整移动部位和必要连接，不默认只圈指尖；"
@@ -956,7 +1012,10 @@ def inspect_asset_image(
         "text_plate": version.text_plate.model_dump(mode="json") if version.text_plate is not None else None,
     }
     payload = {
-        "output_schema": SemanticAssetReview.model_json_schema(),
+        "output_schema": _asset_review_output_schema(
+            crop_available=crop_available, edit_guide_available=edit_guide_available,
+            plane_available=plane_available,
+        ),
         "asset": {
             "id": asset.id,
             "kind": asset.kind.value,
@@ -1047,7 +1106,7 @@ def inspect_asset_image(
     }
     output = client.generate_text(
         instructions=instructions,
-        input_text=json.dumps(payload, ensure_ascii=False, indent=2),
+        input_text=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
         image_urls=[
             _asset_image_url(version),
             *(url for _reference, url in reference_images),
