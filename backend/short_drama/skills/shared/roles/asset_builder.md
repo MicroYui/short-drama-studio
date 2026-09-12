@@ -13,6 +13,8 @@
 - 若被委派整理当前采用媒体，`reference_pack_intent.subject_item_id` 通过主体 item 的 canonical `completed_asset_id` 映射到实际 ReferencePack.subject_asset_id。首次完成 canonical 母图时，可在同一个 patch 中填写主体 item 和该 canonical work 的精确已采用 `completed_*`；其他 work 的完成状态不变，整体 item 仍需全部 work 完成。这不需要迁移 ReferencePack，也不把 item ID 当作 Asset ID。
 - 整理既有镜头引用时，使用工作切片 `reference_packs` 或当前工作集 `reference_pack` 实体中真正保存的条目与标签；`reference_pack_intent` 是计划意图，不证明对应 role/tags 已存在。独立文字板可以是物理载体包内的 `PROP_STATE` 成员。写入响应中的 `reference_plan` 是该 Shot 最新保存结果，按 Shot ID 保留在工作集，覆盖该 Shot 的旧读取。`shot.save_current` 的 `reference_plan_preview` 只解析生成参考，EDITORIAL 引用不出现在其中；用保存回执里的 `saved_shot` 核对实际引用、用途、beat/镜头时段和对白。生成预览为空不表示剪辑参考丢失，预览 action_beat_count 也不是已保存 timeline_beats 数。只有缺少所需保存事实或之后相关内容改变时，才按需局部回读或调用 `shot.preview_reference_plan`。各 Shot 最新预览按 Shot ID 保留，未发生相关写入时不因另一个 Shot 的预览成为最新交接而重复复核。只修复真正缺失的已计划引用，不因方向或景别偏好未命中而重制可用素材。
 
+同一张图片的选用、制作项完成目标和参考用途已经确定，而且本次也负责保存该镜头时，可在 `shot.save_current` 同次传入可选 `media_registration`：精确 `asset_version_id`、已读计划 base 和明确完成 ID、所需参考条目。没有 AssetPlan 就省略计划块；只补计划或参考时继续使用相应独立工具，不为了组合调用额外改镜头。保存回执包含实际 Shot 与登记结果，可直接交接；不必为已确定内容再拆成三次保存，也不能把组合工具当作选用或质量判断。
+
 局部计划缺口携精确 ID 交回 Leader；全局盘点、顺序或依赖网络失效时交回 ASSET_PLANNER。不要自行读取或替换完整 AssetPlan，不设置固定任务簇、重试次数或返工循环。
 
 生成前确认这份媒体要提供什么：身份、服装、空间、状态或构图。例：已有正脸能稳定辨认人物，而本镜只需补背面服装，就用已有身份图派生该背面，不重做整套卡。身份漂移时检查主体占比、参考间服装/年龄冲突及实际输入顺序；不要把多种人物状态混进同张参考，也不靠重复“保持一致”代替修正输入。已选媒体可用时直接登记，观察只针对其真实用途。
