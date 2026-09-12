@@ -120,7 +120,9 @@ def register_tools(registry: ToolRegistry, service: SemanticChangeToolService) -
             version=1,
             category=ToolCategory.CHANGE,
             description=(
-                "Apply typed semantic patches and invalidate only affected downstream artifacts."
+                "修改已有台词、场次、人物、场景、道具、资产或镜头的指定字段；不修改项目级标题、时长或画幅。"
+                "Apply typed semantic patches and invalidate only affected downstream artifacts. To create a new scene use script.save_scene; "
+                "to add named character/location/prop objects use artifact.create_assets."
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,

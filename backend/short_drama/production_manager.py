@@ -67,6 +67,8 @@ from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
     BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result,
 )
+from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
+from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
 from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
 from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
@@ -1960,6 +1962,7 @@ class SpecialistToolRepairSnapshot(DomainModel):
     )
     outcome_status: str | None = Field(default=None, min_length=1)
     error: JsonValue = None
+    attempted_media_relations: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
 class SpecialistReadObservation(DomainModel):
@@ -2412,6 +2415,7 @@ def _specialist_working_set(
                     result_status if isinstance(result_status, str) else None
                 ),
                 error=(None if turn.result is None else turn.result.get("error")),
+                attempted_media_relations=attempted_shot_media_relations(turn.tool_name, turn.arguments),
             )
             current_repair = pending_tool_repairs.get(turn.tool_name)
             if _prefer_specialist_tool_repair(candidate, current_repair):
@@ -2854,6 +2858,10 @@ def _specialist_turn_handoff(
     }
     if attempt_ref is not None:
         handoff["attempt_ref"] = attempt_ref.model_dump(mode="json")
+    if identifiers_only and turn.result is not None and turn.result.get("status") != ToolCallStatus.SUCCEEDED.value:
+        relations = attempted_shot_media_relations(turn.tool_name, turn.arguments)
+        if relations:
+            handoff["attempted_media_relations"] = relations
     if turn.result is not None:
         handoff["result"] = (
             {
@@ -5021,6 +5029,15 @@ class LanguageSpecialistAgent:
                 )
                 known_refs = {ref.identity(): ref for ref in working_set.artifact_refs}
                 known_refs.update({ref.identity(): ref for ref in handoff_refs})
+                working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
+            media, media_refs = observed_media_handoffs(store,
+                run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
+                selected_ids=selected_ids, exclude_work_order_id=work_order.work_order.id)
+            if media:
+                working_set_payload["media_observations"] = media
+                working_set_payload["media_observation_guidance"] = MEDIA_OBSERVATION_GUIDANCE
+                known_refs = {ref.identity(): ref for ref in _artifact_refs_from_json(working_set_payload.get("artifact_refs"))}
+                known_refs.update({ref.identity(): ref for ref in media_refs})
                 working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
         while True:
             execution_boundary()

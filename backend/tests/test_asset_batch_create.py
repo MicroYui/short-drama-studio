@@ -117,6 +117,26 @@ def _worker_input(service: ShortDramaService, pid: str, turns: list[tuple[str, d
     return cast(dict[str, JsonValue], client.payloads[0]["working_set"])
 
 
+def test_new_writer_can_request_asset_creation_without_a_discovery_round(
+    project: tuple[ShortDramaService, str, CountingRepository],
+) -> None:
+    service, pid, _repo = project
+    args: dict[str, JsonValue] = {"project_id": pid, "request": {"assets": [_definition("许岚")]}}
+    client = ScriptedClient([json.dumps({"tool_name": "artifact.create_assets", "arguments": args,
+        "reason": "Save the character already defined for this story."})])
+    work = WorkOrder(id="new-writer", parent_run_id="run", sender="leader", recipient_role="writer",
+        objective="Write the story and save its named characters.", why_now="Current",
+        production_skill_role=ProductionSkillRole.WRITER, production_prompt_stage=ProductionPromptStage.STORY)
+    LanguageSpecialistAgent(client, service.tool_registry).execute(AgentWorkOrderView(
+        work_order=work, context=ContextPack(run_id="run", project_id=pid, objective=work.objective),
+        system_prompt="Write this story."))
+    assert len(client.payloads) == 1
+    schemas = cast(dict[str, dict[str, JsonValue]], client.payloads[0]["tool_schemas"])
+    assert {"artifact.create_assets", "script.save_scene"} <= schemas.keys()
+    assert schemas["artifact.create_assets"]["input_schema"] == service.tool_registry.describe("artifact.create_assets").input_schema
+    assert "artifact.create_production_spec" not in schemas and "change.apply" not in schemas
+
+
 @pytest.mark.parametrize("batch", [False, True])
 def test_actual_worker_input_keeps_written_brief_and_descriptor_once_per_object(
     project: tuple[ShortDramaService, str, CountingRepository], batch: bool,

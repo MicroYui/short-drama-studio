@@ -1,0 +1,644 @@
+{
+  "source_project_id": "project-a150dc017d81",
+  "source_work_order_id": "work-order-46c4837973914872987b5a98dc943e0b",
+  "source": "Fresh2 saved QA and reference-entry Tool turns, 2026-09-12. Only unrelated output.project removed; no creative fields rewritten. Tests remap project/run ownership to temporary fixtures.",
+  "turns": [
+    {
+      "id": "specialist-turn-61544b2b8a26404f975f253f8f6f4c82",
+      "sequence": 5,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "asset_id": "asset-758b439a6065",
+        "version_id": "asset-version-4ef62d521b85",
+        "request": {
+          "review_focus": "只检查本张无人空间母版用途：是否恰好两把黑椅分处长桌南北长边、近侧南椅略拉开；桌长边东西向；左侧西窗、后方北墙浅灰吸音板、右侧东墙靠镜头南端木门是否成立，不能把门误置北墙或右后角。说明实际可见的门、两椅及通道位置，是否支持北侧站立坐下和南侧人员走向东南出口。须完全无人、无反射人影、无额外电脑或桌面物。也检查真实普通办公室材质。不要要求本空间参考本身为9:16镜头或包含人物道具。"
+        }
+      },
+      "reason": "无人会议室图片已落盘，检查两椅、窗与出口的真实位置及是否留下可走动空间，再决定采用。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:48:41.935699Z",
+      "updated_at": "2026-09-12T03:50:39.785188Z",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset",
+            "artifact_id": "asset-758b439a6065",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-4ef62d521b85",
+            "version": 2
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset",
+              "artifact_id": "asset-758b439a6065",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-4ef62d521b85",
+              "version": 2
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "recommended": true,
+          "score": 4.3,
+          "issues": [
+            {
+              "code": "REQUIRED_ELEMENT_CROPPED",
+              "severity": "minor",
+              "message": "右近侧木门的顶部框线及门扇下端出画，未完全实现本张生成意图中完整展示门框、门扇的取景目标。门所在墙面、近侧位置及门前通道仍可辨，不妨碍空间布局参考，但不足以提供完整门体轮廓。若需补齐完整门口覆盖，应扩大取景或扩边后复核，裁切无法解决。",
+              "repair_layer": "COMPOSITION",
+              "category": "COMPOSITION_QUALITY"
+            }
+          ],
+          "summary": "可见一张浅木长方桌，长轴沿画面左右；恰好两把黑色软包椅分处前后两条长边，而非桌端。近侧椅背向镜头、略有偏转并已拉离桌边，远侧椅面对镜头、靠桌且空着。左墙百叶窗、后墙浅灰吸音板、右墙靠镜头的关闭木门构成连贯空间；右门与后方墙角之间有明显墙段，没有误置到北墙或右后角。\n桌右端至门前有连续可见空地，支持南侧人员向东南出口绕行。北侧座位与后墙之间呈现一定纵深，未见阻挡物，可支持北侧站立及入座的布局参考；实际成人拉椅、转身净距不能由单张静帧精确验证。\n桌面完全空白，未见人物、反射人影、额外椅子、电脑、手机、资料、标志或文字。木纹桌门、黑色椅面、灰地毯及墙板符合普通经济型办公室，左窗采光柔和、曝光均衡。建议用于当前无人空间拓扑与材质母版；完整门体边界的取景限制需保留，不将本图视作完整门洞或动态通行的验证。",
+          "review_focus": "只检查本张无人空间母版用途：是否恰好两把黑椅分处长桌南北长边、近侧南椅略拉开；桌长边东西向；左侧西窗、后方北墙浅灰吸音板、右侧东墙靠镜头南端木门是否成立，不能把门误置北墙或右后角。说明实际可见的门、两椅及通道位置，是否支持北侧站立坐下和南侧人员走向东南出口。须完全无人、无反射人影、无额外电脑或桌面物。也检查真实普通办公室材质。不要要求本空间参考本身为9:16镜头或包含人物道具。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": []
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-de254caa360d4e0787528312db92b03f",
+      "sequence": 7,
+      "tool_name": "artifact.add_reference_entry",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "request": {
+          "subject_asset_id": "asset-758b439a6065",
+          "asset_version_id": "asset-version-4ef62d521b85",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "WIDE",
+          "tags": [
+            "无人空间",
+            "西窗",
+            "南北两椅",
+            "东墙南端出口",
+            "空间拓扑"
+          ],
+          "description": "无人小会议室空间母版：浅木长桌长轴东西向，画面左为西窗、后方北墙为浅灰吸音板、右近侧为东墙南端木门；南北两把黑椅，南椅已略拉开。仅提供空间、材质与柔和傍晚西窗光，不是任何人物镜头的首帧。门顶部框线及下端出画，门所在墙面与通道可辨，完整门体及动态离开需由后续具体镜头验证。",
+          "priority": 90
+        }
+      },
+      "reason": "登记已实际检查并采用的无人会议室图片，供后续镜头固定空间关系与材质，不把门体取景限制隐藏掉。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:51:16.147018Z",
+      "updated_at": "2026-09-12T03:51:16.361859Z",
+      "result": {
+        "tool_id": "artifact.add_reference_entry",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-758b439a6065",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-9b20df28deb4",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-4ef62d521b85",
+            "version": null
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack",
+              "artifact_id": "reference-pack-asset-758b439a6065",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-9b20df28deb4",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-4ef62d521b85",
+              "version": null
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "entry": {
+            "id": "reference-entry-9b20df28deb4",
+            "asset_version_id": "asset-version-4ef62d521b85",
+            "lineage_root_version_id": "asset-version-4ef62d521b85",
+            "role": "CANONICAL_MASTER",
+            "angle": "NOT_APPLICABLE",
+            "framing": "WIDE",
+            "tags": [
+              "无人空间",
+              "西窗",
+              "南北两椅",
+              "东墙南端出口",
+              "空间拓扑"
+            ],
+            "description": "无人小会议室空间母版：浅木长桌长轴东西向，画面左为西窗、后方北墙为浅灰吸音板、右近侧为东墙南端木门；南北两把黑椅，南椅已略拉开。仅提供空间、材质与柔和傍晚西窗光，不是任何人物镜头的首帧。门顶部框线及下端出画，门所在墙面与通道可辨，完整门体及动态离开需由后续具体镜头验证。",
+            "priority": 90
+          },
+          "pack": {
+            "id": "reference-pack-asset-758b439a6065",
+            "project_id": "project-a150dc017d81",
+            "subject_asset_id": "asset-758b439a6065",
+            "name": "小会议室参考包",
+            "entries": [
+              {
+                "id": "reference-entry-9b20df28deb4",
+                "asset_version_id": "asset-version-4ef62d521b85",
+                "lineage_root_version_id": "asset-version-4ef62d521b85",
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "WIDE",
+                "tags": [
+                  "无人空间",
+                  "西窗",
+                  "南北两椅",
+                  "东墙南端出口",
+                  "空间拓扑"
+                ],
+                "description": "无人小会议室空间母版：浅木长桌长轴东西向，画面左为西窗、后方北墙为浅灰吸音板、右近侧为东墙南端木门；南北两把黑椅，南椅已略拉开。仅提供空间、材质与柔和傍晚西窗光，不是任何人物镜头的首帧。门顶部框线及下端出画，门所在墙面与通道可辨，完整门体及动态离开需由后续具体镜头验证。",
+                "priority": 90
+              }
+            ],
+            "created_at": "2026-09-12T03:51:16.339+00:00",
+            "updated_at": "2026-09-12T03:51:16.339+00:00"
+          }
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-b279354bee9f4ad7b481723795206623",
+      "sequence": 11,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "asset_id": "asset-e104055d5990",
+        "version_id": "asset-version-abe658eaa803",
+        "request": {
+          "review_focus": "本张用途是深蓝A4资料夹闭合外观母版，以及封面上同一支黑色按动笔的原始来源。检查是否为薄的深蓝双折磨砂塑料夹而非硬壳笔记本，左折脊、右边恰好一枚浅黄色索引贴、白纸在内、无活页环和品牌；黑笔是否完整清楚、直杆、黑色尾部按钮及短笔夹、无笔帽、笔尖未伸出，比例是否可信。实际指出物件方向与材料，不要求小字。本图如有完整清楚笔可裁，请提供保留整支笔及少量四周余量的crop_suggestion，source必须指本候选；黑笔用于独立道具身份参考，不需要为了背景去做付费重绘。检查无人、无手及多余物件。"
+        }
+      },
+      "reason": "检查刚生成的合夹与黑笔实图，确认外观成立并取得可直接裁取黑笔的真实区域。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:54:07.068211Z",
+      "updated_at": "2026-09-12T03:55:10.552426Z",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset",
+            "artifact_id": "asset-e104055d5990",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-abe658eaa803",
+            "version": 2
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-4ef62d521b85",
+            "version": 2
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset",
+              "artifact_id": "asset-e104055d5990",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-abe658eaa803",
+              "version": 2
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-4ef62d521b85",
+              "version": 2
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "recommended": true,
+          "score": 4.7,
+          "issues": [],
+          "summary": "候选完整展示纵向闭合的深蓝资料夹：封面有细磨砂纹理，左侧折脊清楚，边缘薄、右侧圆角自然，没有厚硬壳笔记本式书脊；右缘露出薄白纸边及恰好一枚浅黄色索引贴。未见品牌、文字、扣具或外露金属环。隐藏的内部装订与展开状态不在本次可验证范围内。\n黑笔完整横放在封面中部，直杆哑黑，右端按钮和短笔夹可辨，无独立笔帽。左端为短而钝的金属鼻口，未见伸出的细书写尖，外观支持收尖状态。笔长约为夹宽的四分之三，较生成意图的约三分之二略长，但整体尺度仍可信。\n浅木桌面与参考的木色及画左柔光相容，物件接触阴影自然；无人、无手、无多余物件或水印。可承担闭合资料夹外观母版及黑色按动笔来源职责。下列裁框仅用于提取整支笔的独立身份参考，尚未执行，不替代完整资料夹母图。",
+          "review_focus": "本张用途是深蓝A4资料夹闭合外观母版，以及封面上同一支黑色按动笔的原始来源。检查是否为薄的深蓝双折磨砂塑料夹而非硬壳笔记本，左折脊、右边恰好一枚浅黄色索引贴、白纸在内、无活页环和品牌；黑笔是否完整清楚、直杆、黑色尾部按钮及短笔夹、无笔帽、笔尖未伸出，比例是否可信。实际指出物件方向与材料，不要求小字。本图如有完整清楚笔可裁，请提供保留整支笔及少量四周余量的crop_suggestion，source必须指本候选；黑笔用于独立道具身份参考，不需要为了背景去做付费重绘。检查无人、无手及多余物件。",
+          "candidate_output_layout": "PROP_MASTER_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": {
+            "region": {
+              "x": 0.275,
+              "y": 0.445,
+              "width": 0.455,
+              "height": 0.085
+            },
+            "reason": "从本候选提取约699×131像素的横向笔参考，保留左端金属鼻口、完整笔杆、上侧笔夹、右端按钮及少量四周余量和接触阴影。裁框内背景均为现有深蓝封面，不包含黄色索引贴或资料夹边缘，无需为背景重绘；裁切不会增加微小部件细节。",
+            "source": {
+              "source_asset_version_id": "asset-version-abe658eaa803",
+              "source_width": 1536,
+              "source_height": 1536,
+              "box_pixels": [
+                422,
+                683,
+                1122,
+                815
+              ]
+            }
+          },
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-a150dc017d81",
+              "asset_version_id": "asset-version-4ef62d521b85"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-57d6d19058764641855cb01aebaca6db",
+      "sequence": 13,
+      "tool_name": "artifact.add_reference_entry",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "request": {
+          "subject_asset_id": "asset-e104055d5990",
+          "asset_version_id": "asset-version-abe658eaa803",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "闭合",
+            "深蓝资料夹",
+            "唯一浅黄索引贴",
+            "黑笔横放",
+            "外观母版"
+          ],
+          "description": "采用为同一只深蓝A4双折资料夹的闭合外观母版：薄磨砂聚丙烯、左侧折脊、右缘薄白纸边和唯一浅黄色索引贴，无品牌和金属活页环。封面中部横放同一支哑黑按动笔，左侧金属鼻口收尖、右端按钮及短笔夹完整。仅提供物件外观及开场静态关系；浅木背景不代表完整镜头构图，尚不证明打开内部结构或动态交接。",
+          "priority": 90
+        }
+      },
+      "reason": "闭合资料夹及封面黑笔已实际检查可用，先登记已选用的外观母版，再沿同一物件派生打开状态。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:55:36.276358Z",
+      "updated_at": "2026-09-12T03:55:36.526498Z",
+      "result": {
+        "tool_id": "artifact.add_reference_entry",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-e104055d5990",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-f68c63981dc6",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-abe658eaa803",
+            "version": null
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack",
+              "artifact_id": "reference-pack-asset-e104055d5990",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-f68c63981dc6",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-abe658eaa803",
+              "version": null
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "entry": {
+            "id": "reference-entry-f68c63981dc6",
+            "asset_version_id": "asset-version-abe658eaa803",
+            "lineage_root_version_id": "asset-version-abe658eaa803",
+            "role": "CANONICAL_MASTER",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "闭合",
+              "深蓝资料夹",
+              "唯一浅黄索引贴",
+              "黑笔横放",
+              "外观母版"
+            ],
+            "description": "采用为同一只深蓝A4双折资料夹的闭合外观母版：薄磨砂聚丙烯、左侧折脊、右缘薄白纸边和唯一浅黄色索引贴，无品牌和金属活页环。封面中部横放同一支哑黑按动笔，左侧金属鼻口收尖、右端按钮及短笔夹完整。仅提供物件外观及开场静态关系；浅木背景不代表完整镜头构图，尚不证明打开内部结构或动态交接。",
+            "priority": 90
+          },
+          "pack": {
+            "id": "reference-pack-asset-e104055d5990",
+            "project_id": "project-a150dc017d81",
+            "subject_asset_id": "asset-e104055d5990",
+            "name": "蓝色资料夹参考包",
+            "entries": [
+              {
+                "id": "reference-entry-f68c63981dc6",
+                "asset_version_id": "asset-version-abe658eaa803",
+                "lineage_root_version_id": "asset-version-abe658eaa803",
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "DETAIL",
+                "tags": [
+                  "闭合",
+                  "深蓝资料夹",
+                  "唯一浅黄索引贴",
+                  "黑笔横放",
+                  "外观母版"
+                ],
+                "description": "采用为同一只深蓝A4双折资料夹的闭合外观母版：薄磨砂聚丙烯、左侧折脊、右缘薄白纸边和唯一浅黄色索引贴，无品牌和金属活页环。封面中部横放同一支哑黑按动笔，左侧金属鼻口收尖、右端按钮及短笔夹完整。仅提供物件外观及开场静态关系；浅木背景不代表完整镜头构图，尚不证明打开内部结构或动态交接。",
+                "priority": 90
+              }
+            ],
+            "created_at": "2026-09-12T03:55:36.501+00:00",
+            "updated_at": "2026-09-12T03:55:36.501+00:00"
+          }
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-3c1539ecc9dc4183963411ea88ca372f",
+      "sequence": 14,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "asset_id": "asset-2df81ea5ad58",
+        "version_id": "asset-version-517b1b4894ce",
+        "request": {
+          "review_focus": "本图是从已选闭合资料夹母图原始像素裁出的700×132黑笔，不要求背景去除或放大。请实际检查整支笔是否完整，有无裁掉左金属鼻口、右端按动钮、上方短笔夹；黑杆和部件是否清楚可辨，无笔帽，笔尖收起。同源闭夹图已检查通过，本次只核实裁后可用性，不要求持握、出尖或动态按笔。若可用于同一黑笔身份/外观参考即说明；裁切不会增加微小细节。"
+        }
+      },
+      "reason": "检查已裁出的同一支黑笔是否完整、清楚，确认它能直接承担道具外观参考，避免无必要重绘。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:55:46.934848Z",
+      "updated_at": "2026-09-12T03:56:11.432712Z",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset",
+            "artifact_id": "asset-2df81ea5ad58",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-517b1b4894ce",
+            "version": 2
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-abe658eaa803",
+            "version": 2
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset",
+              "artifact_id": "asset-2df81ea5ad58",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-517b1b4894ce",
+              "version": 2
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-abe658eaa803",
+              "version": 2
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "recommended": true,
+          "score": 4.8,
+          "issues": [],
+          "summary": "整支笔完整入画，左侧金属鼻口、右端按动钮和上方笔夹均未被裁断，周围留有余量。哑黑直杆、收尖前壳、笔夹及尾钮轮廓清楚，无笔帽、可见品牌文字或明显结构破损；部件位置与来源图一致。左端呈短钝金属鼻口，未见另行伸出的尖细笔芯，与笔尖收起的外观相容，但微小滚珠及内部机构无法据此辨认。深蓝封面背景不妨碍辨识，可直接用于同一黑笔的身份与外观参考；不据此确认持握、交接、按动或书写状态。无需进一步裁切。",
+          "review_focus": "本图是从已选闭合资料夹母图原始像素裁出的700×132黑笔，不要求背景去除或放大。请实际检查整支笔是否完整，有无裁掉左金属鼻口、右端按动钮、上方短笔夹；黑杆和部件是否清楚可辨，无笔帽，笔尖收起。同源闭夹图已检查通过，本次只核实裁后可用性，不要求持握、出尖或动态按笔。若可用于同一黑笔身份/外观参考即说明；裁切不会增加微小细节。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-a150dc017d81",
+              "asset_version_id": "asset-version-abe658eaa803"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-5c2ee6171be14f4c9ed6ff8ff643b703",
+      "sequence": 15,
+      "tool_name": "artifact.add_reference_entry",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "request": {
+          "subject_asset_id": "asset-2df81ea5ad58",
+          "asset_version_id": "asset-version-517b1b4894ce",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "黑色按动笔",
+            "完整单笔",
+            "笔尖收起",
+            "闭夹同源裁切",
+            "外观母版"
+          ],
+          "description": "已采用的黑色按动笔外观母版，从闭合资料夹图的原始像素裁出，700×132。整支哑黑直杆、左端短钝金属鼻口、右端按动钮和短笔夹完整清楚，无笔帽及品牌。深蓝封面是来源背景，不表示每个镜头都应置笔于封面。支持同一笔外形和收尖状态；不证明持握、交接、按动或书写动态，也不提供微小内部机构细节。",
+          "priority": 90
+        }
+      },
+      "reason": "黑笔裁图已实际检查完整、清楚，登记为同一支笔的外观依据；不为背景或审核状态重绘。",
+      "status": "COMPLETED",
+      "requested_at": "2026-09-12T03:56:23.381425Z",
+      "updated_at": "2026-09-12T03:56:23.614434Z",
+      "result": {
+        "tool_id": "artifact.add_reference_entry",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-2df81ea5ad58",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-f7f12797a709",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-517b1b4894ce",
+            "version": null
+          }
+        ],
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack",
+              "artifact_id": "reference-pack-asset-2df81ea5ad58",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-f7f12797a709",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-517b1b4894ce",
+              "version": null
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        },
+        "error": null,
+        "output": {
+          "entry": {
+            "id": "reference-entry-f7f12797a709",
+            "asset_version_id": "asset-version-517b1b4894ce",
+            "lineage_root_version_id": "asset-version-517b1b4894ce",
+            "role": "CANONICAL_MASTER",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "黑色按动笔",
+              "完整单笔",
+              "笔尖收起",
+              "闭夹同源裁切",
+              "外观母版"
+            ],
+            "description": "已采用的黑色按动笔外观母版，从闭合资料夹图的原始像素裁出，700×132。整支哑黑直杆、左端短钝金属鼻口、右端按动钮和短笔夹完整清楚，无笔帽及品牌。深蓝封面是来源背景，不表示每个镜头都应置笔于封面。支持同一笔外形和收尖状态；不证明持握、交接、按动或书写动态，也不提供微小内部机构细节。",
+            "priority": 90
+          },
+          "pack": {
+            "id": "reference-pack-asset-2df81ea5ad58",
+            "project_id": "project-a150dc017d81",
+            "subject_asset_id": "asset-2df81ea5ad58",
+            "name": "黑色按动笔参考包",
+            "entries": [
+              {
+                "id": "reference-entry-f7f12797a709",
+                "asset_version_id": "asset-version-517b1b4894ce",
+                "lineage_root_version_id": "asset-version-517b1b4894ce",
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "DETAIL",
+                "tags": [
+                  "黑色按动笔",
+                  "完整单笔",
+                  "笔尖收起",
+                  "闭夹同源裁切",
+                  "外观母版"
+                ],
+                "description": "已采用的黑色按动笔外观母版，从闭合资料夹图的原始像素裁出，700×132。整支哑黑直杆、左端短钝金属鼻口、右端按动钮和短笔夹完整清楚，无笔帽及品牌。深蓝封面是来源背景，不表示每个镜头都应置笔于封面。支持同一笔外形和收尖状态；不证明持握、交接、按动或书写动态，也不提供微小内部机构细节。",
+                "priority": 90
+              }
+            ],
+            "created_at": "2026-09-12T03:56:23.577+00:00",
+            "updated_at": "2026-09-12T03:56:23.577+00:00"
+          }
+        }
+      }
+    }
+  ]
+}

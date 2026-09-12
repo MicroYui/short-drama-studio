@@ -224,7 +224,8 @@ class AssetVersionInspectionRequest(DomainModel):
             "space, or prop structure the candidate should preserve."
         ),
     )
-    review_focus: str | None = Field(default=None, min_length=1, max_length=2000)
+    review_focus: str | None = Field(default=None, min_length=1, max_length=2000,
+        description="Current intended use and unresolved visual questions. Distinguish required story/identity/continuity from optional framing preferences; do not add constraints just to make the inspection exhaustive.")
     regions: list[AssetInspectionRegion] = Field(
         default_factory=list[AssetInspectionRegion], max_length=6,
         description=(
@@ -864,6 +865,11 @@ def inspect_asset_image(
         "不要把多个不同参考状态合并，也不要因总体 brief 只列固定正文而忽略明确选中的状态姓名；"
         "目标状态未明确时记录缺少依据，不自行推断。"
         "生成prompt是意图，不是已观察事实。先说明真实可见的身份、轮廓、空间或文字，再比较要求。"
+        "本次review_focus与当前ShotPlan明确了现在要承担的用途；原生成prompt还保留最初采用的实现方案。"
+        "例如本次仅取人物近景时，原prompt额外写的完整双肩不自动成为新用途的否决条件。"
+        "对原方案的偏离如实记录，并说明是否影响当前用途；recommended针对当前声明用途，"
+        "不是对生成prompt每句描述的机械打分。不能借缩小review_focus隐藏用户要求、身份变化、"
+        "当前ShotPlan明确要求可见的关系或已采用媒体的连续性矛盾；这些仍须处理。"
         "细节区域与原图属于同一证据，不是不同身份或新增参考。小脸、细小文字和部件看不清时明确未观察，"
         "不能用总分或同色服装代替身份比对；记录哪个部位和下游用途仍缺可见依据。"
         "不要追加项目未要求的视觉媒介、表面质感、机位或运动规则。"

@@ -9,6 +9,7 @@ from uuid import uuid4
 from pydantic import JsonValue
 
 from short_drama.agent_runtime.model_input import json_text
+from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
 from short_drama.agent_runtime.models import (
     ActionRecord, ActionStatus, AgentResultStatus, ArtifactRef, DelegationStatus,
     SpecialistTurnRecord, SpecialistTurnStatus,
@@ -222,5 +223,8 @@ def leader_read_working_set(
         })
     completions, completed_refs = completed_work_handoffs(store, run_id=run_id, project_id=project_id)
     artifact_refs.update({ref.identity(): ref for ref in completed_refs})
+    media, media_refs = observed_media_handoffs(store, run_id=run_id, project_id=project_id)
+    artifact_refs.update({ref.identity(): ref for ref in media_refs})
     return {"read_observations": observations, "completion_handoffs": completions,
+        **({"media_observations": media, "media_observation_guidance": MEDIA_OBSERVATION_GUIDANCE} if media else {}),
         "artifact_refs": [ref.model_dump(mode="json") for ref in artifact_refs.values()]}

@@ -27,7 +27,7 @@ _STAGE_TOOLS: dict[str, tuple[str, ...]] = {
     "VISUAL_GEN": ("route.prepare_h3_group", "route.h3_capability_profile"),
 }
 _ROLE_TOOLS: dict[str, tuple[str, ...]] = {
-    "WRITER": ("script.save_scene",),
+    "WRITER": ("script.save_scene", "artifact.create_assets"),
     "DIRECTOR": ("shot.save_current",),
     "ASSET_PLANNER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan"),
     "ASSET_BUILDER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan_fields", "image.capability", "image.enqueue"),

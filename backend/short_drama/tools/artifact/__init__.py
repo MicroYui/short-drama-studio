@@ -941,9 +941,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             version=2,
             category=ToolCategory.ARTIFACT,
             description=(
-                "在完整剧本已确定、准备开始分镜和资产规划时，创建项目级"
-                " ProductionSpec。它统一记录时长意图、画幅、语言、视听方向与"
-                " Provider 偏好，但不会触发任何真实生成。"
+                "创建可选制作规格，记录片名与视听方向，并同步项目语言、画幅及明确目标时长；不生成媒体。"
+                "ProductionSpec 还记录 Provider 偏好；规格内的片名不更改项目标题，"
+                "不修改 ProjectBible、用户原始要求或已保存正文。"
                 "成功时只返回精确新版本身份和输出槽指针；"
                 "需要正文时显式读取 artifact.get_production_spec。"
             ),
