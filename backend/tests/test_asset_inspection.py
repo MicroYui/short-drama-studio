@@ -631,6 +631,8 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "evidence_references": [],
         "candidate_output_layout": None,
         "review_focus": None,
+        "narrative_context": None,
+        "implementation_preferences": [],
         "region_evidence": [],
         "crop_suggestion": None,
         "edit_guide_suggestion": None,

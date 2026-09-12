@@ -1,0 +1,429 @@
+{
+  "source": {
+    "project_id": "project-06116be431fa",
+    "work_order_id": "work-order-8d895cc08c39460aa8a8f9cb0acd9eb8",
+    "qa_input": "output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-06116be431fa/studio-trace/studio-job-6b20ba129621/20260912T065537782187-a5013818-model.input.json",
+    "qa_output": "output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-06116be431fa/studio-trace/studio-job-6b20ba129621/20260912T065751245284-c23fcef7-model.output.json",
+    "created_at": "2026-09-12T06:55:37.782187+00:00",
+    "call_id": "model-82e524032537",
+    "script_snapshot": "RO projects.document_json /script_versions[id=project-06116be431fa-script-v3]; already visible in Builder input 20260912T065525301970-87d0ebb5-model.input.json before QA",
+    "shot_read": "RO projects.document_json /shots[id=shot-qiantai-07]; captured after final FAILED; no writes"
+  },
+  "script": {
+    "id": "project-06116be431fa-script-v3",
+    "version": 3,
+    "source_mode": "IDEA_EXPANSION",
+    "created_at": "2026-09-12T06:41:28.034995+00:00"
+  },
+  "scene": {
+    "id": "scene-8f377e65cf6f",
+    "heading": "第1场｜内景·设计公司小会议室·日",
+    "summary": "设计师周宁被组长郑川安排退居后排记问题。她主动让郑川模拟客户刁难，以旧隔断再利用、节省材料费改造入口的具体方案作答，并承认上次汇报失误、争取亲自讲完。郑川归还方案夹并让出主讲位置，自己接过笔记本，完成主讲权与记录任务的交换。",
+    "line_ids": [
+      "line-qiantai-01",
+      "line-qiantai-02",
+      "line-qiantai-03",
+      "line-qiantai-04",
+      "line-qiantai-05",
+      "line-qiantai-06",
+      "line-qiantai-07",
+      "line-qiantai-08",
+      "line-qiantai-09",
+      "line-qiantai-10",
+      "line-qiantai-11",
+      "line-qiantai-12"
+    ]
+  },
+  "shot": {
+    "id": "shot-qiantai-07",
+    "project_id": "project-06116be431fa",
+    "sequence": 7,
+    "scene_id": "scene-8f377e65cf6f",
+    "duration_seconds": 6.5,
+    "narrative_purpose": "让观众看清周宁已有具体方案，而非临时以强硬态度反驳。",
+    "visual": "@设计公司小会议室的浅木桌面上，@深蓝色方案夹已打开。@周宁的前臂从画面左侧进入，翻到对比页并把纸面转向画面右侧的郑川，手指只点一下新入口。两幅简洁草图分别显示入口被隔断挤窄、隔断移到侧边后入口敞开。画面以完整对比页、夹子边缘与必要的手为中心，不要求人物正脸同时入画；不要求观众读细字。",
+    "framing": "俯斜桌面近景，容纳完整对比页和必要接触手；纸面占主要画幅，两幅草图不能被裁掉或被手长期遮住。",
+    "camera": "从既定对话轴线同侧、靠郑川一侧观察桌面，固定机位；不在翻页时旋转机位。",
+    "audio_intent": "前2秒以翻页、纸面轻滑声承接质疑。之后周宁从画外开始第08句：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。此镜仅承载前面至“人就不用挤着进了”的连续部分，末段在下一镜继续；不另造来源行、不重念整句。无旁白，无新增发声者。",
+    "dialogue_line_ids": [
+      "line-qiantai-08"
+    ],
+    "references": [
+      {
+        "subject_asset_id": "asset-daa7a6dea5fb",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 0,
+        "text_end": 9,
+        "alias": "设计公司小会议室",
+        "required_tags": [],
+        "purpose": "待绑定空间母版：浅木桌面材质和同场日光；本镜只用实际桌面区域，不要求空景母版直接作为首帧。",
+        "image_reference_role": "SCENE_IDENTITY",
+        "usage": "GENERATION"
+      },
+      {
+        "subject_asset_id": "asset-ead7cce81d77",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 16,
+        "text_end": 23,
+        "alias": "深蓝色方案夹",
+        "required_tags": [],
+        "purpose": "待绑定方案夹外观及打开对比页状态。两幅大草图的入口与隔断差别要可辨；闭合单物母版不能证明此内页状态。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      {
+        "subject_asset_id": "asset-70a7fe56fe95",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 27,
+        "text_end": 30,
+        "alias": "周宁",
+        "required_tags": [],
+        "purpose": "待绑定周宁当前服装母版，供可见前臂与袖口连续性使用；本镜不要求正脸或全身出镜。",
+        "image_reference_role": "WARDROBE",
+        "usage": "GENERATION"
+      }
+    ],
+    "timeline_beats": [
+      {
+        "start_seconds": 0.0,
+        "end_seconds": 2.0,
+        "visual": "打开的@深蓝色方案夹留在桌面支撑上，对比页翻出，转到郑川可看的方向。",
+        "framing": "桌面近景，完整页与手部接触可见。",
+        "camera": "固定俯斜机位。",
+        "action": "周宁从已打开的夹中翻到对比页，扶住纸页转向郑川；待页落稳，只在新入口点一下，随后指尖退出入口图形。夹子不离桌、不凭空换页。",
+        "performance": "动作熟悉而直接，像展示已经准备好的依据；不用反复敲纸强调。",
+        "emotion": null,
+        "dialogue_line_ids": [],
+        "sound": "轻微纸页翻动与桌面摩擦声。",
+        "references": [
+          {
+            "subject_asset_id": "asset-ead7cce81d77",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 3,
+            "text_end": 10,
+            "alias": "深蓝色方案夹",
+            "required_tags": [],
+            "purpose": "本时段需要打开夹与对比页的结构、翻转后朝向参考；只需关键可读状态，不为每个中间手势补图。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "start_seconds": 2.0,
+        "end_seconds": 6.5,
+        "visual": "@深蓝色方案夹的对比页保持摊开，手不遮住两幅入口草图。",
+        "framing": "同一桌面近景，保留可读停留。",
+        "camera": "固定，不加推近或镜内切镜。",
+        "action": "周宁不再翻页；纸面稳住，让观众和郑川都有看懂空间变化的时间。",
+        "performance": "周宁画外语气平稳，先说明材料能用，再说明入口为何好用，不把解释说成讥讽。",
+        "emotion": null,
+        "dialogue_line_ids": [
+          "line-qiantai-08"
+        ],
+        "sound": "周宁第08句开始，到“人就不用挤着进了”附近切镜；末句在下一镜无缝继续。只有周宁发声。",
+        "references": [
+          {
+            "subject_asset_id": "asset-ead7cce81d77",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 7,
+            "alias": "深蓝色方案夹",
+            "required_tags": [],
+            "purpose": "本时段需要实际可见的完整对比草图状态；不以细小中文文字承担唯一证据。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      }
+    ],
+    "continuity": {
+      "character_positions": "周宁仍在桌侧左关系位，郑川仍在相对右关系位；本镜只见必要的手与前臂，不改变座位。",
+      "eyeline": "两人看同一张对比页；纸面转向郑川，观众从斜上方看图。",
+      "prop_state_in": "方案夹打开，在两人之间；对比页尚未明确展示。笔记本合着，黑笔未使用。",
+      "prop_state_out": "方案夹仍在桌面中间，打开停留在朝郑川的对比页；周宁已完成一次指点，没有取走夹子。",
+      "action_in": "承接郑川对旧材料的质疑。",
+      "action_out": "页面已稳住，周宁的解释尚在继续；切给听者而非省略听者回应。"
+    },
+    "transition_out": "同组声桥切郑川中景；第08句不中断、不重新起头。",
+    "merge_candidate": false,
+    "local_rework_risk": "后续需依据实际打开页图片检查两幅草图在竖屏近景中的占比和朝向；不能把闭夹母版当内页已验证，也不承诺动态纸面精确变形已成功。",
+    "approval_status": "DRAFT",
+    "freshness": "CURRENT",
+    "revision": 1
+  },
+  "original_qa_payload": {
+    "asset": {
+      "id": "asset-ead7cce81d77",
+      "kind": "PROP",
+      "name": "深蓝色方案夹",
+      "descriptor": "同一深蓝色A4薄硬壳方案夹的打开物件状态候选：右侧白纸同页左右并排入口对比草图，拟呈现旧隔断从门口移至侧边、入口变畅通；无手、无人物、无会议室。须以实图检查草图因果及物件连续性后选用。",
+      "brief": {
+        "identity_anchor": "同一个A4尺寸深蓝色硬壳方案夹，内装白色设计草图纸，整场由周宁带来、郑川拿走并翻看、最后还给周宁。",
+        "tone_or_temperament": null,
+        "visual_attributes": [
+          "纯深蓝色哑光封面，薄硬壳，可自然开合",
+          "内有一张同页左右并排的两幅大块简洁空间草图",
+          "草图左图为入口被隔断挤窄，右图为隔断移到侧边后入口敞开",
+          "示意采用黑灰线条及少量淡蓝色隔断块面，不依赖细小标签、数字或精确文字"
+        ],
+        "wardrobe_or_materials": [
+          "哑光硬质封皮，普通白纸，无金属高反光大装饰"
+        ],
+        "background_constraints": [
+          "是人物手中真实实物，不是悬浮界面或画面字幕",
+          "不增加合同、奖状、客户签字或订单结果"
+        ],
+        "texture_constraints": [
+          "真实纸张与封皮质感，尺寸适合普通人单手递还、双手展开"
+        ],
+        "continuity_anchors": [
+          "初始在桌头周宁的主讲位前；郑川拿到自己面前",
+          "试问时摊在两人之间，周宁将对比页转给郑川看并只点一下新入口",
+          "郑川合上后交还；周宁最后在桌头重新打开",
+          "理解解法主要依靠完整对白与人物回应，草图为辅助，不能强迫观众识读细字"
+        ],
+        "named_views_or_zones": [],
+        "presentation_mode": "PHYSICAL_MASTER",
+        "required_visible_text": [],
+        "reference_strategy": "LIGHTWEIGHT",
+        "layout_profile": "LIGHTWEIGHT_SINGLE",
+        "requested_views": [],
+        "strategy_rationale": null
+      }
+    },
+    "candidate_creation": {
+      "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+      "actual_size": {
+        "width": 2304,
+        "height": 1536
+      },
+      "local_crop_available": true,
+      "local_edit_guide_available": true,
+      "local_plane_composite_available": true,
+      "plane_composite_tool": "image.composite_plane",
+      "operation": "EDIT",
+      "generation_prompt": "Create a realistic photographic prop-state reference of this EXACT navy A4 thin hard-cover presentation folder, now fully open and lying flat on a plain warm-neutral studio surface. Preserve its dark navy matte unbranded cover, thin hard shell, ordinary white paper and understated hinge. No people, hands, other stationery, meeting room, interface, logo, lettering or watermark. Overhead, almost orthographic product photograph, soft daylight, entire open folder visible, high detail. Left inside cover plain navy; right half holds a flat ordinary portrait A4 white design sheet with a thin small stack beneath it. No shiny large ring mechanism. The visible sheet contains TWO LARGE SIMPLE SPACE SKETCHES side by side on the SAME page, occupying most of the paper. These are actual printed/sketched ink on physical white paper, not floating graphics. Both drawings depict the SAME simple rectangular entrance space from the SAME slightly raised axonometric viewpoint: gray rear and side wall outlines, open front edge with a clearly defined central entrance, a few restrained black floor lines. In the LEFT drawing, one pale blue freestanding rectangular reusable partition is positioned directly just inside the entrance, obstructing most of its width and leaving only a narrow passage at its side; a narrow dark gray incoming path bends around it. In the RIGHT drawing, that SAME pale blue partition, same size, shape and two vertical panel seams, has been relocated against the far side wall, away from the entrance; the central entrance is now visibly broad, clear and unobstructed, with one broad simple gray incoming path straight through it. Keep the architecture and entrance width identical between both drawings; only relocate the existing partition and change the available passage. Readable instantly through large shapes: blocked narrow entry versus clear wide entry, old partition reused rather than removed. Restrained black-gray hand-drawn architectural linework and pale blue only for the partition. No fine dimensions, labels, numbers, captions or tiny text. The paper should look natural and physical with clean margins and believable contact shadows. This is only an object and open-page reference, not a shot composition or movement sequence.",
+      "masked_edit": null,
+      "crop": null,
+      "reference_sheet": null,
+      "text_plate": null
+    },
+    "review_focus": "仅检查打开方案夹与对比页的物件自身参考用途，不是人物指页或会议室构图。对照闭合母图检查深蓝哑光薄硬壳、白纸和可自然开合结构。重点实际看两幅图是否在同一物理纸页上左右并排、建筑入口一致：左图隔断挤窄通道，右图相同浅蓝隔断保留并移至侧边，入口明显敞开，不是删除隔断或改变建筑。不要因无文字扣分，也不要求读細字。请说明大形状在画面中是否足够清楚、是否有会误导因果的几何差别。若可用，给可直接image.crop的纸页或两图整体区域，供单独页内容参考；不要把裁切建议当作已完成。",
+    "shot": null,
+    "image_map": [
+      {
+        "image": 1,
+        "role": "candidate_under_review",
+        "asset_id": "asset-ead7cce81d77",
+        "asset_name": "深蓝色方案夹",
+        "version_id": "asset-version-b6cc68c7bf9d"
+      },
+      {
+        "image": 2,
+        "role": "derivation_reference",
+        "reference_source": "DERIVATION_SOURCE",
+        "source_project_id": "project-06116be431fa",
+        "asset_id": "asset-ead7cce81d77",
+        "asset_kind": "PROP",
+        "asset_name": "深蓝色方案夹",
+        "version_id": "asset-version-519456909939",
+        "descriptor": "原创组合母图的深蓝色A4方案夹独立裁切：合上状态、深蓝哑光薄硬壳、白纸薄边。仅提供物件身份与闭合外观，不提供剧情桌面位置、厘米标尺或手持关系。",
+        "reference_role": "PROP_IDENTITY",
+        "reference_authority": "AUTHORITATIVE",
+        "purpose": "只提供同一深蓝哑光薄硬壳A4方案夹的封皮颜色、材质、边缘与物件身份；本次展开，不继承闭合姿态。",
+        "subject_alias": "深蓝色方案夹",
+        "approval_status": "DRAFT",
+        "local_plane_composite_source": {
+          "available": true,
+          "actual_size": {
+            "width": 992,
+            "height": 1137
+          },
+          "full_image_is_content_plate": false
+        },
+        "is_current_canonical_master": false,
+        "normative_for_declared_role": true
+      }
+    ]
+  },
+  "original_review": {
+    "recommended": false,
+    "score": 3.5,
+    "issues": [
+      {
+        "code": "DIAGRAM_ENTRANCE_WIDTH_MISMATCH",
+        "severity": "major",
+        "message": "两幅草图的房间外轮廓、后墙和右侧门垛基本对应，但右图左前门垛明显缩短，使建筑门洞本身比左图更宽。因此画面同时表现了“移动隔断”和“扩大门洞”，会误导只挪用旧隔断便能疏通入口的因果，不能直接承担当前对比页参考职责。",
+        "repair_layer": "LOCAL_IMAGE_EDIT",
+        "category": "PROP_CONTINUITY"
+      }
+    ],
+    "summary": "打开夹的深蓝哑光封皮、薄边、中央折合连接及右侧白纸薄叠均清楚，与闭合参考的颜色、材质和边缘外观相容；未见明显破损、悬浮、大型金属装饰或多余文字。纸页和单侧封皮在本机位下显得较宽短，实际A4长宽比例无法仅凭投影精确确认。\n两幅大草图确实位于同一物理纸页上并左右排列。左图浅蓝隔断阻挡入口主要通路，灰色路径绕行；右图保留了带竖向分缝的浅蓝隔断并移到右侧墙边，直通路径清楚。隔断转向及远近变化可以解释可见宽度差异，未见删除隔断的证据。大形状足够辨认，不依赖细字。\n主要问题是右图还扩大了建筑门洞。夹体外观部分可保留，建议优先局部统一右图前墙开口，不必重做整张夹体；若不修，只能作为不承担解法因果的打开物件外观参考。当前不提供页内容裁切建议，因为裁切不能消除这项几何矛盾。",
+    "crop_suggestion": null,
+    "edit_guide_suggestion": {
+      "regions": [
+        {
+          "polygon": [
+            {
+              "x": 0.741,
+              "y": 0.607
+            },
+            {
+              "x": 0.818,
+              "y": 0.607
+            },
+            {
+              "x": 0.818,
+              "y": 0.686
+            },
+            {
+              "x": 0.741,
+              "y": 0.686
+            }
+          ],
+          "label": "延长右图左前门垛，统一两图建筑开口；覆盖完整短门垛、新边界及邻接地板线恢复区域。"
+        }
+      ],
+      "arrows": [
+        {
+          "start": {
+            "x": 0.792,
+            "y": 0.646
+          },
+          "end": {
+            "x": 0.805,
+            "y": 0.646
+          },
+          "label": "将左门垛朝向门洞的竖向内边界向画面右侧延伸至此；不是平移整段前墙。"
+        }
+      ],
+      "descriptor": "仅调整右侧草图的左前门垛：固定其与左侧外墙的连接端，将门垛向右延长，使门洞宽度和位置与左图对应。区域包含原门垛、目标边界及必要的纸面和地板线恢复范围；清除旧内边界，不留下重复竖线，并让新墙体正确遮挡地板线。保留右门垛、其余建筑轮廓、侧边浅蓝隔断及宽直灰色路径，不改纸张和夹体。此建议未执行，修后仍须核对两图建筑一致性。"
+    },
+    "plane_composite_suggestion": null
+  },
+  "lines": [
+    {
+      "id": "line-qiantai-01",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "待会儿我讲。你坐后面，记问题。",
+      "spoken_text": "待会儿我讲。你坐后面，记问题。",
+      "subtitle_text": "待会儿我讲。你坐后面，记问题。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-02",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "我做的方案，能不能让我讲？",
+      "spoken_text": "我做的方案，能不能让我讲？",
+      "subtitle_text": "我做的方案，能不能让我讲？",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-03",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "上回客户一压价，你就慌了。",
+      "spoken_text": "上回客户一压价，你就慌了。",
+      "subtitle_text": "上回客户一压价，你就慌了。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-04",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "那你现在压。",
+      "spoken_text": "那你现在压。",
+      "subtitle_text": "那你现在压。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-05",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "入口要改，预算一分不加。怎么办？",
+      "spoken_text": "入口要改，预算一分不加。怎么办？",
+      "subtitle_text": "入口要改，预算一分不加。怎么办？",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-06",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+      "spoken_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+      "subtitle_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-07",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "拿旧的糊弄客户？",
+      "spoken_text": "拿旧的糊弄客户？",
+      "subtitle_text": "拿旧的糊弄客户？",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-08",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+      "spoken_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+      "subtitle_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-09",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "上回我没讲好。这回，让我自己讲完。",
+      "spoken_text": "上回我没讲好。这回，让我自己讲完。",
+      "subtitle_text": "上回我没讲好。这回，让我自己讲完。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-10",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "行，这回你讲。",
+      "spoken_text": "行，这回你讲。",
+      "subtitle_text": "行，这回你讲。",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-11",
+      "speaker": "周宁",
+      "speaker_character_id": null,
+      "original_text": "那问题……",
+      "spoken_text": "那问题……",
+      "subtitle_text": "那问题……",
+      "audio_kind": "DIALOGUE"
+    },
+    {
+      "id": "line-qiantai-12",
+      "speaker": "郑川",
+      "speaker_character_id": null,
+      "original_text": "我记。",
+      "spoken_text": "我记。",
+      "subtitle_text": "我记。",
+      "audio_kind": "DIALOGUE"
+    }
+  ],
+  "selected_line_ids": [
+    "line-qiantai-05",
+    "line-qiantai-06"
+  ]
+}

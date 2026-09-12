@@ -225,6 +225,13 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                     artifact_id=request.request.shot_id,
                 )
             )
+        if result.narrative_context is not None:
+            refs.append(ArtifactRef(
+                project_id=result.narrative_context.project_id,
+                artifact_type="script_version",
+                artifact_id=result.narrative_context.script_version_id,
+                version=result.narrative_context.script_version,
+            ))
         refs.extend(service.asset_version_artifact_refs(
             request.project_id,
             [request.version_id, *(
@@ -238,13 +245,15 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
     registry.register(
         ToolSpec(
             id="qa.inspect_asset_version",
-            version=3,
+            version=4,
             category=ToolCategory.QA,
             description=(
                 "生成或导入一个实际图片版本后调用；对照资产 brief、"
                 "本张真实 ImageTask 的生成意图和 output_layout、"
-                "可选镜头、已批准母版与候选固化的派生来源进行多模态语义检查。"
-                "本张局部视图不按整个资产的最终多视图卡误审。review_focus 可指定当前疑问；"
+                "可选镜头、明确选中的可用母版与候选固化的派生来源进行多模态语义检查。"
+                "review_focus 声明本次用途/疑问；叙事影响判断时可用 narrative_context 选择已保存场次与台词ID，"
+                "程序仅读取该场摘要与所选台词。自定实现条件放 implementation_preferences，不冒充用户要求。"
+                "本张局部视图不按整个资产的最终多视图卡误审。"
                 "regions 在同一次检查中追加候选/已声明参考的实际脸部、文字、部件裁图，"
                 "保留全图与真实像素范围，细节不足应报告未观察。"
                 "仅需裁切且边界可见时，crop_suggestion 可在同次观察给出候选的归一化region、"

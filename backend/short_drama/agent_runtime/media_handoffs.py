@@ -40,6 +40,22 @@ def _strings(values: list[JsonValue]) -> set[str]:
     return {value for value in values if isinstance(value, str) and value}
 
 
+def asset_inspection_scope(request: JsonValue) -> dict[str, JsonValue]:
+    """Normalize optional defaults without dropping unknown or selected scope."""
+    scope: dict[str, JsonValue] = {
+        "shot_id": None, "canonical_reference_version_ids": [], "review_focus": None, "regions": [],
+        **(request if isinstance(request, dict) else {}),
+    }
+    narrative = scope.get("narrative_context")
+    if narrative is None:
+        scope.pop("narrative_context", None)
+    elif isinstance(narrative, dict):
+        scope["narrative_context"] = {"dialogue_line_ids": [], **narrative}
+    if scope.get("implementation_preferences") == []:
+        scope.pop("implementation_preferences")
+    return scope
+
+
 def _observation(
     work: WorkOrder, turn: SpecialistTurnRecord, project_id: str,
 ) -> tuple[str, dict[str, JsonValue], set[str], list[ArtifactRef]] | None:
@@ -59,11 +75,10 @@ def _observation(
         asset_id, version_id = args.get("asset_id"), args.get("version_id")
         if not isinstance(version_id, str) or not version_id:
             return None
-        scope: dict[str, JsonValue] = {
-            "shot_id": None, "canonical_reference_version_ids": [], "review_focus": None, "regions": [],
-            **request,
-        }
-        identity: JsonValue = [turn.tool_name, asset_id, version_id, scope, "pending" if pending else "saved"]
+        scope = asset_inspection_scope(request)
+        identity: JsonValue = [turn.tool_name, asset_id, version_id, scope,
+                               output.get("narrative_context") if success else None,
+                               "pending" if pending else "saved"]
         body: dict[str, JsonValue] = {"kind": "image_inspection", "asset_id": asset_id,
             "asset_version_id": version_id, "scope": scope, "result": output if success else None}
         reference_ids = scope.get("canonical_reference_version_ids")

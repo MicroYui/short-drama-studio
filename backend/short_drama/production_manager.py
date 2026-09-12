@@ -76,7 +76,7 @@ from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
     BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result, project_leader_completion_actions,
 )
-from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
+from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, asset_inspection_scope, observed_media_handoffs
 from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
 from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
 from short_drama.studio_trace import record_trace, trace_context
@@ -3488,13 +3488,10 @@ def _fold_specialist_entities(
             # Compare the actual selected inspection scope, not inferred topic
             # names. Explicit defaults are equivalent; ordered references and
             # detail regions remain significant. Future request fields survive.
-            scope: dict[str, JsonValue] = {
-                "shot_id": None, "canonical_reference_version_ids": [],
-                "review_focus": None, "regions": [],
-                **(request if isinstance(request, dict) else {}),
-            }
+            scope = asset_inspection_scope(request)
             key = ("asset_review", json.dumps([
                 arguments.get("project_id"), arguments.get("asset_id"), version_id, scope,
+                output.get("narrative_context"),
             ], ensure_ascii=False, sort_keys=True))
             prior = entities.get(key)
             # Keep short display identities, while the private dictionary key
@@ -3521,7 +3518,7 @@ def _fold_specialist_entities(
                     "summary": output.get("summary"),
                     "issues": output.get("issues"),
                     "evidence_references": output.get("evidence_references"),
-                    **{field: output[field] for field in ("candidate_output_layout", "region_evidence")
+                    **{field: output[field] for field in ("candidate_output_layout", "region_evidence", "narrative_context")
                        if field in output},
                     **({"crop_suggestion": output["crop_suggestion"]}
                        if output.get("crop_suggestion") is not None else {}),

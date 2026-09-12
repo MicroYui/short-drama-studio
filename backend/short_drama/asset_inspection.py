@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import Field, ValidationError, field_validator, model_validator
@@ -93,12 +93,58 @@ class AssetEditGuideSuggestion(DomainModel):
         description="Runtime-attached exact candidate. Return null; never choose another reference as edit source.")
 
 
+class AssetInspectionNarrativeContext(DomainModel):
+    """Explicit selectors into the current saved script, not caller-authored evidence."""
+
+    scene_id: str = Field(min_length=1)
+    dialogue_line_ids: list[str] = Field(default_factory=list[str], max_length=12,
+        description="Exact line IDs belonging to this scene. Only these lines and its summary are read; omit lines when the summary is sufficient.")
+
+    @field_validator("dialogue_line_ids")
+    @classmethod
+    def unique_line_ids(cls, value: list[str]) -> list[str]:
+        if any(not line_id for line_id in value) or len(set(value)) != len(value):
+            raise ValueError("narrative_context.dialogue_line_ids cannot contain empty or duplicate IDs")
+        return value
+
+
+class AssetInspectionSceneEvidence(DomainModel):
+    id: str
+    heading: str
+    summary: str
+
+
+class AssetInspectionLineEvidence(DomainModel):
+    id: str
+    speaker: str
+    spoken_text: str
+
+
+class AssetInspectionNarrativeEvidence(DomainModel):
+    """Runtime-resolved saved content attached to the observation and its input."""
+
+    project_id: str
+    script_version_id: str
+    script_version: int
+    scene: AssetInspectionSceneEvidence
+    lines: list[AssetInspectionLineEvidence]
+
+
+class AssetInspectionContextError(ValueError):
+    """An explicit narrative selector cannot be resolved locally."""
+
+
+ImplementationPreference = Annotated[str, Field(min_length=1, max_length=500)]
+
+
 class SemanticAssetReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue], max_length=16)
     summary: str = Field(min_length=1, max_length=3000)
     review_focus: str | None = None
+    narrative_context: AssetInspectionNarrativeEvidence | None = None
+    implementation_preferences: list[ImplementationPreference] = Field(default_factory=list[ImplementationPreference], max_length=8)
     candidate_output_layout: AssetLayoutProfile | None = None
     region_evidence: list[AssetInspectionRegionEvidence] = Field(
         default_factory=list[AssetInspectionRegionEvidence], max_length=6,
@@ -164,7 +210,8 @@ def _asset_review_output_schema(
     """
     schema = SemanticAssetReview.model_json_schema()
     properties = schema["properties"]
-    for field in ("review_focus", "candidate_output_layout", "region_evidence", "evidence_references"):
+    for field in ("review_focus", "narrative_context", "implementation_preferences",
+                  "candidate_output_layout", "region_evidence", "evidence_references"):
         properties.pop(field)
     definitions = schema.pop("$defs", {})
     definitions["AssetCropSuggestion"]["properties"].pop("source")
@@ -225,7 +272,11 @@ class AssetVersionInspectionRequest(DomainModel):
         ),
     )
     review_focus: str | None = Field(default=None, min_length=1, max_length=2000,
-        description="Current intended use and unresolved visual questions. Distinguish required story/identity/continuity from optional framing preferences; do not add constraints just to make the inspection exhaustive.")
+        description="Current intended use and unresolved visual questions. Use narrative_context for saved story evidence, shot_id for the current shot, and implementation_preferences for adjustable self-chosen means; this text alone does not establish user requirements.")
+    narrative_context: AssetInspectionNarrativeContext | None = Field(default=None,
+        description="Optional exact saved scene/line selectors when story causality or prop meaning affects this review. Runtime reads the current scene summary and selected lines, never the whole screenplay; unknown or mismatched IDs fail before the model call.")
+    implementation_preferences: list[ImplementationPreference] = Field(default_factory=list[ImplementationPreference], max_length=8,
+        description="Optional adjustable choices introduced by the Agent's image-making plan, such as equal door widths. Not user requirements or permission to ignore saved story, identity, physical structure or adopted continuity. Leave empty when irrelevant.")
     regions: list[AssetInspectionRegion] = Field(
         default_factory=list[AssetInspectionRegion], max_length=6,
         description=(
@@ -767,6 +818,39 @@ def analyze_source_image(
     return SemanticSourceImageAnalysis.model_validate_json(_strip_json_fence(output))
 
 
+def resolve_asset_inspection_narrative_context(
+    document: ProjectDocument, selection: AssetInspectionNarrativeContext | None,
+) -> AssetInspectionNarrativeEvidence | None:
+    """Resolve only explicit scene/line IDs from one current document snapshot."""
+    if selection is None:
+        return None
+    script = next((item for item in document.script_versions
+                   if item.id == document.project.current_script_version_id), None)
+    if script is None:
+        raise AssetInspectionContextError("narrative_context: current saved ScriptVersion is missing")
+    scene = next((item for item in script.structured_scenes if item.id == selection.scene_id), None)
+    if scene is None:
+        raise AssetInspectionContextError(
+            f"narrative_context.scene_id {selection.scene_id!r} is not in current script {script.id}")
+    if scene.id in script.structure_stale_scene_ids:
+        raise AssetInspectionContextError(
+            f"narrative_context.scene_id {scene.id!r} has stale structure in script {script.id}; read current scene before selecting its lines")
+    selected = set(selection.dialogue_line_ids)
+    by_id = {line.id: line for line in script.lines}
+    invalid = [line_id for line_id in selection.dialogue_line_ids
+               if line_id not in scene.line_ids or line_id not in by_id]
+    if invalid:
+        raise AssetInspectionContextError(
+            f"narrative_context.dialogue_line_ids {invalid!r} do not resolve in scene {scene.id!r} of current script {script.id}")
+    return AssetInspectionNarrativeEvidence(
+        project_id=document.project.id, script_version_id=script.id, script_version=script.version,
+        scene=AssetInspectionSceneEvidence(id=scene.id, heading=scene.heading, summary=scene.summary),
+        lines=[AssetInspectionLineEvidence(id=line_id, speaker=by_id[line_id].speaker,
+                                           spoken_text=by_id[line_id].spoken_text)
+               for line_id in scene.line_ids if line_id in selected],
+    )
+
+
 def inspect_asset_image(
     *,
     document: ProjectDocument,
@@ -781,6 +865,7 @@ def inspect_asset_image(
     request: AssetVersionInspectionRequest | None = None,
 ) -> SemanticAssetReview:
     request = request or AssetVersionInspectionRequest()
+    narrative_context = resolve_asset_inspection_narrative_context(document, request.narrative_context)
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_VERIFIER,),
@@ -865,10 +950,15 @@ def inspect_asset_image(
         "不要把多个不同参考状态合并，也不要因总体 brief 只列固定正文而忽略明确选中的状态姓名；"
         "目标状态未明确时记录缺少依据，不自行推断。"
         "生成prompt是意图，不是已观察事实。先说明真实可见的身份、轮廓、空间或文字，再比较要求。"
-        "本次review_focus与当前ShotPlan明确了现在要承担的用途；原生成prompt还保留最初采用的实现方案。"
-        "例如本次仅取人物近景时，原prompt额外写的完整双肩不自动成为新用途的否决条件。"
-        "对原方案的偏离如实记录，并说明是否影响当前用途；recommended针对当前声明用途，"
-        "不是对生成prompt每句描述的机械打分。不能借缩小review_focus隐藏用户要求、身份变化、"
+        "review_focus是调用者声明的本次用途和疑问，不因写入其中就成为用户硬要求。"
+        "narrative_context若存在，是运行时按明确ID读取的当前场次摘要及选定台词；"
+        "当前ShotPlan、已保存叙事与用户明确要求仍是依据，摘要不证明未给出的全文细节。"
+        "implementation_preferences和原生成prompt保留Agent自定的实现方案，不自动升级为不可改叙事。"
+        "先报告可见差异，再结合保存依据说明它是否影响身份、物理结构、因果或当前用途；"
+        "只偏离自定方案时说明取舍，不据此机械否决，也不隐藏差异。"
+        "依据缺失或互相冲突时明确未知及冲突，不能猜称用户允许或已批准调整。"
+        "recommended针对当前声明用途，不是对生成prompt每句描述的机械打分。"
+        "不能借缩小review_focus或把条件列为偏好隐藏用户要求、身份变化、"
         "当前ShotPlan明确要求可见的关系或已采用媒体的连续性矛盾；这些仍须处理。"
         "细节区域与原图属于同一证据，不是不同身份或新增参考。小脸、细小文字和部件看不清时明确未观察，"
         "不能用总分或同色服装代替身份比对；记录哪个部位和下游用途仍缺可见依据。"
@@ -1054,6 +1144,10 @@ def inspect_asset_image(
         },
         "candidate_creation": creation,
         "review_focus": request.review_focus,
+        **({"narrative_context": narrative_context.model_dump(mode="json")}
+           if narrative_context is not None else {}),
+        **({"implementation_preferences": list(request.implementation_preferences)}
+           if request.implementation_preferences else {}),
         "bible": next(
             item.model_dump(mode="json")
             for item in document.bible_versions
@@ -1182,6 +1276,8 @@ def inspect_asset_image(
         plane = None
     return result.model_copy(update={
         "review_focus": request.review_focus, "candidate_output_layout": output_layout,
+        "narrative_context": narrative_context,
+        "implementation_preferences": list(request.implementation_preferences),
         "region_evidence": detail_evidence, "crop_suggestion": suggestion,
         "edit_guide_suggestion": edit_guide,
         "plane_composite_suggestion": plane,

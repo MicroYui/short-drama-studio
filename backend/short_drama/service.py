@@ -30,6 +30,7 @@ from short_drama.asset_workbench import (
     default_image_provider_factory,
 )
 from short_drama.asset_inspection import (
+    AssetInspectionContextError,
     AssetInspectionReference,
     AssetInspectionReferenceSource,
     AssetVersionInspectionRequest,
@@ -11515,6 +11516,8 @@ class ShortDramaService:
                 generation_task=generation_task,
                 request=request,
             )
+        except AssetInspectionContextError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         except (LanguageProviderError, ValueError) as exc:
             raise ProviderOperationError(str(exc)) from exc
 
