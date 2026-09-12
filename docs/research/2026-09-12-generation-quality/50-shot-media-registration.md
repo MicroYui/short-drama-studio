@@ -56,3 +56,13 @@ AssetPlan 继续复用已有字段合并保护：不同 item、不同明确 work
 ```
 
 当前只证明一次调用能够表达并原子保存这三处已确定内容；没有真实模型重新运行，因此不声称已减少实际总 tokens、语言次数或耗时。用户选用判断、图像质量判断、不同素材或尚未确定用途仍应由 Agent 根据任务分别处理。
+
+## 整合后的计划状态投影接缝
+
+整合提交 `71db175` 的集中只读检查发现：`fold_asset_plan_items` 原先把组合回执的 `current_state` 全部复制进 `asset_plan_state`。其中的 `saved_shot`、引用预览和媒体登记是 Shot 的事实。后续普通镜头保存只更新独立 Shot 状态，计划实体却仍携带上一份镜头摘要。纯内存交错重放确认了计划版本 19 正确、两份 QA 范围仍在，但计划实体内的镜头 revision 1 与最新回执的 revision 2 同时出现。该问题来自整合检查，不是宣称真实调试任务又触发了同样错误。
+
+修正仅在独立分支 `codex/shot-media-plan-context` 的计划模型投影中进行。已核对五个直接 AssetPlan 写 handler 均使用 `asset_plan_write_receipt`，retry 原样透传内层回执；当前计划状态包含 `project_id`、`asset_plan_identity`、`base_asset_plan_identity`、`sources_changed` 和 `execution_contract`。历史兼容适配还支持 `operation`、`base_version_id`、`item_count`、`work_item_count` 和 `notes_updated`。投影保留这十个字段的原值，同时作用于新回执和相同版本的先前状态，避免旧混入字段继续残留。
+
+公开 Tool 回执、持久 SpecialistTurn/Trace、计划 changed_ids 和原项级保留判断都未修改。完整 `saved_shot` 与 `media_registration` 仍在原保存回执；当前镜头由其独立实体/最新回执负责。QA 继续按精确图像、范围和来源分别保留，本次不改其分页或回读机制。
+
+新增九项回归先红后绿：实际 Registry 组合登记、随后普通镜头保存、持久 Worker 重启后的实际模型输入；全部七个计划写入口的当前/历史字段逐值保留；四份实际 QA 回执与组合登记交错后的精确范围、建议坐标、attempt 引用和原记录保持不变。新测试与既有计划回执、QA 范围、Shot 保存回执及组合登记的 Worker 输入回归合计 **54 passed / 25.38 秒**；修改源文件 Pyright **0 errors / 0 warnings**。最终局部独立只读复核通过。没有调用真实模型/Provider，没有修改运行数据，不据此声称端到端性能提升。

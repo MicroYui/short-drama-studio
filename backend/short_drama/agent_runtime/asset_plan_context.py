@@ -24,6 +24,20 @@ class EntitySnapshot(Protocol):
 EntityT = TypeVar("EntityT", bound=EntitySnapshot)
 
 
+# Current AssetPlan write receipts plus the summary fields retained by the
+# legacy receipt adapter. A compound Shot save also has Shot/media facts;
+# those belong to its receipt and Shot entities, not this plan's current state.
+_PLAN_STATE_FIELDS = frozenset({
+    "project_id", "asset_plan_identity", "base_asset_plan_identity",
+    "sources_changed", "execution_contract", "operation", "base_version_id",
+    "item_count", "work_item_count", "notes_updated",
+})
+
+
+def _plan_state(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    return {key: deepcopy(item) for key, item in value.items() if key in _PLAN_STATE_FIELDS}
+
+
 def asset_work_read_is_stale(
     tool_name: str, result: Mapping[str, JsonValue], *, known_versions: Mapping[str, int],
 ) -> bool:
@@ -68,11 +82,11 @@ def fold_asset_plan_items(
         saved_state = receipt_value.get("current_state") if isinstance(receipt_value, dict) else None
         prior = entities.get(("asset_plan_state", document_id))
         state_value: dict[str, JsonValue] = (
-            deepcopy(prior.state) if prior is not None and prior.state.get("asset_plan_identity") == identity
+            _plan_state(prior.state) if prior is not None and prior.state.get("asset_plan_identity") == identity
             else {"asset_plan_identity": deepcopy(identity)}
         )
         if isinstance(saved_state, dict):
-            state_value.update(deepcopy(saved_state))
+            state_value.update(_plan_state(saved_state))
         elif isinstance(output.get("execution_contract"), dict):
             state_value["execution_contract"] = deepcopy(output["execution_contract"])
         entities[("asset_plan_state", document_id)] = entity_type(
