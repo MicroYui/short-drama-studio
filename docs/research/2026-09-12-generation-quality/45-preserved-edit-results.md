@@ -35,3 +35,17 @@ batch 11 的 `AssetWorkbench._land_provider_output` 将 Provider bytes 写入 st
 08:34:11.037，首张新 masked EDIT `image-task-33a413244a5f` 完成。原 primary 为 `asset-version-5890dc977e57`，mask 为 `asset-version-a35c45cddfad`，feather=8；新候选为 `asset-version-a826f7a3cbf2`，用于 s12 的空白纸面与手腕中间图。任务实际记录 `.provider-output/image-task-33a413244a5f.png`，文件为 1440×2560 PNG、4,548,283 bytes。只读像素核对确认原结果与最终局部合成结果不同，原遮罩中 1,851,854 个完全受保护像素在最终图中零变化。核对记录保存于忽略输出目录 `observations/first-real-preserved-edit.json`。这证明新真实 Provider 结果确实在合成前独立留存，未为核对重发 Provider；它不证明 Provider 原图比最终图更好。
 
 此时新图尚未由产品 QA 检查，也尚未调用 `image.derive_edit_result` 派生。预览能看到两张空白纸、右手裸笔、左手及唯一笔帽；准确文字与后续镜头用途仍待产品处理。不能把中间图或文件留存当作该镜头最终通过。08:36:37.168 原调试任务进入 paused，34 个图片任务、零视频任务和零 Take，准备统一加载下一轮本地采样修复。
+
+## 首次真实派生与后续判断
+
+08:56:51，收尾工单 t48 对上述局部合成图检查为 2.5／不推荐：左臂入画方向错误、南侧纸张移位，笔帽周围还有矩形遮罩拼缝。Agent 随后选择 `PROVIDER_OUTPUT`，08:57:36.199 保存 `asset-version-2428cdc56872`（会议室 v37），t49 Tool 实际耗时 1.11738 秒。新文件与任务 `image-task-33a413244a5f` 留存的 4,548,283 bytes 原图逐字节一致，PNG 为 1440×2560、EXIF 方向 1；派生窗口内图片任务数仍为 35，没有新增 Provider 调用。当前后来增加到 36 个任务属于别的制作操作，不能归到本次派生。
+
+新派生为 DRAFT、`image_task_id=None`，来源保留实际原任务与请求；原任务的输出仍为 `asset-version-a826f7a3cbf2`。返回时和独立读取时 current 均为 `asset-version-7e083c4a5ba7`、approved 均为 `asset-version-d42fba8ad6bb`，镜头和参考集也没有自动引用 v37。核对保存在忽略输出目录 `observations/first-real-derive-edit-result.json`。
+
+09:00:31，t50 对原图仍判断 2.5／不推荐，且正确区分两类问题：原图的帽周木纹自然，笔尖和纸边比局部合成结果完整，说明这些差异来自本地保留边界；但原图自身的左臂仍从左下入画，南侧纸张也已移动，不能仅靠扩大遮罩补出正确臂向。独立实图对照与该判断一致。此次真实调用验证了原结果复用和问题定位，没有把功能跑通误记成该底图已合格。
+
+随后 s01 提供了不同的实际结果：任务 `image-task-9afed9b27894` 的原图派生 `asset-version-84ce65cf3ade`（v39）确有完整小指和圆润指端，旧合成 `asset-version-7e083c4a5ba7` 的遮罩右斜边穿过该轮廓，将其截成尖褐片。09:04:47 的 QA 为 4.6，但推荐范围明确仅是“局部取像素源”，未把全图或缺文字的中间图当作完成品。
+
+Agent 根据本次重新观察的轮廓建立新 mask `asset-version-d37db8a6ab46`，09:06:38 实际 `MASKED_COMPOSITE` 派生 `asset-version-f51918f60fce`（v42），feather=3，耗时 2.628319 秒，复用同一任务的原始像素。独立看图确认完整指端恢复、尖褐片消失、袖腕连接连续；3,606,046 个遮罩外像素变化为零，current 仍为旧 `7e083c4a5ba7`。新图检查尚待完成，准确纸面标题与正文仍是明确的后续步骤；不将手部重合成成功当作该镜头已验收。记录见 `observations/s10-whitepoint-and-s01-raw-repair-review.json`。
+
+09:13:50，该重合成的首次实际QA返回3.8／不推荐，明确唯一缺项是纸面标题和正文尚待恢复，已修好的五指、袖腕和接触关系可以保留，不要求再生手部。09:14:32，Agent仅作本地平面合成，形成v44 `asset-version-bcadd22eb794`；09:17:21 QA为4.3／推荐，限定为第1镜0秒静态动作参考。独立查看整图与纸面裁图，确认手指完整，纸内文字和双空栏已经出现，但白色贴片及周边灰紫边带仍明显可见。工具复用避免了新一次手部生成，尚不能据此宣称图片局部修复整体成熟。
