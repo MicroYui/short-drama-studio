@@ -61,6 +61,15 @@ class SkillProvenanceKind(StrEnum):
     UPSTREAM_COMMUNITY_WITH_ADAPTER = "UPSTREAM_COMMUNITY_WITH_ADAPTER"
 
 
+class MethodCategory(StrEnum):
+    CREATIVE = "creative"
+    ANALYSIS = "analysis"
+    IMAGE = "image"
+    AUDIO = "audio"
+    SOFTWARE = "software"
+    MAINTENANCE = "maintenance"
+
+
 @dataclass(frozen=True)
 class ProductionSkill:
     profile: ProductionProfile
@@ -107,6 +116,8 @@ class ComposableProductionSkill:
     provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
     upstream_sources: tuple[str, ...] = ()
     user_overridable: bool = True
+    category: MethodCategory = MethodCategory.CREATIVE
+    requirements: tuple[str, ...] = ()
 
     def supports(self, role: ProductionSkillRole) -> bool:
         return role in self.role_prompts
@@ -148,6 +159,8 @@ class ProductionMethodSkillDescriptor:
     provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
     upstream_sources: tuple[str, ...] = ()
     user_overridable: bool = True
+    category: MethodCategory = MethodCategory.CREATIVE
+    requirements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

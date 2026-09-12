@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 核对功能主张有依据，品牌图形准确，画面没有遮住关键证明，声音与文字传达同一重点。
-
-## 来源
-
-参考MiniMax-H3 收录的品牌宣传方法，原作者为 MiniMax Hub（官方精选），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/brand-promo-video-generator/meta.yaml)。

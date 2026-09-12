@@ -82,12 +82,12 @@ def _copy_skill_tree(tmp_path: Path) -> Path:
     return copied_root / "methods"
 
 
-def test_method_catalog_contains_only_the_upstream_role_scoped_adapters() -> None:
+def test_method_catalog_keeps_existing_adapters_and_loads_added_methods() -> None:
     loaded = load_production_method_skills()
     catalog = production_method_skill_catalog()
 
-    assert {skill.id for skill in loaded} == OFFICIAL_MINIMAX_METHOD_IDS
-    assert {descriptor.id for descriptor in catalog} == OFFICIAL_MINIMAX_METHOD_IDS
+    assert OFFICIAL_MINIMAX_METHOD_IDS <= {skill.id for skill in loaded}
+    assert {descriptor.id for descriptor in catalog} == {skill.id for skill in loaded}
     assert all(descriptor.description for descriptor in catalog)
     assert all(descriptor.supported_roles for descriptor in catalog)
     assert all(
@@ -99,11 +99,12 @@ def test_method_catalog_contains_only_the_upstream_role_scoped_adapters() -> Non
     )
     assert {
         descriptor.id: descriptor.provenance for descriptor in catalog
+        if descriptor.id in OFFICIAL_MINIMAX_METHOD_IDS
     } == EXPECTED_METHOD_PROVENANCE
     assert all(descriptor.upstream_sources for descriptor in catalog)
     assert all(descriptor.user_overridable for descriptor in catalog)
     skill_paths = tuple(DEFAULT_PRODUCTION_METHOD_SKILLS_ROOT.glob("*/SKILL.md"))
-    assert len(skill_paths) == len(OFFICIAL_MINIMAX_METHOD_IDS)
+    assert len(skill_paths) == len(catalog)
     for skill_path in skill_paths:
         assert "trigger-words" not in skill_path.read_text(encoding="utf-8")
 
@@ -416,16 +417,16 @@ def test_shared_method_guidance_is_once_across_methods_and_roles() -> None:
         ["method.drama_series", "method.brand_promo"],
         roles=[ProductionSkillRole.CONCEPT, ProductionSkillRole.PLANNER],
     )
-    assert text.count("这里同时服务两层来源方法") == 1
-    assert text.count("上游原文提供成熟的制片经验") == 1
+    assert text.count("按当前角色与阶段读取相关方法") == 1
+    assert text.count("方法提供可选择的制片经验") == 1
     assert "## 创作大纲" in text
-    assert "上游原文提供成熟的制片经验" in text[text.index("## 创作大纲"):]
+    assert "方法提供可选择的制片经验" in text[text.index("## 创作大纲"):]
 
 
 def test_method_manifest_round_trip_preserves_existing_ids(tmp_path: Path) -> None:
     copied_root = _copy_skill_tree(tmp_path)
     methods = load_production_method_skills(copied_root)
-    assert {method.id for method in methods} == OFFICIAL_MINIMAX_METHOD_IDS
+    assert {method.id for method in methods} == {item.id for item in production_method_skill_catalog()}
     source = copied_root / "drama_series" / "SKILL.md"
     assert max(map(len, source.read_text().splitlines()[:6])) < 200
     # A user's ordinary Markdown metadata override remains readable.

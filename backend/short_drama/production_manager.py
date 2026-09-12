@@ -9,6 +9,7 @@ structured delegation; it does not encode a fixed video-production workflow.
 from __future__ import annotations
 
 from short_drama.skill_ids import SkillIds, canonical_skill_ids
+from short_drama.skills.models import MethodCategory
 
 from short_drama.prompts import runtime_prompt
 
@@ -726,6 +727,8 @@ class AgentProductionMethodSkillDescriptor(DomainModel):
     provenance: SkillProvenanceKind
     upstream_sources: list[str]
     user_overridable: bool = True
+    category: MethodCategory = MethodCategory.CREATIVE
+    requirements: list[str] = Field(default_factory=list[str])
 
 
 class AgentCapabilityCatalog(DomainModel):
@@ -1095,6 +1098,8 @@ def _agent_method_skill_descriptor(
         provenance=descriptor.provenance,
         upstream_sources=list(descriptor.upstream_sources),
         user_overridable=descriptor.user_overridable,
+        category=descriptor.category,
+        requirements=list(descriptor.requirements),
     )
 
 
@@ -1641,6 +1646,8 @@ class LanguageProductionPlanner:
                             role.value for role in item.supported_roles
                         ],
                         "user_overridable": item.user_overridable,
+                        "category": item.category.value,
+                        "requirements": item.requirements,
                     }
                     for item in method_skills
                 ],

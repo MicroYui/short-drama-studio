@@ -1,0 +1,58 @@
+{
+  "id": "method.ecommerce_images",
+  "label": "商品组图与电商视觉",
+  "description": "根据商品实拍和销售用途制作主图、场景图、细节图、多角度及详情配图，保持同一商品的结构、颜色和尺度。",
+  "category": "image",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::商品事实与图组规划"
+    ],
+    "PLANNER": [
+      "references/production-method.md::商品事实与图组规划"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::构图与图片制作"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::商品事实与图组规划",
+      "references/production-method.md::品类与尺度"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::品类与尺度",
+      "references/production-method.md::构图与图片制作"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::图组验收"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::图组验收"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::图组验收"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::图组验收"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/ecommerce-image/SKILL.md",
+    "sources/design_library/3.0.14/ecommerce-image/meta.yaml"
+  ],
+  "user_overridable": true
+}

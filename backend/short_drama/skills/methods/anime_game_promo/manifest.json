@@ -1,0 +1,73 @@
+{
+  "id": "method.anime_game_promo",
+  "label": "动漫与游戏宣传片",
+  "description": "围绕角色、战斗、剧情或世界观设计动漫和游戏宣传片，分别控制人物身份、画风、动作、文字及声音。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::宣传重点与画风"
+    ],
+    "WRITER": [
+      "references/production-method.md::宣传重点与画风"
+    ],
+    "PLANNER": [
+      "references/production-method.md::视觉分层",
+      "references/production-method.md::资产与视频"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::动作与空间",
+      "references/production-method.md::视觉分层"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产与视频",
+      "references/production-method.md::视觉分层"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产与视频",
+      "references/production-method.md::动作与空间"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::声音与检查"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::声音与检查"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::资产与视频",
+      "references/production-method.md::动作与空间"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::声音与检查"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::声音与检查"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::资产与视频",
+      "references/production-method.md::动作与空间"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/anime-game-pv/SKILL.md",
+    "sources/design_library/3.0.14/anime-game-pv/meta.yaml"
+  ],
+  "user_overridable": true
+}

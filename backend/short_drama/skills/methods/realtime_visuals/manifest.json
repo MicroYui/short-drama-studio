@@ -1,0 +1,58 @@
+{
+  "id": "method.realtime_visuals",
+  "label": "TouchDesigner 实时视觉",
+  "description": "为实时图形、交互和音画网络提供制作方法，区分输入、控制信号、反馈、三维渲染与输出。",
+  "category": "software",
+  "requirements": [
+    "TouchDesigner 与目标网络执行接口；当前产品未内置该连接器。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::输入与网络边界"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::按数据类型设计",
+      "references/production-method.md::反馈与运行检查"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::按数据类型设计"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::输入与网络边界",
+      "references/production-method.md::按数据类型设计",
+      "references/production-method.md::反馈与运行检查"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::导出与交付"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::导出与交付"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::导出与交付"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::反馈与运行检查",
+      "references/production-method.md::导出与交付"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/touchdesigner-workflow/SKILL.md",
+    "sources/design_library/3.0.14/touchdesigner-workflow/meta.yaml"
+  ],
+  "user_overridable": true
+}

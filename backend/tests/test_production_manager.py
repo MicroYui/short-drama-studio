@@ -3609,6 +3609,8 @@ def test_language_planner_semantically_selects_and_persists_method_skills(
             "description",
             "supported_roles",
             "user_overridable",
+            "category",
+            "requirements",
         }
         for item in planner_payload["available_production_methods"]
     )

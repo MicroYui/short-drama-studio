@@ -113,7 +113,7 @@ def test_official_method_prompts_end_with_local_execution_precedence() -> None:
     for method in load_production_method_skills():
         for role in method.role_prompts:
             role_prompt = compile_production_method_skill_prompt([method.id], roles=[role])
-            footer_index = role_prompt.rfind("上游原文提供成熟的制片经验")
+            footer_index = role_prompt.rfind("方法提供可选择的制片经验")
 
             assert footer_index >= 0
             assert "创作数值、方案数量、节奏比例、全局语速、重试次数是可选参考" in role_prompt[footer_index:]

@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/ad-tvc；MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 视频编译
 
 把本组产品、人物、环境和创意路线分别关联到真实选中的参考素材；品牌名、功能、对白、旁白和画内文字保留来源原文。创意视觉参考只贡献构图、色光、材质和空间关系，不能把资料板、标签或多格版式带进成片。每个参考只承担明确用途；缺少不用的参考不创建占位。

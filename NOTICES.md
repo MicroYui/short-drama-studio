@@ -9,7 +9,12 @@ references below document the retained upstream source, not enabled providers.
 
 - MiniMax-H3 public Skills: https://github.com/MiniMax-AI/skills . Original source
   notices remain in `backend/short_drama/skills/sources/minimax_h3/original/`.
-- MiniMax Design 3.0.11 Workflow text was obtained from the locally installed app.
+- MiniMax Design 3.0.11 Workflow text and the 19 locally installed Design 3.0.14
+  Skill packages were obtained from the local app and its Skill directory.
+  The latter's original text, reference documents and author metadata remain in
+  `backend/short_drama/skills/sources/design_library/3.0.14/`.
+  Runtime adapters use purpose-based names and scoped, locally adapted chapters;
+  the app's connector installers, host scripts and private runtime were not imported.
   These references have no confirmed public redistribution grant. The local
   development build is for this workspace; public distribution must obtain that
   grant or replace those references with material licensed for distribution.

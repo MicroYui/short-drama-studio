@@ -1,0 +1,70 @@
+{
+  "id": "method.visual_packaging",
+  "label": "动态字体与视觉包装",
+  "description": "为人物、产品或已有视频设计动态文字、追踪图形和手绘互动，建立图形与真实动作之间的关系。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::选择视觉载体"
+    ],
+    "WRITER": [
+      "references/production-method.md::字体与追踪"
+    ],
+    "PLANNER": [
+      "references/production-method.md::选择视觉载体",
+      "references/production-method.md::素材与编译"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::字体与追踪",
+      "references/production-method.md::手绘与实拍"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::素材与编译"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::字体与追踪",
+      "references/production-method.md::素材与编译"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::后期判断"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::后期判断"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::素材与编译"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::后期判断"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::后期判断"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::素材与编译"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/h3-visual-design/SKILL.md",
+    "sources/design_library/3.0.14/h3-visual-design/meta.yaml"
+  ],
+  "user_overridable": true
+}

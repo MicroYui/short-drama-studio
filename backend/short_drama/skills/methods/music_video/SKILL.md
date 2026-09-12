@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查音乐使用范围、身份与空间、切点、文字和收束；声音及同步判断依据实际音频。
-
-## 来源
-
-参考MiniMax Design 的音乐视频制作工作流，结合本产品的实际制作经验整理。原始资料与署名保留，见[来源资料](../../sources/minimax_design/3.0.11/workflows/mv/workflow.md)。

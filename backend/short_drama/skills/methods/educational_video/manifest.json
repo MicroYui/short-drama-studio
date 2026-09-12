@@ -1,0 +1,73 @@
+{
+  "id": "method.educational_video",
+  "label": "教学与科普视频",
+  "description": "把知识、教材或课程素材组织成可理解的讲解、例题与视频，用逐镜视觉证据说明概念，并保留学科准确性。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::学习目标与讲法"
+    ],
+    "WRITER": [
+      "references/production-method.md::讲稿与时间",
+      "references/production-method.md::学科检查与练习"
+    ],
+    "PLANNER": [
+      "references/production-method.md::学习目标与讲法",
+      "references/production-method.md::讲稿与时间"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::知识与视觉证据"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::教学资产"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::教学资产",
+      "references/production-method.md::知识与视觉证据"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::学科检查与练习"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::学科检查与练习",
+      "references/production-method.md::讲稿与时间"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::生成与后期"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::生成与后期",
+      "references/production-method.md::学科检查与练习"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::生成与后期",
+      "references/production-method.md::讲稿与时间"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::生成与后期"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/education-studio/SKILL.md",
+    "sources/design_library/3.0.14/education-studio/meta.yaml"
+  ],
+  "user_overridable": true
+}

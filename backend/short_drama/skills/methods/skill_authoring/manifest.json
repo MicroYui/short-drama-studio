@@ -1,0 +1,55 @@
+{
+  "id": "method.skill_authoring",
+  "label": "创作方法编写",
+  "description": "把可复用的制作经验整理成用途明确、按需读取的方法文档与角色章节；不会自动安装或修改运行代码。",
+  "category": "maintenance",
+  "requirements": [
+    "当前 Agent 可交付方法文档；安装或修改运行 Skill 文件需开发环境操作。"
+  ],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_BUILDER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::提炼有效方法"
+    ],
+    "WRITER": [
+      "references/production-method.md::入口与渐进读取"
+    ],
+    "PLANNER": [
+      "references/production-method.md::提炼有效方法",
+      "references/production-method.md::本项目的文件合同"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::入口与渐进读取"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::本项目的文件合同"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::验证与迭代"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::验证与迭代"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::验证与迭代"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/skill-creator/SKILL.md",
+    "sources/design_library/3.0.14/skill-creator/meta.yaml"
+  ],
+  "user_overridable": true
+}

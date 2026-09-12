@@ -8,7 +8,7 @@
 | --- | --- |
 | `../prompts/runtime/` | 共同原则、Leader/Worker 职责及输出协议，由运行时读取 |
 | `shared/roles/` | 剧本、分镜、资产、编译和检查职责，按当前角色加载 |
-| `methods/` | 以创作用途命名的 11 个方法；SKILL.md 供阅读，manifest 指定实际角色/阶段章节 |
+| `methods/` | 以用途命名的 27 个方法；SKILL.md 供阅读，manifest 指定实际角色/阶段章节 |
 | `formats/` | 短剧、动画、口播和通用视频的必要补充；Style 仍属于项目 |
 | `providers/minimax_h3/` | H3 专用输入模式、参数、引用顺序与提示词编译 |
 | `sources/` | 实际复用的方法原文、相关参考及译文；保留来源与作者归属，不作为额外方法重复展示 |
@@ -29,18 +29,36 @@
 | [歌词音乐视频](methods/lyric_video/SKILL.md) | `method.lyric_video` |
 | [纸张拼贴讲解](methods/paper_collage_explainer/SKILL.md) | `method.paper_collage_explainer` |
 | [纸艺定格讲解](methods/papercraft_stop_motion/SKILL.md) | `method.papercraft_stop_motion` |
+| [动漫与游戏宣传片](methods/anime_game_promo/SKILL.md) | `method.anime_game_promo` |
+| [Blender 建模与动画](methods/blender_workflow/SKILL.md) | `method.blender_workflow` |
+| [After Effects 动效与合成](methods/compositing_workflow/SKILL.md) | `method.compositing_workflow` |
+| [达人口播与产品测评](methods/creator_video/SKILL.md) | `method.creator_video` |
+| [商品组图与电商视觉](methods/ecommerce_images/SKILL.md) | `method.ecommerce_images` |
+| [教学与科普视频](methods/educational_video/SKILL.md) | `method.educational_video` |
+| [Photoshop 精修与排版](methods/image_editing_workflow/SKILL.md) | `method.image_editing_workflow` |
+| [Houdini 程序化场景](methods/procedural_3d/SKILL.md) | `method.procedural_3d` |
+| [TouchDesigner 实时视觉](methods/realtime_visuals/SKILL.md) | `method.realtime_visuals` |
+| [创作方法编写](methods/skill_authoring/SKILL.md) | `method.skill_authoring` |
+| [创作方法检查](methods/skill_review/SKILL.md) | `method.skill_review` |
+| [影视片头与标题设计](methods/title_sequence/SKILL.md) | `method.title_sequence` |
+| [产品界面与交互动效](methods/ui_motion/SKILL.md) | `method.ui_motion` |
+| [视频拆解与重制](methods/video_deconstruction/SKILL.md) | `method.video_deconstruction` |
+| [动态字体与视觉包装](methods/visual_packaging/SKILL.md) | `method.visual_packaging` |
+| [声音参考与音色复用](methods/voice_reference/SKILL.md) | `method.voice_reference` |
 
-目录名、Skill ID 和产品名称表达创作用途。上游归属继续保存在各方法的“来源”、manifest 的 `provenance` / `upstream_sources`、[来源说明](sources/README.md)及项目 NOTICES 中。H3 专用适配保留供应商名称。
+目录名、Skill ID 和产品名称表达用途；产品概览与运行章节不重复展示来源品牌。原始声明和归属集中保存在 sources、manifest 元数据及项目 NOTICES 中；实际 Provider 标识和旧 ID 兼容不改写。
+
+本次读取的 19 项资料对应 16 个新增方法及广告、MV、H3 三项更新。当前 27 项包括 17 项创作、1 项拆解、1 项图片、1 项声音、5 项软件工作流和 2 项方法维护。软件、声音克隆和运行文件安装的执行条件通过 `requirements` 同时提供给 Leader、Worker 与产品详情；未接入的工具不宣称可执行。
 
 ## 一次调用实际读取什么
 
 `loader._read_markdown` 读取独立 JSON manifest；`ComposableProductionSkill.prompt_for(role, stage)` 优先选择精确阶段片段。`production_profiles` 将多个方法共用的前言和后记按来源路径只注入一次，方法中间部分包含当前角色需要的知识。
 
-11 个方法的全部默认角色和阶段映射均指向本地运行章节，保留各方法的摄影、表演、资产、视觉、声音和剪辑知识；来源中的私有 Tool、固定确认轮次和不适用的时长/画幅要求不进入当前运行正文。实际组装检查覆盖 110 份默认角色正文与 770 个有效角色/阶段组合。体裁补充也遵循当前工作范围、明确选择的可用素材和当前编辑时间线，不要求先读取整份项目或取得素材批准标签。
+27 个方法的全部默认角色和阶段映射均指向本地运行章节，保留各方法的摄影、表演、资产、视觉、声音和剪辑知识；来源中的私有 Tool、固定确认轮次和不适用的时长/画幅要求不进入当前运行正文。原有 11 项检查保持；新增方法同样验证实际角色与阶段加载。体裁补充也遵循当前工作范围、明确选择的可用素材和当前编辑时间线，不要求先读取整份项目或取得素材批准标签。
 
-11 个方法的 `POST.DIRECTOR` 都有明确映射；后期导演使用 `shared/roles/post_director.md`，不回退加载分镜导演职责或体裁中的分镜补充。短剧 `VIDEO_PROMPT_COMPILER` 与 `VISUAL_GEN.DIRECTOR` 使用本地 `references/video-compilation.md` 的叙事、声音与真实边界方法；Design 的 H3 固定中文骨架保留在来源目录，但不再作为当前 API 的实际编译格式注入。当前 H3 Provider Skill 是唯一输出语法来源。
+27 个方法的 `POST.DIRECTOR` 都有明确映射；后期导演使用 `shared/roles/post_director.md`，不回退加载分镜导演职责或体裁中的分镜补充。短剧 `VIDEO_PROMPT_COMPILER` 与 `VISUAL_GEN.DIRECTOR` 使用本地 `references/video-compilation.md` 的叙事、声音与真实边界方法；Design 的 H3 固定中文骨架保留在来源目录，但不再作为当前 API 的实际编译格式注入。当前 H3 Provider Skill 是唯一输出语法来源。
 
-SKILL 正文统一为用途、输入、方法、交付、检查、来源六部分，供阅读，不会自动整篇注入所有角色。本地有效经验必须进入实际角色/阶段映射，例如短剧方法的 `references/project-adaptation.md`。产品方法页已提供方法概览、实际角色/阶段章节及来源说明；打开详情不改变方法选择。
+SKILL 正文说明用途、输入、方法、交付与检查；有外部依赖时列出执行条件。正文供阅读，不会自动整篇注入所有角色。本地有效经验必须进入实际角色/阶段映射，例如短剧方法的 `references/project-adaptation.md`。产品方法页提供分类、方法概览、实际角色/阶段章节及执行条件；打开详情不改变方法选择。完整来源资料与运行内容分开保存。
 
 ## 已清理内容与旧项目读取
 

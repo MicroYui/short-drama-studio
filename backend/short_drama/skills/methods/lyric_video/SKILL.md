@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 结合实际音频核对唱词和时间位置，检查文字对比、停留时间及画面中的遮挡关系。
-
-## 来源
-
-参考MiniMax-H3 收录的音乐视频字幕方法，原作者为 MiniMax Hub User（官方精选），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/music-video-subtitle-generator/meta.yaml)。

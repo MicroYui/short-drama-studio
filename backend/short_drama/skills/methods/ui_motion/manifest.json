@@ -1,0 +1,75 @@
+{
+  "id": "method.ui_motion",
+  "label": "产品界面与交互动效",
+  "description": "围绕真实界面和用户操作设计产品演示，以连续的交互、画面响应与镜头变化展示功能。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::产品视觉与事实"
+    ],
+    "WRITER": [
+      "references/production-method.md::产品视觉与事实",
+      "references/production-method.md::交互因果与运镜"
+    ],
+    "PLANNER": [
+      "references/production-method.md::节奏与可读性",
+      "references/production-method.md::素材与视频编译"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::交互因果与运镜",
+      "references/production-method.md::节奏与可读性"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::素材与视频编译"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::产品视觉与事实",
+      "references/production-method.md::素材与视频编译"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::验证与交付"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::验证与交付"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::素材与视频编译",
+      "references/production-method.md::交互因果与运镜"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::验证与交付",
+      "references/production-method.md::节奏与可读性"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::节奏与可读性",
+      "references/production-method.md::验证与交付"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::素材与视频编译",
+      "references/production-method.md::交互因果与运镜"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/ui-motion/SKILL.md",
+    "sources/design_library/3.0.14/ui-motion/meta.yaml"
+  ],
+  "user_overridable": true
+}

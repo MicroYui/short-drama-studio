@@ -1,0 +1,73 @@
+{
+  "id": "method.title_sequence",
+  "label": "影视片头与标题设计",
+  "description": "为电影、剧集或概念预告设计片头、片名和卡司序列，组织视觉母题、准确文字、镜头转场与声音落点。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::叙事母题"
+    ],
+    "WRITER": [
+      "references/production-method.md::叙事母题",
+      "references/production-method.md::文字与版式"
+    ],
+    "PLANNER": [
+      "references/production-method.md::叙事母题",
+      "references/production-method.md::资产分工"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::镜头与转场",
+      "references/production-method.md::文字与版式"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产分工"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产分工",
+      "references/production-method.md::文字与版式"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::资产分工",
+      "references/production-method.md::成片检查"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::视频与声音"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::成片检查"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::成片检查"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::成片检查",
+      "references/production-method.md::视频与声音"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::视频与声音"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/cinematic-title-sequence/SKILL.md",
+    "sources/design_library/3.0.14/cinematic-title-sequence/meta.yaml"
+  ],
+  "user_overridable": true
+}

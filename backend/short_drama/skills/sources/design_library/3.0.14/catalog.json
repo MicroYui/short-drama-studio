@@ -1,0 +1,135 @@
+[
+  {
+    "source": "cinematic-title-sequence",
+    "target": "methods/title_sequence",
+    "method_id": "method.title_sequence",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "education-studio",
+    "target": "methods/educational_video",
+    "method_id": "method.educational_video",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "video-deconstruct",
+    "target": "methods/video_deconstruction",
+    "method_id": "method.video_deconstruction",
+    "mode": "role_adapted",
+    "category": "analysis"
+  },
+  {
+    "source": "ecommerce-image",
+    "target": "methods/ecommerce_images",
+    "method_id": "method.ecommerce_images",
+    "mode": "role_adapted",
+    "category": "image"
+  },
+  {
+    "source": "h3-visual-design",
+    "target": "methods/visual_packaging",
+    "method_id": "method.visual_packaging",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "koc-video",
+    "target": "methods/creator_video",
+    "method_id": "method.creator_video",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "ui-motion",
+    "target": "methods/ui_motion",
+    "method_id": "method.ui_motion",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "anime-game-pv",
+    "target": "methods/anime_game_promo",
+    "method_id": "method.anime_game_promo",
+    "mode": "role_adapted",
+    "category": "creative"
+  },
+  {
+    "source": "blender-workflow",
+    "target": "methods/blender_workflow",
+    "method_id": "method.blender_workflow",
+    "mode": "role_adapted",
+    "category": "software"
+  },
+  {
+    "source": "design-after-effects",
+    "target": "methods/compositing_workflow",
+    "method_id": "method.compositing_workflow",
+    "mode": "role_adapted",
+    "category": "software"
+  },
+  {
+    "source": "design-photoshop",
+    "target": "methods/image_editing_workflow",
+    "method_id": "method.image_editing_workflow",
+    "mode": "role_adapted",
+    "category": "software"
+  },
+  {
+    "source": "houdini-workflow",
+    "target": "methods/procedural_3d",
+    "method_id": "method.procedural_3d",
+    "mode": "role_adapted",
+    "category": "software"
+  },
+  {
+    "source": "touchdesigner-workflow",
+    "target": "methods/realtime_visuals",
+    "method_id": "method.realtime_visuals",
+    "mode": "role_adapted",
+    "category": "software"
+  },
+  {
+    "source": "voice-clone",
+    "target": "methods/voice_reference",
+    "method_id": "method.voice_reference",
+    "mode": "role_adapted",
+    "category": "audio"
+  },
+  {
+    "source": "skill-creator",
+    "target": "methods/skill_authoring",
+    "method_id": "method.skill_authoring",
+    "mode": "role_adapted",
+    "category": "maintenance"
+  },
+  {
+    "source": "skill-reviewer",
+    "target": "methods/skill_review",
+    "method_id": "method.skill_review",
+    "mode": "role_adapted",
+    "category": "maintenance"
+  },
+  {
+    "source": "brand-ad",
+    "target": "methods/advertising",
+    "method_id": "method.advertising",
+    "mode": "merged",
+    "category": "creative"
+  },
+  {
+    "source": "cool-music-video",
+    "target": "methods/music_video",
+    "method_id": "method.music_video",
+    "mode": "merged",
+    "category": "creative"
+  },
+  {
+    "source": "h3-prompt-expert",
+    "target": "providers/minimax_h3",
+    "method_id": null,
+    "mode": "merged",
+    "category": "provider"
+  }
+]

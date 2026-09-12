@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 创意与连续实体
 
 把用户想表达的情绪变成发生在真实空间里的手绘事件。保留当前用户指定的地点、形象、颜色和故事，不为追求新奇替换已经选定的内容。需要原创方案时，可以从雨天水槽、阳台晾衣角、书店走廊、火车窗边小桌、手作台或温室通道等可连续追踪的生活空间出发。

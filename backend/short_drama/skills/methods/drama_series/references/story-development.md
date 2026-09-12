@@ -1,6 +1,6 @@
 # 短剧叙事与当前制作范围
 
-本地适配 MiniMax Design 3.0.11 drama-series 的 workflow、script-craft 与 production-plan 方法。来源原文保存在 skills/sources；这里保留叙事判断，改用本产品当前内容与自主执行协议。
+这里整理故事发展、剧本写作与制作规划的方法。来源原文保存在 skills/sources；这里保留叙事判断，改用本产品当前内容与自主执行协议。
 
 ## 创作大纲
 

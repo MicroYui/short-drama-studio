@@ -1,0 +1,57 @@
+{
+  "id": "method.procedural_3d",
+  "label": "Houdini 程序化场景",
+  "description": "为程序化建模、粒子、模拟与节点工程提供方法，区分几何、属性、时间、缓存及最终渲染。",
+  "category": "software",
+  "requirements": [
+    "Houdini、所需许可证与场景执行接口；当前产品未内置该连接器。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::绑定工程与能力"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::时间与模拟"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::节点与数据流"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::绑定工程与能力",
+      "references/production-method.md::节点与数据流",
+      "references/production-method.md::时间与模拟"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::检查与交付"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::检查与交付"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::检查与交付"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::时间与模拟",
+      "references/production-method.md::检查与交付"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/houdini-workflow/SKILL.md",
+    "sources/design_library/3.0.14/houdini-workflow/meta.yaml"
+  ],
+  "user_overridable": true
+}

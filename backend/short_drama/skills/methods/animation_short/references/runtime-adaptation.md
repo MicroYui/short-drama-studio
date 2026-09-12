@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/3d-animation-short-generator/SKILL.cn.md + references；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/3d-animation-short-generator/meta.yaml [source=community; author-en=MiniMax Hub User]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 视频编译
 
 把当前角色的比例、材质、轮廓和表演风格写清，并保持项目选定的渲染语言。动作按预备、发力、接触、余势或回弹描述；夸张程度由角色和情绪决定。场景地标、光向、角色视线与道具位置从当前镜头和真实参考取得。

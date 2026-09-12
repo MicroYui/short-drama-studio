@@ -20,17 +20,20 @@
   "role_source_sections": {
     "CONCEPT": [
       "references/production-method.md::创意与内容依据",
-      "references/production-method.md::视觉系统与歌曲展开"
+      "references/production-method.md::视觉系统与歌曲展开",
+      "references/performance-space-and-typography.md::音乐与表演关系"
     ],
     "PLANNER": [
-      "references/production-method.md::主音乐与制作规划"
+      "references/production-method.md::主音乐与制作规划",
+      "references/performance-space-and-typography.md::音乐与表演关系"
     ],
     "REVISION_VERIFIER": [
       "references/production-method.md::当前范围验收"
     ],
     "DIRECTOR": [
       "references/production-method.md::分镜与空间表演",
-      "references/production-method.md::字体与空间包装"
+      "references/production-method.md::字体与空间包装",
+      "references/performance-space-and-typography.md::空间母题与歌词文字"
     ],
     "ASSET_REVIEWER": [
       "references/production-method.md::资产检查"
@@ -39,7 +42,8 @@
       "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "references/runtime-adaptation.md::后期判断"
+      "references/runtime-adaptation.md::后期判断",
+      "references/performance-space-and-typography.md::主音轨与编辑检查"
     ],
     "WRITER": [
       "references/production-method.md::歌词与内容写作"
@@ -48,7 +52,8 @@
       "references/production-method.md::资产规划"
     ],
     "ASSET_BUILDER": [
-      "references/production-method.md::资产制作"
+      "references/production-method.md::资产制作",
+      "references/performance-space-and-typography.md::空间母题与歌词文字"
     ],
     "ASSET_VERIFIER": [
       "references/production-method.md::资产检查"
@@ -57,13 +62,15 @@
   "provenance": "OFFICIAL_ORIGINAL_WITH_ADAPTER",
   "upstream_sources": [
     "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/mv",
-    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared"
+    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared",
+    "sources/design_library/3.0.14/cool-music-video/meta.yaml"
   ],
   "user_overridable": true,
   "stage_role_source_sections": {
     "POST.DIRECTOR": [
       "../../shared/methods/post.md::当前作品与最小修复",
-      "references/runtime-adaptation.md::后期判断"
+      "references/runtime-adaptation.md::后期判断",
+      "references/performance-space-and-typography.md::主音轨与编辑检查"
     ],
     "POST.REVISION_VERIFIER": [
       "../../shared/methods/post.md::当前作品与最小修复",

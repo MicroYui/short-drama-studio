@@ -11,6 +11,7 @@ from short_drama.models import ProductionProfile
 from short_drama.skills.models import (
     ComposableProductionSkill,
     LEGACY_ROLE_FILE_ALIASES,
+    MethodCategory,
     ProviderPromptSkill,
     ProductionPromptStage,
     ProductionSkill,
@@ -640,6 +641,8 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
             default=True,
             path=skill_path,
         ),
+        category=MethodCategory(metadata.get("category", MethodCategory.CREATIVE.value)),
+        requirements=_optional_string_list(metadata, "requirements", path=skill_path),
     )
 
 

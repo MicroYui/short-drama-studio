@@ -3201,6 +3201,8 @@ export interface components {
         };
         /** AgentProductionMethodSkillDescriptor */
         AgentProductionMethodSkillDescriptor: {
+            /** @default creative */
+            category: components["schemas"]["MethodCategory"];
             /** Description */
             description: string;
             /** Id */
@@ -3208,6 +3210,8 @@ export interface components {
             /** Label */
             label: string;
             provenance: components["schemas"]["SkillProvenanceKind"];
+            /** Requirements */
+            requirements?: string[];
             /** Supported Roles */
             supported_roles: components["schemas"]["ProductionSkillRole"][];
             /** Upstream Sources */
@@ -8361,6 +8365,11 @@ export interface components {
             thumbnail?: string | null;
         };
         /**
+         * MethodCategory
+         * @enum {string}
+         */
+        MethodCategory: "creative" | "analysis" | "image" | "audio" | "software" | "maintenance";
+        /**
          * MockBehavior
          * @enum {string}
          */
@@ -12412,6 +12421,8 @@ export interface components {
         };
         /** StudioMethodDetail */
         StudioMethodDetail: {
+            /** @default creative */
+            category: components["schemas"]["MethodCategory"];
             /** Description */
             description: string;
             /** Id */
@@ -12422,6 +12433,8 @@ export interface components {
             principles: string;
             /** Provenance */
             provenance: string;
+            /** Requirements */
+            requirements?: string[];
             /** Sections */
             sections: components["schemas"]["StudioMethodSection"][];
             /** Upstream Sources */

@@ -12,14 +12,16 @@
     "ASSET_VERIFIER",
     "ASSET_REVIEWER",
     "VIDEO_PROMPT_COMPILER",
-    "EPISODE_REVIEWER"
+    "EPISODE_REVIEWER",
+    "WRITER"
   ],
   "shared_role_prompt": "../../shared/official_task_method_role.md",
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
       "references/production-method.md::简报与传播证明",
-      "references/production-method.md::创意与风格判断"
+      "references/production-method.md::创意与风格判断",
+      "references/product-proof-and-motion.md::卖点与可见证据"
     ],
     "PLANNER": [
       "references/production-method.md::制作规划"
@@ -28,7 +30,8 @@
       "references/production-method.md::当前范围验收"
     ],
     "DIRECTOR": [
-      "references/production-method.md::镜头与视觉技法"
+      "references/production-method.md::镜头与视觉技法",
+      "references/product-proof-and-motion.md::产品运动与感官表达"
     ],
     "ASSET_REVIEWER": [
       "references/production-method.md::资产检查"
@@ -37,28 +40,36 @@
       "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "references/runtime-adaptation.md::后期判断"
+      "references/runtime-adaptation.md::后期判断",
+      "references/product-proof-and-motion.md::准确文字与局部维护"
     ],
     "ASSET_PLANNER": [
       "references/production-method.md::资产规划"
     ],
     "ASSET_BUILDER": [
-      "references/production-method.md::资产制作"
+      "references/production-method.md::资产制作",
+      "references/product-proof-and-motion.md::准确文字与局部维护"
     ],
     "ASSET_VERIFIER": [
       "references/production-method.md::资产检查"
+    ],
+    "WRITER": [
+      "references/product-proof-and-motion.md::卖点与可见证据",
+      "references/product-proof-and-motion.md::准确文字与局部维护"
     ]
   },
   "provenance": "OFFICIAL_ORIGINAL_WITH_ADAPTER",
   "upstream_sources": [
     "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/ad-tvc",
-    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared"
+    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared",
+    "sources/design_library/3.0.14/brand-ad/meta.yaml"
   ],
   "user_overridable": true,
   "stage_role_source_sections": {
     "POST.DIRECTOR": [
       "../../shared/methods/post.md::当前作品与最小修复",
-      "references/runtime-adaptation.md::后期判断"
+      "references/runtime-adaptation.md::后期判断",
+      "references/product-proof-and-motion.md::准确文字与局部维护"
     ],
     "POST.REVISION_VERIFIER": [
       "../../shared/methods/post.md::当前作品与最小修复",

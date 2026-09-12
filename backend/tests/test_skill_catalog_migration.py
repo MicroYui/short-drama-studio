@@ -17,7 +17,7 @@ from short_drama.production_profiles import (
 
 def test_old_method_names_resolve_into_one_current_catalog_entry() -> None:
     catalog = production_method_skill_catalog()
-    assert len(catalog) == 11
+    assert {"method.drama_series", "method.brand_promo", "method.music_video"} <= {item.id for item in catalog}
     assert all("minimax" not in item.id.casefold() for item in catalog)
     assert all("minimax" not in item.label.casefold() for item in catalog)
 

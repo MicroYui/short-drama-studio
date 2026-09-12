@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查产品事实、品牌图形、卖点证明与视听表达，优先修正影响传播效果的具体问题。
-
-## 来源
-
-参考MiniMax Design 的广告与 TVC 制作工作流，结合本产品的实际制作经验整理。原始资料与署名保留，见[来源资料](../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md)。

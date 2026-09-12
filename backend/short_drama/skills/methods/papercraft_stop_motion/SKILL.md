@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查事实是否准确、纸艺结构是否清楚、动作是否连续，以及镜头和声音是否对应。
-
-## 来源
-
-参考MiniMax-H3 的纸艺定格讲解方法，原作者为 MiniMax Hub（官方发布），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/papercraft-stop-motion-explainer/meta.yaml)。

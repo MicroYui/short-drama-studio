@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/SKILL.cn.md + references；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/meta.yaml [source=official; author-en=MiniMax Hub]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 创意与玩家信息
 
 从当前用户目标、项目风格和已有素材提取玩家昵称、游戏名称、人数及角色对应关系。已提供的信息直接使用；用户交给 Agent 决定的画风、装备和开场事件可以结合游戏主题确定。真实玩家身份或必须出现的昵称缺失且会改变交付时，集中补齐该信息；只制作概念或提示词时，明确尚未指定的部分即可。

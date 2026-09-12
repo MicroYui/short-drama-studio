@@ -1,0 +1,57 @@
+{
+  "id": "method.blender_workflow",
+  "label": "Blender 建模与动画",
+  "description": "为可编辑三维模型、场景、动画和机位设计提供制作方法；实际操作需要 Blender 场景连接。",
+  "category": "software",
+  "requirements": [
+    "Blender 与可读写目标场景的执行接口；当前产品未内置该连接器。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::工程与可执行能力"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::动画与渲染"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::建模方法"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::工程与可执行能力",
+      "references/production-method.md::建模方法",
+      "references/production-method.md::动画与渲染"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::保存与检查"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::保存与检查"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::保存与检查"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::动画与渲染",
+      "references/production-method.md::保存与检查"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/blender-workflow/SKILL.md",
+    "sources/design_library/3.0.14/blender-workflow/meta.yaml"
+  ],
+  "user_overridable": true
+}

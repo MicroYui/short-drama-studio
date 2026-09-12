@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/meta.yaml [source=community; author-en=User]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 视频编译
 
 使用当前真实选中的商品参考保持型号、材质、颜色、主视角与功能细节。用户原商品图可以直接承担身份参考，已制作的视觉图可负责风格或结尾构图；参考数量由实际用途与 Provider 限制决定。参考布局不自动变成视频分屏。

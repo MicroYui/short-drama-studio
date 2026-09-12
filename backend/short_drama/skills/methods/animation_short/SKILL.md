@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查身份和材质是否连续、重量与接触是否成立、动作是否完成，以及镜头衔接是否自然。
-
-## 来源
-
-参考MiniMax-H3 收录的 3D 动画短片方法，原作者为 MiniMax Hub User（社区收录），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/3d-animation-short-generator/meta.yaml)。

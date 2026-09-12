@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/paper-collage-explainer-generator/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/paper-collage-explainer-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 创意与视觉隐喻
 
 把当前句子、观点、故事节点或知识点转成能看懂的纸拼贴关系。适合解释抽象因果、制作口播 B-roll 或让物件逐步组装成一个观点；用户只需要提示词或方案时，同样可以运用这套视觉方法并在该范围交付。

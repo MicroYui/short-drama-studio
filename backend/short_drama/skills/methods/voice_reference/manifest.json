@@ -1,0 +1,63 @@
+{
+  "id": "method.voice_reference",
+  "label": "声音参考与音色复用",
+  "description": "检查说话人录音、整理声音参考并保持跨镜身份；创建可复用克隆音色需要另接支持克隆的服务。",
+  "category": "audio",
+  "requirements": [
+    "当前可登记声音参考；独立创建克隆音色还需要支持该操作的语音服务接口。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::录音与用途",
+      "references/production-method.md::项目绑定与执行"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::项目绑定与执行"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::录音与用途"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::预处理与试听",
+      "references/production-method.md::项目绑定与执行"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::检查与复用"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::检查与复用"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::项目绑定与执行"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::检查与复用"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::检查与复用"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::项目绑定与执行"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/voice-clone/SKILL.md",
+    "sources/design_library/3.0.14/voice-clone/meta.yaml"
+  ],
+  "user_overridable": true
+}

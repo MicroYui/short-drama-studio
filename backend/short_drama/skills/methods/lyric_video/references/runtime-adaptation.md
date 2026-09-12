@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 创意与音乐依据
 
 先理解歌曲、歌词和用户希望观众感受到什么，再选择视觉结构。记录已经给定的音乐类型、器乐、速度感、人声形式、情绪、片段范围和视觉方向；缺少的信息只在影响当前交付且无法合理决定时集中补齐。用户已提供的歌曲通常是本次音乐依据，替换或改词需要来自当前目标。

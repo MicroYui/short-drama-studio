@@ -155,8 +155,8 @@ def test_method_combination_loads_current_role_once_without_overview() -> None:
         (*selected_ids, selected_ids[0]), roles=(ProductionSkillRole.DIRECTOR,),
         stage=ProductionPromptStage.STORYBOARD,
     )
-    assert prompt.count("这里同时服务两层来源方法") == 1
-    assert prompt.count("上游原文提供成熟的制片经验") == 1
+    assert prompt.count("按当前角色与阶段读取相关方法") == 1
+    assert prompt.count("方法提供可选择的制片经验") == 1
     for method_id in selected_ids:
         method = production_method_skill(method_id)
         assert prompt.count(method.role_prompts[ProductionSkillRole.DIRECTOR]) == 1

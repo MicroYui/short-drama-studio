@@ -19,7 +19,7 @@ from short_drama.studio_trace import production_trace, trace_context
 from short_drama.video_inspection import inspection_source_context
 from short_drama.production_profiles import (
     ProductionPromptStage, ProductionSkillRole, compile_production_prompt,
-    production_method_skill_catalog,
+    production_method_skill, production_method_skill_catalog,
 )
 from short_drama.providers.h3_language_prompt import (
     LanguagePromptValidationError, apply_language_prompt_section_repair,
@@ -42,7 +42,10 @@ def test_post_director_loads_editing_not_storyboard_responsibility(method_id: st
         include_constitution=False,
     ).text
     assert "使用当前已选视频、实际媒体时间和本集编辑时间线" in prompt
-    assert "## 当前作品与最小修复" in prompt
+    method = production_method_skill(method_id)
+    assert method.stage_role_prompts is not None
+    post = method.stage_role_prompts.get((ProductionPromptStage.POST, ProductionSkillRole.DIRECTOR))
+    assert post is not None and post in prompt
     assert "## 表演设计" not in prompt
     assert "不通过视频串联保持连续性" not in prompt
     assert "你负责把当前采用的文本意图转成" not in prompt
@@ -57,7 +60,14 @@ def test_every_method_compiler_contributes_craft_without_a_second_provider_templ
         stage=ProductionPromptStage.VISUAL_GEN, include_constitution=False).text
     for stale_contract in ("固定六段骨架", "H3 唯一可执行填空骨架", "prompt_section_titles", "generation_authorization_unit", "concurrency_limit:", "用户明确确认 H3 生成前"):
         assert stale_contract not in prompt
-    assert "正常失败例" in prompt or method_id == "method.drama_series"
+    method = production_method_skill(method_id)
+    compiler = method.prompt_for(ProductionSkillRole.VIDEO_PROMPT_COMPILER, stage=ProductionPromptStage.VISUAL_GEN)
+    if compiler is not None:
+        assert compiler in prompt
+    else:
+        # Image-only and external-software methods must not acquire a video
+        # compiler merely by being listed in the broader method library.
+        assert f"（{method.id}）" not in prompt
 
 
 def test_drama_actual_methods_remove_forced_interaction_and_post_production_formulas() -> None:

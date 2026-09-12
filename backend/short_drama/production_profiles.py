@@ -139,6 +139,8 @@ def production_method_skill_catalog() -> tuple[ProductionMethodSkillDescriptor, 
             provenance=skill.provenance,
             upstream_sources=skill.upstream_sources,
             user_overridable=skill.user_overridable,
+            category=skill.category,
+            requirements=skill.requirements,
         )
         for skill in _production_method_skill_library()
     )
@@ -239,6 +241,8 @@ def _render_production_method_skill_prompt(
             f"Agent 已根据当前项目完整语义选择制片方法技能“{selected_skill.label}”"
             f"（{selected_skill.id}）：{selected_skill.description}"
         ]
+        if selected_skill.requirements:
+            sections.append("执行条件：" + "；".join(selected_skill.requirements))
         sections.extend(
             f"{_ROLE_LABELS[role]}的制片方法补充：{role_prompt}"
             for role in resolved_roles

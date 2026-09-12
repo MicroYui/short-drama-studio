@@ -1,0 +1,59 @@
+{
+  "id": "method.compositing_workflow",
+  "label": "After Effects 动效与合成",
+  "description": "整理可编辑动效、片头和合成工程的制作方法，覆盖时间关系、缓动、遮罩、图层依赖与预览检查。",
+  "category": "software",
+  "requirements": [
+    "After Effects 与可读写工程的执行接口；当前产品未内置该连接器。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::工程与素材"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::动画曲线与层级",
+      "references/production-method.md::合成与镜头"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::工程与素材",
+      "references/production-method.md::合成与镜头"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::工程与素材",
+      "references/production-method.md::动画曲线与层级",
+      "references/production-method.md::合成与镜头"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::交付检查"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::交付检查"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::交付检查"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::动画曲线与层级",
+      "references/production-method.md::交付检查"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/design-after-effects/SKILL.md",
+    "sources/design_library/3.0.14/design-after-effects/meta.yaml"
+  ],
+  "user_overridable": true
+}

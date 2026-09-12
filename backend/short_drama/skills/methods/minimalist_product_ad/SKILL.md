@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查产品结构和颜色是否准确、主次是否清楚、文案是否可读，以及动作和声音是否完成表达。
-
-## 来源
-
-参考MiniMax-H3 收录的极简产品广告方法，原作者署名为 User（社区收录），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/minimalist-product-ad-generator/meta.yaml)。

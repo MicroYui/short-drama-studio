@@ -514,6 +514,10 @@
       "AgentProductionMethodSkillDescriptor": {
         "additionalProperties": false,
         "properties": {
+          "category": {
+            "$ref": "#/components/schemas/MethodCategory",
+            "default": "creative"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -528,6 +532,13 @@
           },
           "provenance": {
             "$ref": "#/components/schemas/SkillProvenanceKind"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirements",
+            "type": "array"
           },
           "supported_roles": {
             "items": {
@@ -15635,6 +15646,18 @@
         "title": "MediaSpec",
         "type": "object"
       },
+      "MethodCategory": {
+        "enum": [
+          "creative",
+          "analysis",
+          "image",
+          "audio",
+          "software",
+          "maintenance"
+        ],
+        "title": "MethodCategory",
+        "type": "string"
+      },
       "MockBehavior": {
         "enum": [
           "SUCCESS",
@@ -27679,6 +27702,10 @@
       "StudioMethodDetail": {
         "additionalProperties": false,
         "properties": {
+          "category": {
+            "$ref": "#/components/schemas/MethodCategory",
+            "default": "creative"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -27698,6 +27725,13 @@
           "provenance": {
             "title": "Provenance",
             "type": "string"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirements",
+            "type": "array"
           },
           "sections": {
             "items": {

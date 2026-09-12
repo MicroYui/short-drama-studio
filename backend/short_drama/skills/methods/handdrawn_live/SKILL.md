@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 核对触碰和变形是否连续、手绘与实拍是否处于同一空间，以及本次效果是否符合全片已有风格。
-
-## 来源
-
-参考MiniMax-H3 收录的手绘实拍融合方法，原作者为 MiniMax Hub User（官方精选），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/handdrawn-live-video-generator/meta.yaml)。

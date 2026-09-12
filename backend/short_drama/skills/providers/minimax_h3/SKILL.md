@@ -1,17 +1,17 @@
 ---
 provider: minimax_h3
-label: MiniMax H3 提示词编译技能
+label: H3 提示词编译技能
 provenance: OFFICIAL_TRANSLATION_WITH_ADAPTER
-upstream_sources: ["https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/base-en.txt", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/ref-en.txt"]
-prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "references/common_compilation.md", "references/base_and_keyframe_modes.md", "references/reference_mode.md"]
+upstream_sources: ["https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/base-en.txt", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/ref-en.txt", "sources/design_library/3.0.14/h3-prompt-expert/meta.yaml"]
+prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "references/common_compilation.md", "references/base_and_keyframe_modes.md", "references/reference_mode.md", "references/reference-intent-and-preservation.md"]
 ---
-# MiniMax H3 提示词编译适配层
+# H3 提示词编译适配层
 
 > 官方 `h3-prompt-writing` 的忠实中文直译单独保存在 `references/official_h3_prompt_writing_zh_cn.md`。本文仅负责把官方规则接到当前项目的 ShotPlan、Route、Tool 和状态合同，不得冒充上游原文。
 
 ## 这项技能解决什么问题
 
-把已经确定的 `ShotPlan`、`ReferencePlan`、对白、连续性状态和媒体绑定翻译成 MiniMax H3 能执行的 Prompt IR。它位于导演决策之后、Provider 请求提交之前。
+把已经确定的 `ShotPlan`、`ReferencePlan`、对白、连续性状态和媒体绑定翻译成 H3 能执行的 Prompt IR。它位于导演决策之后、Provider 请求提交之前。
 
 它不负责构思剧情，不重写对白，不替导演改变镜头，也不执行网络请求。格式 Skill 决定“这类视频应该怎样讲和怎样拍”，本技能只决定“既定镜头如何用 H3 的语言表达”，提交、轮询、下载和失败恢复仍由 Tool 与任务状态负责。
 

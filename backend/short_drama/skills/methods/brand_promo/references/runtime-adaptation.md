@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 视频编译
 
 让产品动作、光标路径、界面状态、光线或匹配几何驱动视觉变化。一个节拍有清楚的主要动作，次级层略作延迟；高能段与安静段形成层次，数量由片长和信息量决定。项目色彩、Logo、文案安全区和产品轮廓保持一致。

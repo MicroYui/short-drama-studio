@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 检查双人身份和互动是否错配，文字是否清楚，画面次序是否完整。这里制作的是开场画面和动画；可操作的游戏菜单需要另行开发。
-
-## 来源
-
-参考MiniMax-H3 的双人游戏开场方法，原作者为 MiniMax Hub（官方发布），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/co-op-game-intro-generator/meta.yaml)。

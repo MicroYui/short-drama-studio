@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/papercraft-stop-motion-explainer/SKILL.cn.md；MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/papercraft-stop-motion-explainer/meta.yaml [source=official; author-en=MiniMax Hub]。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 创意与讲解路径
 
 从学习目标、观众已有知识和当前交付范围出发，选择能够解释主题的纸艺隐喻。立体书翻页适合层层展开，纸偶实验台适合机制演示，分层剖面适合结构，微缩自然剧场适合生态与地理，机关板的齿轮、滑轨、箭头和标签适合因果。用户已定方向就延续，交给 Agent 决定时可直接选择最清楚的方案并说明理由。

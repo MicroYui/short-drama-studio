@@ -37,7 +37,3 @@ manifest: manifest.json
 ## 检查
 
 核对来源与人物身份、对白和动作、因果与结尾兑现。已有视频按实际使用片段检查空间、接触和配时；对白、声线与同步根据实际音频判断。优先修正影响本次目标的问题。
-
-## 来源
-
-参考MiniMax Design 的短剧与连续剧制作工作流，结合本产品的实际制作经验整理。原始资料与署名保留，见[来源资料](../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md)。

@@ -31,7 +31,3 @@ manifest: manifest.json
 ## 检查
 
 核对知识依据、信息顺序、文字可读性与纸张层次；视觉隐喻应帮助理解，事实判断仍依据来源。
-
-## 来源
-
-参考MiniMax-H3 收录的纸张拼贴讲解方法，原作者为 MiniMax Hub（官方精选），结合本产品的实际制作经验整理。参见[原始方法](../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md)和[作者及来源](../../sources/minimax_h3/original/paper-collage-explainer-generator/meta.yaml)。

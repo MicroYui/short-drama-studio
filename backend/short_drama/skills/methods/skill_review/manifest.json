@@ -1,0 +1,48 @@
+{
+  "id": "method.skill_review",
+  "label": "创作方法检查",
+  "description": "检查方法的用途、角色边界、引用与实际工具适配，指出会导致误用、上下文膨胀或错误完成声明的问题。",
+  "category": "maintenance",
+  "requirements": [
+    "当前提供方法文档检查；修改运行文件需开发环境操作。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::检查范围",
+      "references/production-method.md::结构与加载"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::行为与问题报告"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::结构与加载"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::行为与问题报告",
+      "references/production-method.md::回读与验证"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::回读与验证"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::回读与验证"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/skill-reviewer/SKILL.md",
+    "sources/design_library/3.0.14/skill-reviewer/meta.yaml"
+  ],
+  "user_overridable": true
+}

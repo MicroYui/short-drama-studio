@@ -5,10 +5,13 @@
 | 目录 | 内容 |
 | --- | --- |
 | `minimax_design/3.0.11/workflows/` | 来自本机 MiniMax Design 的短剧、广告和 MV Workflow 原文及相关参考，保留原有相对引用 |
+| `design_library/3.0.14/` | 本机已安装的 19 项 Skill 原文、参考与元数据；catalog.json 对应 16 个新增方法及广告、MV、H3 三处合并 |
 | `minimax_h3/original/` | 实际采用的上游中文 Skill、作者/来源元数据和必要的英文参考 |
 | `minimax_h3/translations/` | 当前方法读取的 4 份参考译文；相应英文原文保留在 `original/` |
 
 各方法 manifest 的 `role_source_sections` / `stage_role_source_sections` 声明进入请求的章节；`upstream_sources` 记录出处和作者。参考资料不会作为第二份方法目录展示，也不会整包注入模型。
+
+产品名称、方法详情与运行章节使用用途命名；来源和作者元数据集中留在本资料层及 NOTICES。专业软件方法未带入原应用的连接器安装器或宿主脚本，不能把已导入文档等同于软件已接通。
 
 未使用的英文 SKILL 副本、模型选择/固定回退/旧镜头表资料已删除。保留的原文没有改写成项目原创内容；具体来源和再分发边界见项目根目录 [NOTICES.md](../../../../NOTICES.md)。
 

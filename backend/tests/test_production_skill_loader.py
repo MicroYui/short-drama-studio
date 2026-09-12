@@ -251,7 +251,7 @@ def test_provider_prompt_skill_is_file_backed_and_reads_references(
 
     assert len(skills) == 1
     assert skills[0].provider == "minimax_h3"
-    assert skills[0].label == "MiniMax H3 提示词编译技能"
+    assert skills[0].label == "H3 提示词编译技能"
     assert skills[0].provenance == "OFFICIAL_TRANSLATION_WITH_ADAPTER"
     assert any(
         "h3-prompt-writing/SKILL.md" in source
@@ -266,6 +266,7 @@ def test_provider_prompt_skill_is_file_backed_and_reads_references(
         "references/common_compilation.md",
         "references/base_and_keyframe_modes.md",
         "references/reference_mode.md",
+        "references/reference-intent-and-preservation.md",
     )
 
 

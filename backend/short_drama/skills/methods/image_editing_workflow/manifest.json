@@ -1,0 +1,57 @@
+{
+  "id": "method.image_editing_workflow",
+  "label": "Photoshop 精修与排版",
+  "description": "为照片精修、分层合成和准确排版提供方法，保留蒙版、文字、智能对象及可编辑交付。",
+  "category": "software",
+  "requirements": [
+    "Photoshop 与可读写文档的执行接口；当前产品未内置该连接器。"
+  ],
+  "roles": [
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "PLANNER": [
+      "references/production-method.md::文档与对象"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::排版与色彩"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::文档与对象",
+      "references/production-method.md::排版与色彩"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::文档与对象",
+      "references/production-method.md::精修与合成",
+      "references/production-method.md::排版与色彩"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::检查与交付"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::检查与交付"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::检查与交付"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::检查与交付"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/design-photoshop/SKILL.md",
+    "sources/design_library/3.0.14/design-photoshop/meta.yaml"
+  ],
+  "user_overridable": true
+}

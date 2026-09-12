@@ -1,6 +1,10 @@
 .sd-method-grid .sd-method-option{border:1px solid var(--sd-border);border-radius:9px;background:var(--sd-panel);overflow:hidden;min-width:0}
 .sd-method-grid .sd-method-option.is-active{border-color:var(--sd-accent-text);background:var(--sd-accent-soft)}
 .sd-method-grid .sd-method-toggle{border:0;border-radius:0;width:100%;background:transparent}
+.sd-method-category{display:block;color:var(--sd-secondary);font-size:11px;margin-bottom:5px}
+.sd-method-connection{display:block;font-size:11px;color:var(--sd-accent-text);margin-top:9px}
+.sd-method-requirements{padding:10px 12px;border:1px solid var(--sd-border);border-radius:8px;background:var(--sd-panel-soft);color:var(--sd-text);margin:12px 0}
+.sd-method-requirements ul{padding-left:18px;margin:5px 0 0}
 .sd-method-grid .sd-method-open{border:0;border-top:1px solid var(--sd-border);border-radius:0;background:transparent;width:100%;font-size:11px;padding:8px 13px;color:var(--sd-accent-text)}
 .sd-method-detail{border:1px solid var(--sd-border);border-radius:10px;padding:15px;background:var(--sd-panel);margin:14px 0;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
 .sd-method-detail>header{display:flex;align-items:center;gap:8px;margin-bottom:8px}.sd-method-detail>header strong{flex:1}.sd-method-detail>p{margin:9px 0;color:var(--sd-secondary)}

@@ -1,0 +1,32 @@
+display-name-zh: 品牌广告
+version: 1.1.4
+tag-en: "Commercial Ad / Full Production"
+tag-cn: "商业广告 / 成片制作"
+complete-tags-en:
+  - "Commercial Ad / Full Production"
+complete-tags-cn:
+  - "商业广告 / 成片制作"
+summary-en: "Produce a 15, 30, or 45-second official brand or product hero film"
+summary-cn: "把品牌事实与产品卖点转化为十五、三十或四十五秒轻量品牌广告成片"
+desc-en: "For brands and product teams that need one lightweight official ad planned at 15, 30, or 45 seconds. Verifies brand facts, selects an internal creative route, compiles LLM-developed copy and art typography, builds timecoded prompts, generates independent video clips with native narration and effects, and concatenates the complete clips on canvas without forced duration edits."
+desc-cn: "面向需要制作单条轻量品牌或产品广告的品牌与产品团队，将用户提供或经官方核验的品牌事实、产品资产、卖点和授权信息整理为广告方案。流程覆盖品牌与素材真实性核验、广告路线选择、视觉方向收敛、时间码分镜、屏幕文案与艺术字体编排、产品锚点和声音策略确认、独立片段生成、原生旁白与动作音效处理，再按实际顺序完整拼接并交付。支持十五、三十和四十五秒目标；身份、文字、包装、版权或最终时长有风险时暂停并请求补充，不把未经确认的宣传承诺当成事实。"
+author-en: "MiniMax Design"
+author-cn: "MiniMax Design"
+source: official
+structured-info:
+  zh-CN:
+    summary: 把经核验的品牌事实、产品卖点与视觉资产编排成可发布的轻量品牌广告成片。
+    best-for:
+      - 品牌广告
+      - 产品卖点
+      - 短片成片
+    how-to-use: 提供品牌事实、产品资产、授权信息和目标时长，先确认广告路线与真实性边界。
+    outputs: 广告简报、时间码分镜、屏幕文案、声音设计与完整广告片。
+  en-US:
+    summary: Shape verified brand facts, product benefits, and visual assets into a publishable lightweight brand commercial.
+    best-for:
+      - Brand Advertising
+      - Product Benefits
+      - Short Commercials
+    how-to-use: Provide brand facts, product assets, permissions, and target duration, then confirm the route and authenticity boundary.
+    outputs: A commercial brief, timecoded storyboard, screen copy, sound design, and finished ad.

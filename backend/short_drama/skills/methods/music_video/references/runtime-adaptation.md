@@ -1,7 +1,5 @@
 # 当前项目的制作适配
 
-本地适配来源：MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/mv；MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared。上游原文、作者与归属保留在 skills/sources、manifest 与 NOTICES；以下为本产品实际加载的执行知识。
-
 ## 视频编译
 
 按本组完整分镜保留人物动作、构图、运镜、光影、材质、VFX、准确歌词、文字图层、切点和可见末态。方法只补参考用途、物理连续性与音乐同步；不重选风格、换词或增添表演。镜头数量和时窗以当前组为准，全部源事实进入 Provider 唯一格式。

@@ -1,0 +1,74 @@
+{
+  "id": "method.creator_video",
+  "label": "达人口播与产品测评",
+  "description": "制作种草、测评、开箱或手部实测视频，让产品证据、自然口播、人物身份和声音跨镜保持一致。",
+  "category": "creative",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::开场与证明"
+    ],
+    "WRITER": [
+      "references/production-method.md::连续口播与镜头",
+      "references/production-method.md::开场与证明"
+    ],
+    "PLANNER": [
+      "references/production-method.md::承载方式与人物",
+      "references/production-method.md::产品资产与生成"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::连续口播与镜头",
+      "references/production-method.md::承载方式与人物"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::产品资产与生成"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::承载方式与人物",
+      "references/production-method.md::产品资产与生成"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::检查与局部修改"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::检查与局部修改"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::产品资产与生成",
+      "references/production-method.md::连续口播与镜头"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::检查与局部修改"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::检查与局部修改",
+      "references/production-method.md::连续口播与镜头"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::产品资产与生成",
+      "references/production-method.md::连续口播与镜头"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/koc-video/SKILL.md",
+    "sources/design_library/3.0.14/koc-video/meta.yaml"
+  ],
+  "user_overridable": true
+}

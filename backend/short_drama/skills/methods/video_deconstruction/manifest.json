@@ -1,0 +1,69 @@
+{
+  "id": "method.video_deconstruction",
+  "label": "视频拆解与重制",
+  "description": "分析参考视频的镜头、动作、运镜、声音和剪辑关系，形成有时间位置的拆解报告或可编辑重制分镜。",
+  "category": "analysis",
+  "requirements": [],
+  "roles": [
+    "CONCEPT",
+    "PLANNER",
+    "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
+    "REVISION_VERIFIER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "references/production-method.md::逐镜拆解"
+    ],
+    "PLANNER": [
+      "references/production-method.md::观察与事实",
+      "references/production-method.md::重制与引用"
+    ],
+    "DIRECTOR": [
+      "references/production-method.md::观察与事实",
+      "references/production-method.md::逐镜拆解"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::重制与引用"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::重制与引用"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::观察与事实"
+    ],
+    "REVISION_VERIFIER": [
+      "references/production-method.md::编译与检查"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "references/production-method.md::重制与引用",
+      "references/production-method.md::编译与检查"
+    ],
+    "EPISODE_REVIEWER": [
+      "references/production-method.md::观察与事实",
+      "references/production-method.md::编译与检查"
+    ]
+  },
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "references/production-method.md::逐镜拆解",
+      "references/production-method.md::编译与检查"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/production-method.md::重制与引用",
+      "references/production-method.md::编译与检查"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "sources/design_library/3.0.14/video-deconstruct/SKILL.md",
+    "sources/design_library/3.0.14/video-deconstruct/meta.yaml"
+  ],
+  "user_overridable": true
+}

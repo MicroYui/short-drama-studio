@@ -51,8 +51,8 @@ def test_all_live_roles_and_stages_use_executable_method_sections(method_name: s
             ).text
             assert body in prompt
             assert method.constitution not in prompt
-            assert "这里同时服务两层来源方法" in prompt
-            assert "上游原文提供成熟的制片经验" in prompt
+            assert "按当前角色与阶段读取相关方法" in prompt
+            assert "方法提供可选择的制片经验" in prompt
             for obsolete in OBSOLETE_INSTRUCTIONS:
                 assert obsolete not in prompt, (method_name, role, stage, obsolete)
 
