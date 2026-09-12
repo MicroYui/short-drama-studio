@@ -296,7 +296,7 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "再调用 route.plan_h3" in descriptors[
         "route.update_h3_asset_preparation"
     ].description
-    assert "不会触发任何真实生成" in descriptors[
+    assert "不生成媒体" in descriptors[
         "artifact.create_production_spec"
     ].description
     for tool_id in (

@@ -3480,13 +3480,19 @@ export interface components {
         AgentWorkOrderResultRequest: {
             /** Assumptions */
             assumptions?: string[];
-            /** Concise Summary */
+            /**
+             * Concise Summary
+             * @description 本次分工的完成判断与结果摘要；无需重复逐项抄写已保存的媒体元数据。
+             */
             concise_summary: string;
             /** Created Artifacts */
             created_artifacts?: components["schemas"]["ArtifactRef"][];
             /** Decisions */
             decisions?: string[];
-            /** Deliverable */
+            /**
+             * Deliverable
+             * @description 本任务要求的额外交付、判断或限制。已通过 saved_tool_result_sequences 引用的保存事实无需再次展开；仍满足明确的自定义输出 schema。
+             */
             deliverable?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
@@ -3497,6 +3503,11 @@ export interface components {
             next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
             /** Recommended Next Actions */
             recommended_next_actions?: string[];
+            /**
+             * Saved Tool Result Sequences
+             * @description 可选：本 WorkOrder 已成功 Tool 的 source_sequence。runtime 附其精确产物、现成审核/用途及可回读原回执；不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。
+             */
+            saved_tool_result_sequences?: number[];
             status: components["schemas"]["AgentResultStatus"];
             /** Unresolved Questions */
             unresolved_questions?: string[];
