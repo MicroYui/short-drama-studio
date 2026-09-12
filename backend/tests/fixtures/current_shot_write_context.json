@@ -1,0 +1,745 @@
+{
+  "source": {
+    "project_id": "project-8d268085367b",
+    "work_order_id": "work-order-1c5c9702bb324b5b96aa7ca3a83d05bb",
+    "cropping": "Only selected turns; read_current omits shared indexes/Bible. Authored bodies, arguments, refs and write receipts unchanged."
+  },
+  "turns": [
+    {
+      "id": "specialist-turn-8354913584ad4b69a043932c94323e0b",
+      "sequence": 1,
+      "tool_name": "artifact.read_current",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "shot_id": "shot-last-version-01"
+      },
+      "reason": "读取第1镜当前正文、时段与引用，按真实起态制作开场关系构图，不改动对白和镜头设计。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.read_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "content": {
+            "project_id": "project-8d268085367b",
+            "script_id": "project-8d268085367b-script-v2",
+            "episode_title": "第 1 集",
+            "editorial_revision": 0,
+            "shot": {
+              "id": "shot-last-version-01",
+              "project_id": "project-8d268085367b",
+              "sequence": 1,
+              "scene_id": "scene-4da82135c813",
+              "duration_seconds": 6.0,
+              "narrative_purpose": "用已经拿起的包、即将合上的电脑和主管自己握着的钥匙，同时建立离开与追加工作的冲突。",
+              "visual": "@林乔与@周诚在@设计办公室·夜的桌旁。林乔坐画左、南侧靠东端，左手从自己椅背提包，右手刚碰到朝南打开的电脑屏幕上沿；周诚站画右、东侧空椅旁，右手握钥匙，左手朝电脑点一下。听到打断，林乔停手，电脑不发生合盖。真人皮肤与衣料，北窗暗、工作区柔光，双眼及接触手位可辨。",
+              "framing": "9:16双人中景，林乔略靠前、周诚略靠后，保留两张脸、桌面电脑及周诚腰侧持钥匙的手；不把整个办公室塞入竖幅。",
+              "camera": "东南侧朝西北，眼平略低于站立周诚的视线，固定机位；南侧林乔在左、东侧周诚在右。开场电脑屏幕朝南，镜头能斜见屏幕而不要求读字。",
+              "audio_intent": "周诚画内说：先别关。首页排版再换一下，最后一版，五分钟。林乔不说话也不动嘴；约0.5秒起发声，5.7秒前收句。仅设计轻微办公室底噪和布包声，不生成声音。",
+              "dialogue_line_ids": [
+                "line-last-version-01"
+              ],
+              "references": [
+                {
+                  "subject_asset_id": "asset-5ec41674f76e",
+                  "id": "shot-last-version-01-reference-0",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 3,
+                  "alias": "林乔",
+                  "required_tags": [],
+                  "purpose": "林乔身份和灰蓝卷袖衬衫；坐姿三分之二侧脸。待绑定真实图片，不作为首帧。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                {
+                  "subject_asset_id": "asset-0534f2f33ae9",
+                  "id": "shot-last-version-01-reference-1",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 4,
+                  "text_end": 7,
+                  "alias": "周诚",
+                  "required_tags": [],
+                  "purpose": "周诚身份、浅米开衫及白T；站立时脸与右手均可辨。待绑定真实图片。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                {
+                  "subject_asset_id": "asset-54ead5627df9",
+                  "id": "shot-last-version-01-reference-2",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 8,
+                  "text_end": 16,
+                  "alias": "设计办公室_夜",
+                  "required_tags": [],
+                  "purpose": "东南向西北的空间关系和夜间工作照明。另需开场双人状态构图，空办公室母版不自动成为人物首帧。",
+                  "image_reference_role": "SCENE_IDENTITY",
+                  "usage": "GENERATION"
+                }
+              ],
+              "timeline_beats": [
+                {
+                  "start_seconds": 0.0,
+                  "end_seconds": 0.5,
+                  "visual": "@银灰色笔记本电脑朝南打开约105度，屏幕为不需读字的浅底蓝灰设计块；林乔的脸与屏幕上沿同处可辨区域。",
+                  "framing": "双人中景，电脑不遮住林乔下半张脸。",
+                  "camera": "固定，不追手变焦。",
+                  "action": "@米白帆布包由林乔左手握双提带，刚离开南侧自己椅背；右手指腹轻碰屏幕上沿，尚未压下。",
+                  "performance": "林乔带日常下班的疲态，动作不是愤然甩包。",
+                  "emotion": null,
+                  "dialogue_line_ids": [],
+                  "sound": "轻微包布摩擦，未来声音意图。",
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-dff9d6ea2f65",
+                      "id": "shot-last-version-01-reference-3",
+                      "asset_version_id": null,
+                      "field": "visual",
+                      "text_start": 0,
+                      "text_end": 9,
+                      "alias": "银灰色笔记本电脑",
+                      "required_tags": [],
+                      "purpose": "无品牌银灰14英寸电脑外观及朝南打开状态；不得预先合盖。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    },
+                    {
+                      "subject_asset_id": "asset-ae10d5ed0f06",
+                      "id": "shot-last-version-01-reference-4",
+                      "asset_version_id": null,
+                      "field": "action",
+                      "text_start": 0,
+                      "text_end": 6,
+                      "alias": "米白帆布包",
+                      "required_tags": [],
+                      "purpose": "素面双布带托特包身份及林乔左手刚提离自己椅背的起态。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ]
+                },
+                {
+                  "start_seconds": 0.5,
+                  "end_seconds": 6.0,
+                  "visual": "@金属钥匙圈在周诚右手腰侧，银环和两枚短钥匙可见；他用空着的左手示意电脑，林乔仍握包。",
+                  "framing": "保持关系中景，注意中心由林乔停手转到周诚理所当然的说话姿态。",
+                  "camera": "固定，同一东南侧机位。",
+                  "action": "周诚左手指向电脑一次后自然放低，不拿鼠标；林乔右手停在屏幕上沿，左手不松包。台词结束时她开始抬眼。",
+                  "performance": "周诚语气熟络，最后一版和五分钟不重吼；林乔先停动作，再看人，嘴唇不跟读。",
+                  "emotion": null,
+                  "dialogue_line_ids": [
+                    "line-last-version-01"
+                  ],
+                  "sound": "周诚现场对白完整一次，尾部留短暂接收时间，无第三人声。",
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-a8e18bcffe9f",
+                      "id": "shot-last-version-01-reference-5",
+                      "asset_version_id": null,
+                      "field": "visual",
+                      "text_start": 0,
+                      "text_end": 6,
+                      "alias": "金属钥匙圈",
+                      "required_tags": [],
+                      "purpose": "银环两枚短钥匙；只在周诚右手，建立主管自己也准备走的证据。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ]
+                }
+              ],
+              "continuity": {
+                "character_positions": "林乔坐南侧靠东端画左；周诚站东侧空椅旁画右。两人均未走位。",
+                "eyeline": "周诚看左下方林乔及电脑；林乔起初看屏幕，收尾开始朝画右上抬眼。",
+                "prop_state_in": "电脑朝南开约105度；鼠标在电脑东侧；包由林乔左手刚提起；周诚右手握钥匙。",
+                "prop_state_out": "电脑同角度未合，林乔右手停在屏幕上沿、左手持包；钥匙仍在周诚右手，鼠标未动。",
+                "action_in": "取包和准备合盖已经开始。",
+                "action_out": "追加要求打断合盖；林乔开始抬眼。此为设计终态，并非媒体观察。"
+              },
+              "transition_out": "直切林乔较近反应，承接她刚开始的抬眼；不重复取包。",
+              "merge_candidate": false,
+              "local_rework_risk": "需后续实图检查竖幅中脸、屏幕上沿和持物手不相互遮挡；真实视频再验证停手触发与对白节奏。",
+              "approval_status": "DRAFT",
+              "freshness": "CURRENT",
+              "revision": 1
+            }
+          }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T02:18:11.506951Z",
+      "updated_at": "2026-09-12T02:18:11.917697Z"
+    },
+    {
+      "id": "specialist-turn-e036b56984e04c168cfce8511f580860",
+      "sequence": 2,
+      "tool_name": "artifact.read_current",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "shot_id": "shot-last-version-02"
+      },
+      "reason": "读取第2镜的现有正文、视线时段和引用，确定林乔脸与周诚右手钥匙同框的静态参考用途。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.read_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "content": {
+            "project_id": "project-8d268085367b",
+            "script_id": "project-8d268085367b-script-v2",
+            "episode_title": "第 1 集",
+            "editorial_revision": 0,
+            "shot": {
+              "id": "shot-last-version-02",
+              "project_id": "project-8d268085367b",
+              "sequence": 2,
+              "scene_id": "scene-4da82135c813",
+              "duration_seconds": 3.5,
+              "narrative_purpose": "让林乔确实看见对方已准备离开的钥匙，再指出重复承诺；她不是无缘由地顶嘴。",
+              "visual": "@林乔在南侧原位，脸为注意中心；画右边缘仅保留@周诚腰侧持钥匙的右手及浅米衣料，不要求他的脸入画。她抬眼后先扫到手里的钥匙，再看向他画外的脸，克制地指出刚才同样的承诺。",
+              "framing": "9:16林乔中近景，肩部以上表情清楚，下缘保留右手碰屏幕的关系；周诚右手在画右中下部，与米色衣料分离。",
+              "camera": "仍在东南半平面，较首镜靠近林乔，不越两人对话轴。固定，焦点不在说话中离开她的眼睛。",
+              "audio_intent": "林乔画内说：刚才那版，您也是这么说的。约0.6—3.4秒，礼貌而平实。周诚画外听，不增加回应声。",
+              "dialogue_line_ids": [
+                "line-last-version-02"
+              ],
+              "references": [
+                {
+                  "subject_asset_id": "asset-5ec41674f76e",
+                  "id": "shot-last-version-02-reference-0",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 3,
+                  "alias": "林乔",
+                  "required_tags": [],
+                  "purpose": "林乔脸和卷袖造型，朝画右上的互补视线；待真实身份图。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                {
+                  "subject_asset_id": "asset-0534f2f33ae9",
+                  "id": "shot-last-version-02-reference-1",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 23,
+                  "text_end": 26,
+                  "alias": "周诚",
+                  "required_tags": [],
+                  "purpose": "仅贡献周诚浅米衣料和手部身份关系，不要求脸或全身进入这镜。",
+                  "image_reference_role": "WARDROBE",
+                  "usage": "GENERATION"
+                }
+              ],
+              "timeline_beats": [
+                {
+                  "start_seconds": 0.0,
+                  "end_seconds": 0.6,
+                  "visual": "@金属钥匙圈仍握在周诚右手，位于林乔视线短暂落点；不做脱离空间的超大钥匙特写。",
+                  "framing": "林乔脸与画右钥匙保持在可辨的同一构图。",
+                  "camera": "固定，保持景深让钥匙类别可辨而不是只剩高光。",
+                  "action": "林乔接续上镜抬眼，短看钥匙后转向周诚的脸；右手不压屏幕，左手仍持包。",
+                  "performance": "视线先确认再发问，没有翻白眼或冷笑。",
+                  "emotion": null,
+                  "dialogue_line_ids": [],
+                  "sound": null,
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-a8e18bcffe9f",
+                      "id": "shot-last-version-02-reference-2",
+                      "asset_version_id": null,
+                      "field": "visual",
+                      "text_start": 0,
+                      "text_end": 6,
+                      "alias": "金属钥匙圈",
+                      "required_tags": [],
+                      "purpose": "原银环两枚钥匙仍由右手持有，作为她视线的可见落点；需此状态构图。",
+                      "image_reference_role": "PROP_IDENTITY",
+                      "usage": "GENERATION"
+                    }
+                  ]
+                },
+                {
+                  "start_seconds": 0.6,
+                  "end_seconds": 3.5,
+                  "visual": "林乔看向画右上方周诚的脸，嘴部完整可见；电脑边缘和持包状态保持。",
+                  "framing": "稳定中近景。",
+                  "camera": "固定，不用推近夸大冲突。",
+                  "action": "说完后仍坐原位，手没有接回键盘或鼠标。",
+                  "performance": "对您保持日常称呼，语尾像陈述刚发生的事实，等对方回应。",
+                  "emotion": null,
+                  "dialogue_line_ids": [
+                    "line-last-version-02"
+                  ],
+                  "sound": "仅林乔对白及轻微办公室底噪。",
+                  "references": []
+                }
+              ],
+              "continuity": {
+                "character_positions": "林乔仍坐南侧靠东端；周诚站东侧、脸在画外右上，右手在画右边缘。",
+                "eyeline": "林乔从画右中下钥匙扫向画右上周诚的脸；周诚仍看向她。",
+                "prop_state_in": "林乔左手包、右手屏幕上沿；电脑朝南打开；周诚右手钥匙。",
+                "prop_state_out": "所有道具位置与持有者不变。",
+                "action_in": "接上镜抬眼而不是重新低头准备合盖。",
+                "action_out": "林乔完成一句克制回应，继续等答。"
+              },
+              "transition_out": "视线匹配切周诚，保持他看向画左下的反向关系。",
+              "merge_candidate": false,
+              "local_rework_risk": "后续构图图需检查钥匙实际大小与亮度是否可辨；不以文字写可读替代实际图像观察。",
+              "approval_status": "DRAFT",
+              "freshness": "CURRENT",
+              "revision": 1
+            }
+          }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T02:18:26.653959Z",
+      "updated_at": "2026-09-12T02:18:27.016891Z"
+    },
+    {
+      "id": "specialist-turn-252276da947c477e9c79bd36a2bcd16e",
+      "sequence": 3,
+      "tool_name": "artifact.read_current",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "shot_id": "shot-last-version-03"
+      },
+      "reason": "读取第3镜当前正文，确认周诚近景的视线、表情和画内范围；保留第1、2镜已有读取，不重复加载。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.read_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "content": {
+            "project_id": "project-8d268085367b",
+            "script_id": "project-8d268085367b-script-v2",
+            "episode_title": "第 1 集",
+            "editorial_revision": 0,
+            "shot": {
+              "id": "shot-last-version-03",
+              "project_id": "project-8d268085367b",
+              "sequence": 3,
+              "scene_id": "scene-4da82135c813",
+              "duration_seconds": 2.5,
+              "narrative_purpose": "主管仍以惯常笑容淡化工作成本，为林乔不再口头争辩而让位提供原因。",
+              "visual": "@周诚站东侧椅旁，浅米开衫与脸清楚，林乔不入画。他朝左下方的林乔点一下头，仍带惯常的笑，说完没有自己接近电脑。",
+              "framing": "9:16胸上中近景，不用仰拍压迫或极近特写。",
+              "camera": "东南侧偏东机位，固定，保持周诚朝画左下看；北窗暗色及桌旁柔光延续。",
+              "audio_intent": "周诚画内说：小改一下，改完就走。0.2—2.4秒自然说完；林乔画外不发声。",
+              "dialogue_line_ids": [
+                "line-last-version-03"
+              ],
+              "references": [
+                {
+                  "subject_asset_id": "asset-0534f2f33ae9",
+                  "id": "shot-last-version-03-reference-0",
+                  "asset_version_id": null,
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 3,
+                  "alias": "周诚",
+                  "required_tags": [],
+                  "purpose": "周诚三分之二侧脸与浅米开衫，熟络轻描淡写的表情起态；不是夸张反派笑容。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                }
+              ],
+              "timeline_beats": [
+                {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5,
+                  "visual": "周诚眼神仍落在林乔身上，笑意没有消失。",
+                  "framing": "固定胸上中近景。",
+                  "camera": "不移动，维持互补视线。",
+                  "action": "轻点一次头并说完，右手在画外继续握钥匙，左手自然垂下，不增添拍肩动作。",
+                  "performance": "像重复平常工作安排，不抢话、不加讥讽。",
+                  "emotion": null,
+                  "dialogue_line_ids": [
+                    "line-last-version-03"
+                  ],
+                  "sound": "周诚原句完整一次；不增加喜剧音效。",
+                  "references": []
+                }
+              ],
+              "continuity": {
+                "character_positions": "周诚站桌东侧空椅旁；林乔仍坐南侧原位，在画外左下。",
+                "eyeline": "周诚向画左下看林乔。",
+                "prop_state_in": "周诚右手钥匙；电脑朝南打开；林乔右手屏幕、左手包。",
+                "prop_state_out": "未动电脑鼠标椅子，钥匙仍右手，包仍林乔左手。",
+                "action_in": "接收林乔的事实提醒。",
+                "action_out": "继续淡化成本，保留惯常笑容，等待她继续修改。"
+              },
+              "transition_out": "在话音落完后切回桌旁行动中景，林乔才开始挂包起身。",
+              "merge_candidate": false,
+              "local_rework_risk": "后续动态需确认笑意自然和嘴型归属；本项仅文本设计。",
+              "approval_status": "DRAFT",
+              "freshness": "CURRENT",
+              "revision": 1
+            }
+          }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T02:18:44.753809Z",
+      "updated_at": "2026-09-12T02:18:45.633520Z"
+    },
+    {
+      "id": "specialist-turn-797330c76592435b9521f88c7deb5adc",
+      "sequence": 12,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "shot_id": "shot-last-version-03",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-last-version-03",
+            "project_id": "project-8d268085367b",
+            "sequence": 3,
+            "scene_id": "scene-4da82135c813",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "主管仍以惯常笑容淡化工作成本，为林乔不再口头争辩而让位提供原因。",
+            "visual": "@周诚站东侧椅旁，浅米开衫与脸清楚，林乔不入画。他朝左下方的林乔点一下头，仍带惯常的笑，说完没有自己接近电脑。",
+            "framing": "9:16胸上中近景，不用仰拍压迫或极近特写。",
+            "camera": "东南侧偏东机位，固定，保持周诚朝画左下看；北窗暗色及桌旁柔光延续。",
+            "audio_intent": "周诚画内说：小改一下，改完就走。0.2—2.4秒自然说完；林乔画外不发声。",
+            "dialogue_line_ids": [
+              "line-last-version-03"
+            ],
+            "references": [
+              {
+                "subject_asset_id": "asset-0534f2f33ae9",
+                "id": "shot-last-version-03-reference-0",
+                "asset_version_id": "asset-version-a1e1bacbcc6b",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "周诚",
+                "required_tags": [],
+                "purpose": "全镜0—2.5秒的权威身份及可见服装依据：周诚五官、侧分短发、浅米开衫白T。中性身份图不提供办公室站位、钥匙状态或剧情首帧。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-fbc3e1837141",
+                "id": "shot-last-version-03-composition",
+                "asset_version_id": "asset-version-2690746552ca",
+                "alias": "周诚_淡化成本构图",
+                "required_tags": [],
+                "purpose": "全镜0—2.5秒胸上9:16构图与静态表情参考：实际看画左下、闭唇轻微惯常笑意、脸与衣领清楚。504×896原像素裁图，不是2K成片；不提供手、钥匙、林乔或完整空间拓扑，不证明点头、发声与口型，也非硬首帧。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "周诚眼神仍落在林乔身上，笑意没有消失。",
+                "framing": "固定胸上中近景。",
+                "camera": "不移动，维持互补视线。",
+                "action": "轻点一次头并说完，右手在画外继续握钥匙，左手自然垂下，不增添拍肩动作。",
+                "performance": "像重复平常工作安排，不抢话、不加讥讽。",
+                "emotion": null,
+                "dialogue_line_ids": [
+                  "line-last-version-03"
+                ],
+                "sound": "周诚原句完整一次；不增加喜剧音效。",
+                "references": []
+              }
+            ],
+            "continuity": {
+              "character_positions": "周诚站桌东侧空椅旁；林乔仍坐南侧原位，在画外左下。",
+              "eyeline": "周诚向画左下看林乔。",
+              "prop_state_in": "周诚右手钥匙；电脑朝南打开；林乔右手屏幕、左手包。",
+              "prop_state_out": "未动电脑鼠标椅子，钥匙仍右手，包仍林乔左手。",
+              "action_in": "接收林乔的事实提醒。",
+              "action_out": "继续淡化成本，保留惯常笑容，等待她继续修改。"
+            },
+            "transition_out": "在话音落完后切回桌旁行动中景，林乔才开始挂包起身。",
+            "merge_candidate": false,
+            "local_rework_risk": "后续动态需确认笑意自然和嘴型归属；本项仅文本设计。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        }
+      },
+      "reason": "第3镜裁图已实际检查可用，先把精确身份图和胸上构图局部绑定到现有镜头，不改对白、时长或导演正文。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-8d268085367b",
+          "scene_ids": [],
+          "shot_ids": [
+            "shot-last-version-03"
+          ],
+          "notices": [
+            "镜头设计已保存；已有视频保留，可按新设计重新生成。"
+          ],
+          "shot_revisions": {
+            "shot-last-version-03": 2
+          },
+          "editorial_revision": null,
+          "timeline_id": null,
+          "changed_shot_ids": [
+            "shot-last-version-03"
+          ],
+          "changed_scene_ids": [],
+          "asset_plan_identity": null,
+          "saved_shot": {
+            "shot_id": "shot-last-version-03",
+            "revision": 2,
+            "duration_seconds": 2.5,
+            "audio_intent": "周诚画内说：小改一下，改完就走。0.2—2.4秒自然说完；林乔画外不发声。",
+            "dialogue_line_ids": [
+              "line-last-version-03"
+            ],
+            "beats": [
+              {
+                "index": 0,
+                "start_seconds": 0.0,
+                "end_seconds": 2.5,
+                "dialogue_line_ids": [
+                  "line-last-version-03"
+                ],
+                "sound": "周诚原句完整一次；不增加喜剧音效。"
+              }
+            ],
+            "shot_cues": [
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-0534f2f33ae9",
+                  "id": "shot-last-version-03-reference-0",
+                  "asset_version_id": "asset-version-a1e1bacbcc6b",
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 3,
+                  "alias": "周诚",
+                  "required_tags": [],
+                  "purpose": "全镜0—2.5秒的权威身份及可见服装依据：周诚五官、侧分短发、浅米开衫白T。中性身份图不提供办公室站位、钥匙状态或剧情首帧。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@周诚"
+              },
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-fbc3e1837141",
+                  "id": "shot-last-version-03-composition",
+                  "asset_version_id": "asset-version-2690746552ca",
+                  "field": null,
+                  "text_start": null,
+                  "text_end": null,
+                  "alias": "周诚_淡化成本构图",
+                  "required_tags": [],
+                  "purpose": "全镜0—2.5秒胸上9:16构图与静态表情参考：实际看画左下、闭唇轻微惯常笑意、脸与衣领清楚。504×896原像素裁图，不是2K成片；不提供手、钥匙、林乔或完整空间拓扑，不证明点头、发声与口型，也非硬首帧。",
+                  "image_reference_role": "COMPOSITION",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": null
+              }
+            ]
+          },
+          "media_registration": null,
+          "reference_plan_preview_scope": "GENERATION_ONLY",
+          "reference_plan_preview": {
+            "shot_id": "shot-last-version-03",
+            "selected": [
+              {
+                "pack_id": "reference-pack-asset-0534f2f33ae9",
+                "entry_id": "reference-entry-49d740ab6b94",
+                "subject_asset_id": "asset-0534f2f33ae9",
+                "asset_version_id": "asset-version-a1e1bacbcc6b",
+                "lineage_root_version_id": "asset-version-a1e1bacbcc6b",
+                "role": "CANONICAL_MASTER",
+                "angle": "FRONT",
+                "framing": "MEDIUM",
+                "tags": [
+                  "周诚",
+                  "原创身份母图",
+                  "正面",
+                  "头顶至大腿中段",
+                  "浅米针织开衫",
+                  "白色圆领T恤",
+                  "深海军蓝裤",
+                  "身份与可见造型",
+                  "非剧情首帧"
+                ],
+                "description": "全镜0—2.5秒的权威身份及可见服装依据：周诚五官、侧分短发、浅米开衫白T。中性身份图不提供办公室站位、钥匙状态或剧情首帧。",
+                "requirement_ids": [],
+                "score": 1999,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              },
+              {
+                "pack_id": "current-shot-reference:shot-last-version-03",
+                "entry_id": "current-shot-reference:shot-last-version-03:shot-last-version-03-composition",
+                "subject_asset_id": "asset-fbc3e1837141",
+                "asset_version_id": "asset-version-2690746552ca",
+                "lineage_root_version_id": null,
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "NOT_APPLICABLE",
+                "tags": [],
+                "description": "全镜0—2.5秒胸上9:16构图与静态表情参考：实际看画左下、闭唇轻微惯常笑意、脸与衣领清楚。504×896原像素裁图，不是2K成片；不提供手、钥匙、林乔或完整空间拓扑，不证明点头、发声与口型，也非硬首帧。",
+                "requirement_ids": [],
+                "score": 1998,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              }
+            ],
+            "missing_requirement_ids": [],
+            "warnings": [],
+            "complexity": {
+              "duration_seconds": 2.5,
+              "action_beat_count": 0,
+              "interaction_count": 0,
+              "missing_topology_anchors": [],
+              "observations": [
+                "镜头时长为 2.5 秒，共声明 0 个动作节拍。",
+                "当前镜头未显式声明空间交互。"
+              ],
+              "advisory_only": true
+            },
+            "proceed_allowed": true
+          },
+          "reference_plan_preview_error": null
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-8d268085367b",
+            "artifact_type": "shot",
+            "artifact_id": "shot-last-version-03",
+            "version": 2
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-8d268085367b",
+              "artifact_type": "shot",
+              "artifact_id": "shot-last-version-03",
+              "version": 2
+            }
+          ],
+          "current_state": {
+            "project_id": "project-8d268085367b",
+            "shot_revisions": {
+              "shot-last-version-03": 2
+            },
+            "editorial_revision": null,
+            "timeline_id": null,
+            "saved_shot": {
+              "shot_id": "shot-last-version-03",
+              "revision": 2,
+              "duration_seconds": 2.5,
+              "audio_intent": "周诚画内说：小改一下，改完就走。0.2—2.4秒自然说完；林乔画外不发声。",
+              "dialogue_line_ids": [
+                "line-last-version-03"
+              ],
+              "beats": [
+                {
+                  "index": 0,
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5,
+                  "dialogue_line_ids": [
+                    "line-last-version-03"
+                  ],
+                  "sound": "周诚原句完整一次；不增加喜剧音效。"
+                }
+              ],
+              "shot_cues": [
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-0534f2f33ae9",
+                    "id": "shot-last-version-03-reference-0",
+                    "asset_version_id": "asset-version-a1e1bacbcc6b",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 3,
+                    "alias": "周诚",
+                    "required_tags": [],
+                    "purpose": "全镜0—2.5秒的权威身份及可见服装依据：周诚五官、侧分短发、浅米开衫白T。中性身份图不提供办公室站位、钥匙状态或剧情首帧。",
+                    "image_reference_role": "SUBJECT_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@周诚"
+                },
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-fbc3e1837141",
+                    "id": "shot-last-version-03-composition",
+                    "asset_version_id": "asset-version-2690746552ca",
+                    "field": null,
+                    "text_start": null,
+                    "text_end": null,
+                    "alias": "周诚_淡化成本构图",
+                    "required_tags": [],
+                    "purpose": "全镜0—2.5秒胸上9:16构图与静态表情参考：实际看画左下、闭唇轻微惯常笑意、脸与衣领清楚。504×896原像素裁图，不是2K成片；不提供手、钥匙、林乔或完整空间拓扑，不证明点头、发声与口型，也非硬首帧。",
+                    "image_reference_role": "COMPOSITION",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": null
+                }
+              ]
+            },
+            "reference_plan_preview_scope": "GENERATION_ONLY",
+            "reference_plan_preview_error": null
+          },
+          "changed_ids": {
+            "changed_shot_ids": [
+              "shot-last-version-03"
+            ],
+            "changed_scene_ids": []
+          }
+        }
+      },
+      "requested_at": "2026-09-12T02:30:37.228755Z",
+      "updated_at": "2026-09-12T02:30:37.779004Z"
+    }
+  ]
+}

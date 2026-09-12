@@ -2108,7 +2108,7 @@ def _specialist_read_observation_result(
                 for key, value in content.items()
                 if key in {
                     "project_id", "script_id", "episode_title", "editorial_revision",
-                    "scene", "lines", "shot",
+                    "scene", "lines", "shot", "script_ref", "structure_stale",
                 }
             },
         },
@@ -2315,6 +2315,40 @@ def _specialist_working_set(
             }
         if result_status == ToolCallStatus.SUCCEEDED.value:
             pending_tool_repairs.pop(turn.tool_name, None)
+            if turn.tool_name in write_tool_ids:
+                output = turn.result.get("output") if turn.result is not None else None
+                output = output if isinstance(output, dict) else {}
+                changed_scenes = output.get("changed_scene_ids")
+                scene_ids: set[str] = {item for item in changed_scenes if isinstance(item, str)} if isinstance(changed_scenes, list) else set()
+                saved_scenes = output.get("saved_scenes")
+                if turn.tool_name == "script.save_scene" and isinstance(saved_scenes, list):
+                    for saved in saved_scenes:
+                        scene = saved.get("scene") if isinstance(saved, dict) else None
+                        if isinstance(scene, dict) and isinstance(scene.get("id"), str):
+                            scene_ids.add(cast(str, scene["id"]))
+                # Unknown whole-script mutations cannot prove which cached
+                # scenes survived. Local scene writes expose the exact scope.
+                all_scenes = (turn.tool_name != "script.save_scene"
+                    and any(ref.artifact_type == "script_version" for ref in turn_refs)
+                    and not isinstance(changed_scenes, list))
+                changed_shots = output.get("changed_shot_ids")
+                shot_ids: set[str] = {item for item in changed_shots if isinstance(item, str)} if isinstance(changed_shots, list) else set()
+                shot_ids.update(ref.artifact_id for ref in turn_refs if ref.artifact_type == "shot")
+                for key in list(entities):
+                    if key[0] == "scene" and (all_scenes or key[1] in scene_ids):
+                        entities.pop(key)
+                    elif key[0] in {"shot", "saved_shot", "shot_reference_plan", "reference_plan_preview"} and key[1] in shot_ids:
+                        entities.pop(key)
+                for shot_id in shot_ids:
+                    shot_write_revisions[shot_id] = next((ref.version for ref in turn_refs
+                        if ref.artifact_type == "shot" and ref.artifact_id == shot_id), None)
+                for key, observation in list(read_observations.items()):
+                    retained = _retire_current_read_content(observation, project_id=turn.arguments.get("project_id"),
+                        scene_ids=scene_ids, shot_ids=shot_ids, all_scenes=all_scenes)
+                    if retained is None:
+                        read_observations.pop(key)
+                    else:
+                        read_observations[key] = retained
             selected_ref = _selected_tool_attempt_ref(turn)
             if selected_ref is not None:
                 selected_repair_attempt_ids.add(selected_ref.attempt_id)
@@ -2470,7 +2504,7 @@ def _specialist_working_set(
             # latest_handoff. Rebuild its entity on the following turn instead
             # of adding a second complete body to this request.
             for key, entity in list(entities.items()):
-                if key[0] == "shot" and entity.source_sequence == latest_turn.sequence:
+                if key[0] in {"shot", "scene"} and entity.source_sequence == latest_turn.sequence:
                     entities.pop(key)
         latest_selected_ref = _selected_tool_attempt_ref(latest_turn)
         if latest_selected_ref is not None:
@@ -2500,6 +2534,14 @@ def _specialist_working_set(
             # A read-only index can reveal another writer's change too. Keep
             # exact historical snapshots addressable, not as current item facts.
             read_observations.pop(key)
+    visible_scene_read_sequences = {
+        observation.source_sequence for observation in read_observations.values()
+        if observation.tool_name == "artifact.read_current"
+    }
+    for key, entity in list(entities.items()):
+        if entity.kind == "scene" and entity.source_sequence in visible_scene_read_sequences:
+            # Each independently selected scene already has one exact read body.
+            entities.pop(key)
     visible_plan_read_sequences = {
         observation.source_sequence for observation in read_observations.values()
         if observation.tool_name == "artifact.get_asset_work_context"
@@ -2547,6 +2589,44 @@ def _specialist_working_set(
         artifact_refs=_unique_artifact_refs(list(artifact_ref_slots.values())),
         progress=progress,
     )
+
+
+def _retire_current_read_content(
+    observation: SpecialistReadObservation, *, project_id: JsonValue,
+    scene_ids: set[str], shot_ids: set[str], all_scenes: bool,
+) -> SpecialistReadObservation | None:
+    """Drop only changed selected bodies, including old receipts without refs.
+
+    A current read may select both a scene and a Shot. Retain the other body
+    and its original provenance instead of losing an unrelated scope with it.
+    Full results and any persisted context snapshots remain historical records.
+    """
+    if observation.tool_name != "artifact.read_current" or observation.request_identifiers.get("project_id") != project_id:
+        return observation
+    output = observation.result.get("output")
+    content = output.get("content") if isinstance(output, dict) else None
+    if not isinstance(output, dict) or not isinstance(content, dict):
+        return observation
+    scene, shot = content.get("scene"), content.get("shot")
+    stale_scene = isinstance(scene, dict) and (all_scenes or scene.get("id") in scene_ids)
+    stale_shot = isinstance(shot, dict) and shot.get("id") in shot_ids
+    if not stale_scene and not stale_shot:
+        return observation
+    remove: set[str] = set()
+    if stale_scene:
+        remove.update({"scene", "lines", "script_ref", "structure_stale"})
+    if stale_shot:
+        remove.add("shot")
+    remaining = {key: value for key, value in content.items() if key not in remove}
+    if "scene" not in remaining and "shot" not in remaining:
+        return None
+    identifiers = dict(observation.request_identifiers)
+    identifiers.pop("scene_id" if stale_scene else "shot_id", None)
+    return observation.model_copy(update={"request_identifiers": identifiers,
+        "result": {**observation.result, "output": {**output, "content": remaining},
+            "artifact_refs": [ref.model_dump(mode="json") for ref in _artifact_refs_from_json(observation.result.get("artifact_refs"))
+                if not (stale_shot and ref.artifact_type == "shot" and ref.artifact_id in shot_ids)
+                and not (stale_scene and ref.artifact_type == "script_version")]}})
 
 
 def _read_observation_is_superseded(
@@ -2982,6 +3062,26 @@ def _fold_specialist_entities(
     output = cast(dict[str, JsonValue], output_value)
 
     if result.get("status") == ToolCallStatus.SUCCEEDED.value:
+        scene_values: list[JsonValue] = []
+        script_ref: JsonValue = output.get("script_ref")
+        if tool_name == "script.save_scene" and isinstance(output.get("saved_scenes"), list):
+            scene_values = cast(list[JsonValue], output["saved_scenes"])
+        elif tool_name == "artifact.read_current":
+            content = output.get("content")
+            if isinstance(content, dict) and isinstance(content.get("scene"), dict):
+                script_ref = content.get("script_ref")
+                if script_ref is None and isinstance(content.get("script_id"), str):
+                    # Legacy current reads know the immutable script ID but did
+                    # not expose its number. Do not infer it from the spelling.
+                    script_ref = {"project_id": arguments.get("project_id"), "artifact_type": "script_version",
+                        "artifact_id": content["script_id"], "version": None}
+                scene_values = [{key: content[key] for key in ("scene", "lines", "structure_stale") if key in content}]
+        for saved_scene in scene_values:
+            scene = saved_scene.get("scene") if isinstance(saved_scene, dict) else None
+            if not isinstance(saved_scene, dict) or not isinstance(scene, dict) or not isinstance(scene.get("id"), str):
+                continue
+            _put_specialist_entity(entities, kind="scene", source_tool=tool_name, sequence=sequence,
+                identity_id=scene["id"], value={**saved_scene, "script_ref": script_ref})
         _fold_specialist_take_states(
             entities, tool_name=tool_name, sequence=sequence, arguments=arguments, output=output,
         )
@@ -3339,6 +3439,8 @@ def _compact_image_task_state(
             "asset_id",
             "output_version_id",
             "output_version_number",
+            "provider_output_version_id",
+            "provider_output_version_number",
             "parent_version_id",
             "operation",
             "status",

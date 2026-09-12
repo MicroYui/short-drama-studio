@@ -1,0 +1,371 @@
+{
+  "source": {
+    "project_id": "project-8d268085367b",
+    "work_order_id": "work-order-7e5ea45e81f34c02a1e1b8d2f23c9108",
+    "cropping": "Only selected turns; read_current omits shared indexes/Bible. Authored bodies, arguments, refs and write receipts unchanged."
+  },
+  "turns": [
+    {
+      "id": "specialist-turn-aad68e10501f45e49511c8d8de7d03c7",
+      "sequence": 2,
+      "tool_name": "script.save_scene",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "request": {
+          "heading": "《最后一版》第一场｜内景·设计办公室·夜",
+          "screenplay_text": "夜，设计办公室。北窗外已黑，室内只留桌旁的工作灯光。浅木桌南侧、靠近东端的工作椅上，林乔从椅背提起米白帆布包，另一只手碰上仍打开的银灰色笔记本屏幕上沿。\n\n周诚站在桌子东侧的空椅旁，右手已握着钥匙。他用空着的手朝电脑点了点。\n\n周诚：先别关。首页排版再换一下，最后一版，五分钟。\n\n林乔的手停在屏幕上沿。她抬眼，看看他手里的钥匙。\n\n林乔：刚才那版，您也是这么说的。\n\n周诚仍带着惯常的笑，点了下头。\n\n周诚：小改一下，改完就走。\n\n林乔把包挂回自己的椅背，起身。她将笔记本沿桌面转向东侧，把黑色鼠标移到周诚面前，再将他身旁的空椅拉开半步。\n\n林乔：那您坐。我看看，五分钟怎么改。\n\n她留在自己的椅旁，手掌朝上，让出电脑。周诚的笑略僵了一下，还是坐下，把钥匙换到左手，右手握住鼠标。他看着屏幕，手指迟迟没有按下去。\n\n周诚：我又不会这个软件。\n\n林乔：那您怎么知道，只要五分钟？\n\n周诚张了张嘴，没有接话。他低头看了看左手里的钥匙，将它轻放到桌面东北角，右手也离开鼠标。林乔不催，也不坐回去。\n\n周诚：……行。明早我先把意见合成一份，咱们再改。\n\n他说完，合上电脑。接着欠身，从相邻的林乔椅背取下包，递过去。\n\n林乔接住包，没有马上往肩上挎，抬眼看他。\n\n林乔：这回真下班？\n\n周诚点头，手松开包带。\n\n周诚：真下班。\n\n林乔嘴角终于松开，把包背到右肩，向东南门口迈步。周诚拾起钥匙，起身侧让，随后也离开桌边。电脑留在桌上，盖子合着。\n\n全剧终。",
+          "lines": [
+            {
+              "id": "line-last-version-01",
+              "speaker": "周诚",
+              "speaker_character_id": "asset-0534f2f33ae9",
+              "original_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+              "spoken_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+              "subtitle_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-02",
+              "speaker": "林乔",
+              "speaker_character_id": "asset-5ec41674f76e",
+              "original_text": "刚才那版，您也是这么说的。",
+              "spoken_text": "刚才那版，您也是这么说的。",
+              "subtitle_text": "刚才那版，您也是这么说的。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-03",
+              "speaker": "周诚",
+              "speaker_character_id": "asset-0534f2f33ae9",
+              "original_text": "小改一下，改完就走。",
+              "spoken_text": "小改一下，改完就走。",
+              "subtitle_text": "小改一下，改完就走。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-04",
+              "speaker": "林乔",
+              "speaker_character_id": "asset-5ec41674f76e",
+              "original_text": "那您坐。我看看，五分钟怎么改。",
+              "spoken_text": "那您坐。我看看，五分钟怎么改。",
+              "subtitle_text": "那您坐。我看看，五分钟怎么改。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-05",
+              "speaker": "周诚",
+              "speaker_character_id": "asset-0534f2f33ae9",
+              "original_text": "我又不会这个软件。",
+              "spoken_text": "我又不会这个软件。",
+              "subtitle_text": "我又不会这个软件。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-06",
+              "speaker": "林乔",
+              "speaker_character_id": "asset-5ec41674f76e",
+              "original_text": "那您怎么知道，只要五分钟？",
+              "spoken_text": "那您怎么知道，只要五分钟？",
+              "subtitle_text": "那您怎么知道，只要五分钟？",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-07",
+              "speaker": "周诚",
+              "speaker_character_id": "asset-0534f2f33ae9",
+              "original_text": "……行。明早我先把意见合成一份，咱们再改。",
+              "spoken_text": "……行。明早我先把意见合成一份，咱们再改。",
+              "subtitle_text": "……行。明早我先把意见合成一份，咱们再改。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-08",
+              "speaker": "林乔",
+              "speaker_character_id": "asset-5ec41674f76e",
+              "original_text": "这回真下班？",
+              "spoken_text": "这回真下班？",
+              "subtitle_text": "这回真下班？",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-last-version-09",
+              "speaker": "周诚",
+              "speaker_character_id": "asset-0534f2f33ae9",
+              "original_text": "真下班。",
+              "spoken_text": "真下班。",
+              "subtitle_text": "真下班。",
+              "audio_kind": "DIALOGUE"
+            }
+          ],
+          "summary": "设计师林乔准备下班，已拿钥匙的主管周诚却追加首页排版，声称“最后一版，五分钟”。林乔不再争辩，转过电脑、递出鼠标让他实际操作。周诚承认不会软件，无法回答随口估时的依据，于是把明早先整合意见的责任接回自己，合上电脑并递还林乔的包。两人离开桌边，当晚追加工作明确停止。",
+          "target_duration_seconds": 54,
+          "narrative_purpose": "在单一桌旁冲突中，让林乔通过让出操作位而非说教争取下班边界；用周诚握鼠标却不点击、看自己钥匙的反应建立让步原因。以电脑终于合盖、包被主动递还和“真下班”回收开场被打断的离开动作，完成单篇回报。",
+          "entry_state": {
+            "setting": "同一间设计办公室的夜间，林乔坐桌南侧靠东端，周诚站桌东侧空椅旁，出口在东南。",
+            "character_states": [
+              "林乔准备下班，未与主管发生公开争吵。",
+              "周诚本人已拿好钥匙准备走，却要求林乔继续修改。"
+            ],
+            "prop_states": [
+              "银灰笔记本朝南打开，林乔手碰屏幕上沿但未合盖。",
+              "黑色鼠标在笔记本东侧、林乔右手位置。",
+              "米白帆布包刚由林乔从南侧椅背提起。",
+              "两枚钥匙的银色钥匙圈在周诚右手。"
+            ],
+            "known_facts": [
+              "林乔正在修改首页排版；周诚说这是最后一版、只需五分钟。"
+            ],
+            "open_threads": [
+              "林乔能否结束当晚不断追加的修改并离开。"
+            ]
+          },
+          "exit_state": {
+            "setting": "场景仍为同一办公室；林乔先向东南门口迈步，周诚起身让路后也离开桌边，不展示门外新场景。",
+            "character_states": [
+              "林乔没有接回操作位，确认获准结束当晚工作后背包离开。",
+              "周诚停止当晚追加，明确由自己明早先把意见合成一份。"
+            ],
+            "prop_states": [
+              "笔记本留在转向东侧的桌面原位，已由周诚合盖。",
+              "黑色鼠标留在东侧临时操作位，周诚没有点击。",
+              "帆布包由周诚从林乔椅背取下递还，现背在林乔右肩。",
+              "钥匙圈曾放桌面东北角，最后由周诚拾起带走。"
+            ],
+            "known_facts": [
+              "周诚承认自己不会使用设计软件，没有依据把这次改动保证为五分钟。",
+              "本场内已停止当晚工作，明早整合意见只是普通工作安排，不是悬念或后续解围承诺。"
+            ],
+            "open_threads": []
+          },
+          "affected_shot_ids": []
+        }
+      },
+      "reason": "《最后一版》的两名人物和单一办公室文字设定已保存；现在写入完整一场、逐字对白及实际进出状态，让开场追加修改、主动让位、主管让步与下班回收形成可表演的闭环。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "script.save_scene",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-8d268085367b",
+          "scene_ids": [
+            "scene-4da82135c813"
+          ],
+          "shot_ids": [],
+          "notices": [
+            "剧本及本次明确关联的场次已保存；相关镜头保留。下一次制作前由 Agent 按当前正文同步台词与分镜。"
+          ],
+          "shot_revisions": {},
+          "editorial_revision": null,
+          "timeline_id": null,
+          "changed_shot_ids": [],
+          "changed_scene_ids": [
+            "scene-4da82135c813"
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-8d268085367b",
+            "artifact_type": "script_version",
+            "artifact_id": "project-8d268085367b-script-v2",
+            "version": 2
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-8d268085367b",
+              "artifact_type": "script_version",
+              "artifact_id": "project-8d268085367b-script-v2",
+              "version": 2
+            }
+          ],
+          "current_state": {
+            "project_id": "project-8d268085367b",
+            "shot_revisions": {},
+            "editorial_revision": null,
+            "timeline_id": null
+          },
+          "changed_ids": {
+            "changed_shot_ids": [],
+            "changed_scene_ids": [
+              "scene-4da82135c813"
+            ]
+          }
+        }
+      },
+      "requested_at": "2026-09-12T01:50:20.888763Z",
+      "updated_at": "2026-09-12T01:50:21.053617Z"
+    },
+    {
+      "id": "specialist-turn-27fcd7d8a6ac4738a1091e8c8b74c514",
+      "sequence": 3,
+      "tool_name": "artifact.read_current",
+      "arguments": {
+        "project_id": "project-8d268085367b",
+        "scene_id": "scene-4da82135c813"
+      },
+      "reason": "当前场次已保存，但恢复后的工作集没有完整正文。读取这一场，用实际台词和动作核算自然表演时长，并据此补齐故事、结尾与视觉时长约定；不重复读取已保留的七项资产设定。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.read_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "content": {
+            "project_id": "project-8d268085367b",
+            "script_id": "project-8d268085367b-script-v2",
+            "episode_title": "第 1 集",
+            "editorial_revision": 0,
+            "scene": {
+              "id": "scene-4da82135c813",
+              "heading": "《最后一版》第一场｜内景·设计办公室·夜",
+              "summary": "设计师林乔准备下班，已拿钥匙的主管周诚却追加首页排版，声称“最后一版，五分钟”。林乔不再争辩，转过电脑、递出鼠标让他实际操作。周诚承认不会软件，无法回答随口估时的依据，于是把明早先整合意见的责任接回自己，合上电脑并递还林乔的包。两人离开桌边，当晚追加工作明确停止。",
+              "line_ids": [
+                "line-last-version-01",
+                "line-last-version-02",
+                "line-last-version-03",
+                "line-last-version-04",
+                "line-last-version-05",
+                "line-last-version-06",
+                "line-last-version-07",
+                "line-last-version-08",
+                "line-last-version-09"
+              ],
+              "screenplay_text": "夜，设计办公室。北窗外已黑，室内只留桌旁的工作灯光。浅木桌南侧、靠近东端的工作椅上，林乔从椅背提起米白帆布包，另一只手碰上仍打开的银灰色笔记本屏幕上沿。\n\n周诚站在桌子东侧的空椅旁，右手已握着钥匙。他用空着的手朝电脑点了点。\n\n周诚：先别关。首页排版再换一下，最后一版，五分钟。\n\n林乔的手停在屏幕上沿。她抬眼，看看他手里的钥匙。\n\n林乔：刚才那版，您也是这么说的。\n\n周诚仍带着惯常的笑，点了下头。\n\n周诚：小改一下，改完就走。\n\n林乔把包挂回自己的椅背，起身。她将笔记本沿桌面转向东侧，把黑色鼠标移到周诚面前，再将他身旁的空椅拉开半步。\n\n林乔：那您坐。我看看，五分钟怎么改。\n\n她留在自己的椅旁，手掌朝上，让出电脑。周诚的笑略僵了一下，还是坐下，把钥匙换到左手，右手握住鼠标。他看着屏幕，手指迟迟没有按下去。\n\n周诚：我又不会这个软件。\n\n林乔：那您怎么知道，只要五分钟？\n\n周诚张了张嘴，没有接话。他低头看了看左手里的钥匙，将它轻放到桌面东北角，右手也离开鼠标。林乔不催，也不坐回去。\n\n周诚：……行。明早我先把意见合成一份，咱们再改。\n\n他说完，合上电脑。接着欠身，从相邻的林乔椅背取下包，递过去。\n\n林乔接住包，没有马上往肩上挎，抬眼看他。\n\n林乔：这回真下班？\n\n周诚点头，手松开包带。\n\n周诚：真下班。\n\n林乔嘴角终于松开，把包背到右肩，向东南门口迈步。周诚拾起钥匙，起身侧让，随后也离开桌边。电脑留在桌上，盖子合着。\n\n全剧终。",
+              "narrative_purpose": "在单一桌旁冲突中，让林乔通过让出操作位而非说教争取下班边界；用周诚握鼠标却不点击、看自己钥匙的反应建立让步原因。以电脑终于合盖、包被主动递还和“真下班”回收开场被打断的离开动作，完成单篇回报。",
+              "target_duration_seconds": 54.0,
+              "entry_state": {
+                "setting": "同一间设计办公室的夜间，林乔坐桌南侧靠东端，周诚站桌东侧空椅旁，出口在东南。",
+                "character_states": [
+                  "林乔准备下班，未与主管发生公开争吵。",
+                  "周诚本人已拿好钥匙准备走，却要求林乔继续修改。"
+                ],
+                "prop_states": [
+                  "银灰笔记本朝南打开，林乔手碰屏幕上沿但未合盖。",
+                  "黑色鼠标在笔记本东侧、林乔右手位置。",
+                  "米白帆布包刚由林乔从南侧椅背提起。",
+                  "两枚钥匙的银色钥匙圈在周诚右手。"
+                ],
+                "known_facts": [
+                  "林乔正在修改首页排版；周诚说这是最后一版、只需五分钟。"
+                ],
+                "open_threads": [
+                  "林乔能否结束当晚不断追加的修改并离开。"
+                ]
+              },
+              "exit_state": {
+                "setting": "场景仍为同一办公室；林乔先向东南门口迈步，周诚起身让路后也离开桌边，不展示门外新场景。",
+                "character_states": [
+                  "林乔没有接回操作位，确认获准结束当晚工作后背包离开。",
+                  "周诚停止当晚追加，明确由自己明早先把意见合成一份。"
+                ],
+                "prop_states": [
+                  "笔记本留在转向东侧的桌面原位，已由周诚合盖。",
+                  "黑色鼠标留在东侧临时操作位，周诚没有点击。",
+                  "帆布包由周诚从林乔椅背取下递还，现背在林乔右肩。",
+                  "钥匙圈曾放桌面东北角，最后由周诚拾起带走。"
+                ],
+                "known_facts": [
+                  "周诚承认自己不会使用设计软件，没有依据把这次改动保证为五分钟。",
+                  "本场内已停止当晚工作，明早整合意见只是普通工作安排，不是悬念或后续解围承诺。"
+                ],
+                "open_threads": []
+              }
+            },
+            "lines": [
+              {
+                "id": "line-last-version-01",
+                "speaker": "周诚",
+                "speaker_character_id": "asset-0534f2f33ae9",
+                "original_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+                "spoken_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+                "subtitle_text": "先别关。首页排版再换一下，最后一版，五分钟。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-02",
+                "speaker": "林乔",
+                "speaker_character_id": "asset-5ec41674f76e",
+                "original_text": "刚才那版，您也是这么说的。",
+                "spoken_text": "刚才那版，您也是这么说的。",
+                "subtitle_text": "刚才那版，您也是这么说的。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-03",
+                "speaker": "周诚",
+                "speaker_character_id": "asset-0534f2f33ae9",
+                "original_text": "小改一下，改完就走。",
+                "spoken_text": "小改一下，改完就走。",
+                "subtitle_text": "小改一下，改完就走。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-04",
+                "speaker": "林乔",
+                "speaker_character_id": "asset-5ec41674f76e",
+                "original_text": "那您坐。我看看，五分钟怎么改。",
+                "spoken_text": "那您坐。我看看，五分钟怎么改。",
+                "subtitle_text": "那您坐。我看看，五分钟怎么改。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-05",
+                "speaker": "周诚",
+                "speaker_character_id": "asset-0534f2f33ae9",
+                "original_text": "我又不会这个软件。",
+                "spoken_text": "我又不会这个软件。",
+                "subtitle_text": "我又不会这个软件。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-06",
+                "speaker": "林乔",
+                "speaker_character_id": "asset-5ec41674f76e",
+                "original_text": "那您怎么知道，只要五分钟？",
+                "spoken_text": "那您怎么知道，只要五分钟？",
+                "subtitle_text": "那您怎么知道，只要五分钟？",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-07",
+                "speaker": "周诚",
+                "speaker_character_id": "asset-0534f2f33ae9",
+                "original_text": "……行。明早我先把意见合成一份，咱们再改。",
+                "spoken_text": "……行。明早我先把意见合成一份，咱们再改。",
+                "subtitle_text": "……行。明早我先把意见合成一份，咱们再改。",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-08",
+                "speaker": "林乔",
+                "speaker_character_id": "asset-5ec41674f76e",
+                "original_text": "这回真下班？",
+                "spoken_text": "这回真下班？",
+                "subtitle_text": "这回真下班？",
+                "audio_kind": "DIALOGUE"
+              },
+              {
+                "id": "line-last-version-09",
+                "speaker": "周诚",
+                "speaker_character_id": "asset-0534f2f33ae9",
+                "original_text": "真下班。",
+                "spoken_text": "真下班。",
+                "subtitle_text": "真下班。",
+                "audio_kind": "DIALOGUE"
+              }
+            ]
+          }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T01:50:37.103115Z",
+      "updated_at": "2026-09-12T01:50:37.273708Z"
+    }
+  ]
+}

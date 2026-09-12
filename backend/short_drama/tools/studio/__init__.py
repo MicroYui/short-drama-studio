@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Self, cast
 from pydantic import JsonValue, Field, model_validator
-from short_drama.models import DomainModel
+from short_drama.models import DomainModel, ScriptLine, StructuredScene
 from short_drama.studio_models import StudioSceneSave, StudioShotSave, StudioTimelineSave, StudioExportRequest, StudioExport, StudioEditorialEdit, StudioAssetOverlay
 from short_drama.tools.contracts import ArtifactRef, ToolCategory, ToolEffect, ToolExecution, ToolModel, ToolSpec
 from short_drama.tools.registry import ToolRegistry
@@ -110,6 +110,20 @@ class CurrentWriteOutput(DomainModel):
     changed_scene_ids: list[str] = Field(default_factory=list[str])
 
 
+class SavedSceneContent(DomainModel):
+    scene: StructuredScene
+    lines: list[ScriptLine]
+    structure_stale: bool
+
+
+class SceneWriteOutput(CurrentWriteOutput):
+    script_ref: ArtifactRef
+    saved_scenes: list[SavedSceneContent] = Field(description=(
+        "Actual saved content for the selected and related scenes only, including unchanged selected scenes. "
+        "Lines come from the saved ScriptVersion; structure_stale flags text whose dialogue structure needs updating."
+    ))
+
+
 class ShotWriteOutput(CurrentWriteOutput):
     asset_plan_identity: dict[str, JsonValue] | None = None
     saved_shot: SavedShotSummary | None = None
@@ -177,6 +191,9 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
                 raise KeyError(request.scene_id)
             content["scene"] = cast(dict[str, JsonValue], scene.model_dump(mode="json"))
             content["lines"] = [cast(dict[str, JsonValue], line.model_dump(mode="json")) for line in script.lines if line.id in scene.line_ids]
+            content["script_ref"] = ArtifactRef(project_id=request.project_id, artifact_type="script_version",
+                artifact_id=script.id, version=script.version).model_dump(mode="json")
+            content["structure_stale"] = scene.id in script.structure_stale_scene_ids
         if request.shot_id:
             shot = next((item for item in document.shots if item.id == request.shot_id), None)
             if shot is None:
@@ -184,14 +201,24 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             content["shot"] = cast(dict[str, JsonValue], shot.model_dump(mode="json"))
         return ToolExecution(output=CurrentReadOutput(content=content))
 
-    def save_scene(request: SceneWriteInput) -> ToolExecution[CurrentWriteOutput]:
+    def save_scene(request: SceneWriteInput) -> ToolExecution[SceneWriteOutput]:
         result = service.studio.save_scene(request.project_id, request.request)
         document = result.project.document
         script = next(item for item in document.script_versions if item.id == document.project.current_script_version_id)
-        return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id,
+        selected_ids = set(result.changed_scene_ids)
+        if request.request.scene_id is not None:
+            selected_ids.add(request.request.scene_id)
+        selected_ids.update(edit.scene_id for edit in request.request.related_scene_updates)
+        script_ref = ArtifactRef(project_id=request.project_id, artifact_type="script_version",
+            artifact_id=script.id, version=script.version)
+        return ToolExecution(output=SceneWriteOutput(project_id=request.project_id,
             scene_ids=[item.id for item in script.structured_scenes], shot_ids=[], notices=result.notices,
-            changed_scene_ids=result.changed_scene_ids, changed_shot_ids=result.changed_shot_ids),
-            artifact_refs=(ArtifactRef(project_id=request.project_id, artifact_type="script_version", artifact_id=script.id, version=script.version),))
+            changed_scene_ids=result.changed_scene_ids, changed_shot_ids=result.changed_shot_ids,
+            script_ref=script_ref, saved_scenes=[SavedSceneContent(scene=scene,
+                lines=[line for line in script.lines if line.id in scene.line_ids],
+                structure_stale=scene.id in script.structure_stale_scene_ids)
+                for scene in script.structured_scenes if scene.id in selected_ids]),
+            artifact_refs=(script_ref,))
 
     def save_shot(request: ShotWriteInput) -> ToolExecution[ShotWriteOutput]:
         registration = None
@@ -428,8 +455,8 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         effect=ToolEffect.EXTERNAL, idempotent=False, input_model=WorkflowInput, output_model=ComfyRun, handler=workflow,
         tags=frozenset({"studio", "comfyui", "workflow"})))
     registry.register(ToolSpec(id="script.save_scene", version=2, category=ToolCategory.SCRIPT,
-        description="按完整场次新增或修改当前剧本，实时显示。已有场次带 expected_text；同时写入正文中逐字存在的 lines，summary/narrative_purpose 与当前正文一致。entry_state/exit_state 可记录正文实际建立的相关事实，勿照抄未实现的蓝图。修改回报、关键道具、人物知情或因果时，先用 artifact.read_current 的场次索引定位相关铺垫/回收，再按 scene_id 读取正文；必要的跨场修复用 related_scene_updates 一次保存，每场独立 expected_text，任一冲突整体不保存。无关联无需填写，不默认重写全剧。用每场 affected_shot_ids 限定需更新画面的镜头；[] 保留画面，范围未知时省略。变更台词仍自动关联使用它的镜头。返回实际 changed_scene_ids/changed_shot_ids；只要求剧本时完成即交付。",
-        effect=ToolEffect.WRITE, idempotent=False, input_model=SceneWriteInput, output_model=CurrentWriteOutput, handler=save_scene,
+        description="按完整场次新增或修改当前剧本，实时显示。已有场次带 expected_text；同时写入正文中逐字存在的 lines，summary/narrative_purpose 与当前正文一致。entry_state/exit_state 可记录正文实际建立的相关事实，勿照抄未实现的蓝图。修改回报、关键道具、人物知情或因果时，先用 artifact.read_current 的场次索引定位相关铺垫/回收，再按 scene_id 读取正文；必要的跨场修复用 related_scene_updates 一次保存，每场独立 expected_text，任一冲突整体不保存。无关联无需填写，不默认重写全剧。用每场 affected_shot_ids 限定需更新画面的镜头；[] 保留画面，范围未知时省略。变更台词仍自动关联使用它的镜头。返回实际 changed_scene_ids/changed_shot_ids、script_ref 及本次 saved_scenes 正文/lines/structure_stale，可直接继续创作，无需为找回刚保存的正文重复读取；不包含无关场次正文。只要求剧本时完成即交付。",
+        effect=ToolEffect.WRITE, idempotent=False, input_model=SceneWriteInput, output_model=SceneWriteOutput, handler=save_scene,
         tags=frozenset({"studio", "script", "partial-edit"})))
     registry.register(ToolSpec(id="shot.save_current", version=2, category=ToolCategory.SHOT,
         description="保存当前镜头及素材引用，可同时登记同一图片的制作项完成和参考包用途。返回实际修订号及 saved_shot：实际保存的 GENERATION/EDITORIAL 引用、正文字符范围、作用时段和对白 IDs。receipt 同样保留这些事实，可直接核对，不因生成预览为空而重复读取。reference_plan_preview_scope=GENERATION_ONLY：reference_plan_preview 只解析视频生成参考，EDITORIAL 不进入 selected；其 action_beat_count 是参考计划的动作数量，不是已保存的分镜时段数量。references 使用对象 id、精确 asset_version_id、purpose、field 和 Unicode 字符 text_start/text_end，作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。已明确选定的同一图片可用可选 media_registration 同时登记具体工作项完成与参考包用途；CURRENT DRAFT 可用，不切换素材 current/approved 指针，不自动审核、不推断全部服务镜头。全部验证成功才一起保存；相同内容重试复用，目标冲突不部分写。省略仍只保存镜头。保存引用不表示已剪入成片，预览不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
