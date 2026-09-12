@@ -143,7 +143,9 @@ def register_tool_attempt_tools(
                 "Read the exact arguments, result, or both from a persisted Tool "
                 "attempt produced by this run. The Leader may read its Workers' "
                 "attempts; a Worker uses its own or explicitly handed references. Use it to continue "
-                "from a failed draft without reconstructing the draft from summaries."
+                "from a failed draft without reconstructing the draft from summaries, or retrieve exact "
+                "saved local image/layout parameters that are not visible in the current working set. "
+                "Use the actual attempt_ref from the handoff; do not inspect the image again just to recover saved parameters."
             ),
             effect=ToolEffect.READ,
             idempotent=True,

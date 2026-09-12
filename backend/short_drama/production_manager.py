@@ -67,6 +67,7 @@ from short_drama.agent_runtime.storyboard_context import (
     storyboard_read_is_stale,
 )
 from short_drama.agent_runtime.asset_plan_context import asset_work_read_is_stale, fold_asset_plan_items
+from short_drama.agent_runtime.asset_version_context import asset_construction_state, selected_asset_version_ids
 from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
     BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result,
@@ -2090,10 +2091,12 @@ def _specialist_read_observation_key(
 
 def _specialist_read_observation_result(
     turn: SpecialistTurnRecord,
+    *,
+    selected_version_ids: frozenset[str] = frozenset(),
 ) -> dict[str, JsonValue]:
     assert turn.result is not None
     result = _compact_specialist_tool_result(
-        turn.tool_name, turn.result, retain_exact_payload=True
+        turn.tool_name, turn.result, retain_exact_payload=True, selected_version_ids=selected_version_ids,
     )
     if turn.tool_name != "artifact.read_current" or not (
         turn.arguments.get("scene_id") or turn.arguments.get("shot_id")
@@ -2144,6 +2147,7 @@ def _specialist_working_set(
     # must continue handing off its exact result until the caller saves it.
     write_tool_ids = write_tool_ids | frozenset({"route.plan_h3"})
     ordered_turns = sorted(work_order.specialist_turns, key=lambda item: item.sequence)
+    selected_version_ids = selected_asset_version_ids(work_order)
     latest_turn = ordered_turns[-1] if ordered_turns else None
     latest_requires_repair = (
         False
@@ -2196,6 +2200,7 @@ def _specialist_working_set(
                 latest_requires_repair or latest_is_successful_write or latest_is_compiled_prompt
             ),
             compact_write_result=latest_is_successful_write,
+            selected_version_ids=selected_version_ids,
             attempt_ref=(
                 _selected_tool_attempt_ref(latest_turn)
                 or (
@@ -2233,6 +2238,7 @@ def _specialist_working_set(
                 turn.tool_name,
                 turn.result,
                 retain_exact_payload=False,
+                selected_version_ids=selected_version_ids,
             )
         )
         turn_refs = _artifact_refs_from_json(
@@ -2498,7 +2504,7 @@ def _specialist_working_set(
                 request_identifiers=_specialist_request_identifiers(
                     turn.arguments
                 ),
-                result=_specialist_read_observation_result(turn),
+                result=_specialist_read_observation_result(turn, selected_version_ids=selected_version_ids),
             )
         if compact_result is not None:
             review_project_id = resolved_project_id or turn.arguments.get("project_id")
@@ -2588,6 +2594,15 @@ def _specialist_working_set(
             # Its original scoped read already carries the same body (and its
             # exact snapshot). Materialize the item only if a later local write
             # invalidates that multi-object response while proving this item unchanged.
+            entities.pop(key)
+    visible_project_read_sequences = {observation.source_sequence for observation in read_observations.values()
+        if observation.tool_name == "project.get"}
+    if latest_turn is not None and latest_turn.tool_name == "project.get":
+        visible_project_read_sequences.add(latest_turn.sequence)
+    for key, entity in list(entities.items()):
+        if entity.kind in {"asset", "asset_version"} and entity.source_tool == "project.get" and entity.source_sequence in visible_project_read_sequences:
+            # The selected version appears once in this exact read. Rebuild its
+            # entity only when a later related write retires the broad snapshot.
             entities.pop(key)
     repair_tool_schema_ids = sorted(pending_tool_repairs)
     if latest_turn is not None:
@@ -2869,6 +2884,7 @@ def _specialist_turn_handoff(
     identifiers_only: bool = False,
     compact_write_result: bool = False,
     attempt_ref: ToolAttemptRef | None = None,
+    selected_version_ids: frozenset[str] = frozenset(),
 ) -> dict[str, JsonValue]:
     request_arguments = (
         _specialist_request_identifiers(turn.arguments)
@@ -2908,6 +2924,7 @@ def _specialist_turn_handoff(
                 turn.tool_name,
                 turn.result,
                 retain_exact_payload=retain_exact_payload,
+                selected_version_ids=selected_version_ids,
             )
         )
     return handoff
@@ -3297,6 +3314,11 @@ def _fold_specialist_entities(
 
     asset_values = output.get("assets")
     assets = list(asset_values) if isinstance(asset_values, list) else []
+    if tool_name == "project.get" and result.get("status") == ToolCallStatus.SUCCEEDED.value:
+        project_document = output.get("document")
+        project_assets = project_document.get("assets") if isinstance(project_document, dict) else None
+        if isinstance(project_assets, list):
+            assets.extend(project_assets)
     asset_value = output.get("asset")
     if isinstance(asset_value, dict):
         assets.append(asset_value)
@@ -3331,6 +3353,14 @@ def _fold_specialist_entities(
         if tool_name == "artifact.create_assets" and isinstance(current_version, dict):
             _put_specialist_entity(entities, kind="asset_version", source_tool=tool_name, sequence=sequence,
                 value=_compact_version_state(current_version, entity_kind="asset_version"))
+        elif tool_name == "project.get" and isinstance(versions, list):
+            # The project projection already selected only current/approved and
+            # this task's exact candidates. A fresh read also updates review
+            # status/metadata of those versions without selecting new media.
+            for candidate in versions:
+                if isinstance(candidate, dict):
+                    _put_specialist_entity(entities, kind="asset_version", source_tool=tool_name, sequence=sequence,
+                        value=_compact_version_state(candidate, entity_kind="asset_version"))
     version_value = output.get("version")
     if isinstance(version_value, dict):
         version = cast(dict[str, JsonValue], version_value)
@@ -3527,6 +3557,8 @@ def _compact_version_state(
         "created_at",
     )
     state = _select_json_fields(version, common)
+    if entity_kind == "asset_version":
+        state.update(asset_construction_state(version))
     state["entity_kind"] = entity_kind
     return state
 
@@ -3894,6 +3926,7 @@ def _compact_specialist_tool_result(
     result: dict[str, JsonValue],
     *,
     retain_exact_payload: bool = True,
+    selected_version_ids: frozenset[str] = frozenset(),
 ) -> dict[str, JsonValue]:
     """Project persisted Tool results into a compact model-facing handoff.
 
@@ -4120,7 +4153,7 @@ def _compact_specialist_tool_result(
                 asset = cast(dict[str, JsonValue], raw_asset)
                 current_version_id = asset.get("current_version_id")
                 approved_version_id = asset.get("approved_version_id")
-                selected_version_ids = {
+                asset_selected_version_ids = set(selected_version_ids) | {
                     version_id
                     for version_id in (
                         current_version_id,
@@ -4135,7 +4168,7 @@ def _compact_specialist_tool_result(
                         cast(dict[str, JsonValue], version)
                         for version in versions_value
                         if isinstance(version, dict)
-                        and version.get("id") in selected_version_ids
+                        and version.get("id") in asset_selected_version_ids
                     ]
                 assets.append(
                     {
@@ -4146,9 +4179,9 @@ def _compact_specialist_tool_result(
                         "brief": asset.get("brief"),
                         "current_version_id": current_version_id,
                         "approved_version_id": approved_version_id,
-                        # Keep the exact current/approved media records so an
-                        # Agent can assign source-intake contributions and
-                        # reference their AssetVersion IDs in AssetPlan.
+                        # Current/approved plus versions explicitly selected or
+                        # produced in this WorkOrder, including non-current
+                        # DRAFT construction plates. Unrelated history stays out.
                         "versions": selected_versions,
                     }
                 )

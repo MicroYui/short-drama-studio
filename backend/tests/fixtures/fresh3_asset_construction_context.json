@@ -1,0 +1,1286 @@
+{
+  "provenance": {
+    "project_id": "project-d2fa0fa72d76",
+    "work_order_id": "work-order-cb2028bdf2ee42acada0e14746c0ae2a",
+    "job_id": "studio-job-f199582089d7",
+    "source_commit": "3202f3c",
+    "selection": "Original turns 1/2/4/7; project.get only project header and selected paper asset; convenience aggregates omitted; no generated observations."
+  },
+  "objective": "根据现有加班单设定完成可用于后续照片构图的原创准确纸面和道具状态图片。保持同一张A4竖向白纸、单行大号黑体“自愿加班”、下部空白签名线、其余留白。准备原始未签状态，以及仅一道黑线划过前两字“自愿”、原字仍可辨认、后两字“加班”未被划掉的未签状态。优先采用真实工具支持的确定性文字排版及必要照片平面合成，避免依赖生成模型碰运气写字；需要生成摄影底图时读取实际image.capability。实际检查文字、划线范围、留白、纸张形态和可用分辨率，保存各状态精确引用及用途，原始和划线状态均保留可用，不混淆为同一镜头起态。暂不制造握纸、递笔等依赖人物和分镜的构图；折纸终态是否需单独图片待具体镜头决定。",
+  "task_inputs": {
+    "asset_id": "asset-865595edbe90",
+    "required_text": "自愿加班",
+    "states": [
+      "完整标题，空白签名线",
+      "只用一道黑线划过“自愿”，原字可辨，“加班”完整，签名线仍空白"
+    ],
+    "deferred_scope": "人物互动构图及折纸终态的具体镜头图片"
+  },
+  "scope": [
+    {
+      "project_id": "project-d2fa0fa72d76",
+      "artifact_type": "asset_version",
+      "artifact_id": "asset-version-e4525527b3bd",
+      "version": 1
+    }
+  ],
+  "turns": [
+    {
+      "id": "specialist-turn-550b60cddbd24396afe9516da6431908",
+      "sequence": 1,
+      "tool_name": "image.compose_text_plate",
+      "arguments": {
+        "project_id": "project-d2fa0fa72d76",
+        "asset_id": "asset-865595edbe90",
+        "request": {
+          "size": "1680x2376",
+          "content_state": {
+            "name": "原始未签：完整标题、签名线空白",
+            "required_visible_text": [
+              "自愿加班"
+            ]
+          },
+          "background_color": "#FFFFFF",
+          "foreground_color": "#000000",
+          "stroke_width": 1,
+          "stroke_color": "#000000",
+          "text_blocks": [
+            {
+              "text": "自愿加班",
+              "content_box": [
+                0.18,
+                0.1,
+                0.64,
+                0.13
+              ],
+              "font_size": 240,
+              "text_align": "center",
+              "vertical_align": "center",
+              "color": "#000000"
+            }
+          ],
+          "lines": [
+            {
+              "start": [
+                0.28,
+                0.78
+              ],
+              "end": [
+                0.72,
+                0.78
+              ],
+              "width": 3,
+              "color": "#000000"
+            }
+          ],
+          "layout_description": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+          "descriptor": "原创准确纸面／原始未签。唯一文字“自愿加班”，标题完整无划线，下部签名横线空白。A4比例白底PNG，作为后续物理纸张照片平面合成的内容源，不承担纸纤维、光照、纸边或手部接触依据。",
+          "parent_version_id": "asset-version-e4525527b3bd"
+        }
+      },
+      "reason": "先在现有加班单资产内制作原始未签的准确纸面，保留物理道具设定，不让生成模型猜写汉字。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "image.compose_text_plate",
+        "status": "SUCCEEDED",
+        "output": {
+          "asset": {
+            "id": "asset-865595edbe90",
+            "project_id": "project-d2fa0fa72d76",
+            "kind": "PROP",
+            "name": "自愿加班单",
+            "bible_entity_id": null,
+            "brief": {
+              "identity_anchor": "一张白色A4竖向加班单，唯一可读正文为页顶四字“自愿加班”；无公章、标志、金额、日期或额外条款。",
+              "tone_or_temperament": null,
+              "visual_attributes": [
+                "白色普通办公纸，竖向排版",
+                "页顶“自愿加班”以大号黑体排成单行，前两字与后两字可明确区分",
+                "下部一条空白签名横线，其余大面积留白",
+                "单面打印，背面空白"
+              ],
+              "wardrobe_or_materials": [
+                "普通不反光白纸",
+                "原印字为黑色；划线为同一支黑色按动笔留下的一道墨线"
+              ],
+              "background_constraints": [
+                "不是辞职信、劳动合同或已生效的法律认定",
+                "禁止添加人名签字、已批准章、二维码或密集小字",
+                "后续准确纸面及其状态须在当前项目原创制作"
+              ],
+              "texture_constraints": [
+                "真实纸纤维与自然弯曲，不能做成漂浮的字幕卡"
+              ],
+              "continuity_anchors": [
+                "状态一：完整标题，无墨线，无签字，正向朝林夏",
+                "状态二：只用一道横线划过“自愿”两字，仍能辨认原字；不划掉“加班”，不新写替换字，不出现任何签名",
+                "林夏将状态二在桌面旋转半圈，正向朝周启，并把黑色按动笔递向他；周启不接笔",
+                "状态三：周启把状态二沿纸张短边方向对折一次，印字面折在里面；没有新增纸张和新增签字"
+              ],
+              "named_views_or_zones": [
+                "原始完整纸面",
+                "“自愿”被划掉但仍未签字的纸面",
+                "主管对折收回状态"
+              ],
+              "presentation_mode": "PHYSICAL_MASTER",
+              "required_visible_text": [
+                "自愿加班"
+              ],
+              "reference_strategy": "LIGHTWEIGHT",
+              "layout_profile": "PROP_MASTER_SINGLE",
+              "requested_views": [
+                "PROP_PRODUCT",
+                "PROP_STATE"
+              ],
+              "strategy_rationale": "原始与划线后的准确状态是必要连续性信息；无需制造密集合同内容，折纸状态是否单独制图由具体镜头需要决定。"
+            },
+            "current_version_id": "asset-version-e4525527b3bd",
+            "approved_version_id": null,
+            "versions": [
+              {
+                "id": "asset-version-e4525527b3bd",
+                "version": 1,
+                "origin_type": "MANUAL",
+                "descriptor": "唯一关键剧情道具：一张白色A4竖向纸，页顶只有醒目的黑色标题“自愿加班”，下部留有一条空白签名横线。开场完整未签；林夏划掉标题前两字“自愿”，将纸转向主管；结尾仍无人签字，由主管对折收回。理解冲突依靠实际对白和交还动作，不依赖阅读小字。",
+                "media_type": "TEXT_REFERENCE",
+                "local_path": null,
+                "external_url": null,
+                "mime_type": null,
+                "width": null,
+                "height": null,
+                "duration_seconds": null,
+                "file_size_bytes": null,
+                "parent_version_id": null,
+                "image_task_id": null,
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": null,
+                "source": {
+                  "source_type": "MANUAL",
+                  "source_label": "用户创建的资产说明",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": null,
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": null,
+                  "prompt": null,
+                  "created_at": "2026-09-12T05:40:22.363+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:40:22.363+00:00"
+              },
+              {
+                "id": "asset-version-b004f0cdde1e",
+                "version": 2,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "原创准确纸面／原始未签。唯一文字“自愿加班”，标题完整无划线，下部签名横线空白。A4比例白底PNG，作为后续物理纸张照片平面合成的内容源，不承担纸纤维、光照、纸边或手部接触依据。",
+                "media_type": "IMAGE",
+                "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v2-asset-version-b004f0cdde1e-text-plate.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 1680,
+                "height": 2376,
+                "duration_seconds": null,
+                "file_size_bytes": 39053,
+                "parent_version_id": "asset-version-e4525527b3bd",
+                "image_task_id": null,
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": {
+                  "purpose": "PHYSICAL_SURFACE_CONTENT",
+                  "content_state": {
+                    "name": "原始未签：完整标题、签名线空白",
+                    "required_visible_text": [
+                      "自愿加班"
+                    ]
+                  },
+                  "size": "1680x2376",
+                  "background_color": "#FFFFFF",
+                  "foreground_color": "#000000",
+                  "content_box": [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  "text_align": "left",
+                  "vertical_align": "center",
+                  "stroke_width": 1,
+                  "stroke_color": "#000000",
+                  "title": null,
+                  "exact_lines": [],
+                  "text_blocks": [
+                    {
+                      "text": "自愿加班",
+                      "content_box": [
+                        0.18,
+                        0.1,
+                        0.64,
+                        0.13
+                      ],
+                      "font_size": 240,
+                      "text_align": "center",
+                      "vertical_align": "center",
+                      "color": "#000000"
+                    }
+                  ],
+                  "append_text_blocks": [],
+                  "lines": [
+                    {
+                      "start": [
+                        0.28,
+                        0.78
+                      ],
+                      "end": [
+                        0.72,
+                        0.78
+                      ],
+                      "width": 3,
+                      "color": "#000000"
+                    }
+                  ],
+                  "layout_description": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                  "font_family": "STHeiti Medium"
+                },
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地确定性精确文字图版",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-text-plate-v1",
+                  "prompt": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                  "created_at": "2026-09-12T05:46:40.118+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:46:40.118+00:00"
+              }
+            ]
+          },
+          "version": {
+            "id": "asset-version-b004f0cdde1e",
+            "version": 2,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "原创准确纸面／原始未签。唯一文字“自愿加班”，标题完整无划线，下部签名横线空白。A4比例白底PNG，作为后续物理纸张照片平面合成的内容源，不承担纸纤维、光照、纸边或手部接触依据。",
+            "media_type": "IMAGE",
+            "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v2-asset-version-b004f0cdde1e-text-plate.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 1680,
+            "height": 2376,
+            "duration_seconds": null,
+            "file_size_bytes": 39053,
+            "parent_version_id": "asset-version-e4525527b3bd",
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": {
+              "purpose": "PHYSICAL_SURFACE_CONTENT",
+              "content_state": {
+                "name": "原始未签：完整标题、签名线空白",
+                "required_visible_text": [
+                  "自愿加班"
+                ]
+              },
+              "size": "1680x2376",
+              "background_color": "#FFFFFF",
+              "foreground_color": "#000000",
+              "content_box": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+              ],
+              "text_align": "left",
+              "vertical_align": "center",
+              "stroke_width": 1,
+              "stroke_color": "#000000",
+              "title": null,
+              "exact_lines": [],
+              "text_blocks": [
+                {
+                  "text": "自愿加班",
+                  "content_box": [
+                    0.18,
+                    0.1,
+                    0.64,
+                    0.13
+                  ],
+                  "font_size": 240,
+                  "text_align": "center",
+                  "vertical_align": "center",
+                  "color": "#000000"
+                }
+              ],
+              "append_text_blocks": [],
+              "lines": [
+                {
+                  "start": [
+                    0.28,
+                    0.78
+                  ],
+                  "end": [
+                    0.72,
+                    0.78
+                  ],
+                  "width": 3,
+                  "color": "#000000"
+                }
+              ],
+              "layout_description": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+              "font_family": "STHeiti Medium"
+            },
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "本地确定性精确文字图版",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-text-plate-v1",
+              "prompt": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+              "created_at": "2026-09-12T05:46:40.118+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:46:40.118+00:00"
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset",
+            "artifact_id": "asset-865595edbe90",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-b004f0cdde1e",
+            "version": 2
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset",
+              "artifact_id": "asset-865595edbe90",
+              "version": null
+            },
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-b004f0cdde1e",
+              "version": 2
+            }
+          ],
+          "current_state": {
+            "asset.id": "asset-865595edbe90",
+            "asset.project_id": "project-d2fa0fa72d76",
+            "asset.current_version_id": "asset-version-e4525527b3bd",
+            "version.id": "asset-version-b004f0cdde1e",
+            "version.version": 2,
+            "version.local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v2-asset-version-b004f0cdde1e-text-plate.png",
+            "version.duration_seconds": null
+          },
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T05:46:39.140594Z",
+      "updated_at": "2026-09-12T05:46:40.132868Z"
+    },
+    {
+      "id": "specialist-turn-c3d2f8dab6ab46218fec49abaee39a0b",
+      "sequence": 2,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-d2fa0fa72d76",
+        "asset_id": "asset-865595edbe90",
+        "version_id": "asset-version-b004f0cdde1e",
+        "request": {
+          "review_focus": "本图预期仅作为PHYSICAL_SURFACE_CONTENT准确纸面，不是摄影或互动照片。请看实际PNG：是否仅有单行大号黑体“自愿加班”，四字准确、无多余文字；标题位于页顶、下部仅一条空白签名线，其余留白；纵横比接近A4，分辨率能支持之后照片平面合成。请报告标题四字各自的可见范围及签名线位置（归一化坐标），建议一道黑色细横线仅划过“自愿”的起止坐标和粗细；不要求纸面图版本身有摄影纹理。"
+        }
+      },
+      "reason": "先检查已落盘的原始纸面是否可用，避免重做；同时取得实际标题与签名线的位置，为仅划过“自愿”的同版式状态提供依据。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": true,
+          "score": 5.0,
+          "issues": [],
+          "summary": "实际可见内容仅为页顶单行大号黑体“自愿加班”和下部一条空白签名横线。四字准确、完整，当前没有划线、签字、多余文字或水印；其余纸面为大面积白色留白，符合原始未签状态。\n以下坐标均相对完整图片归一化，字形可见墨迹范围约为[x_min,y_min,x_max,y_max]：自[0.237,0.118,0.335,0.213]；愿[0.363,0.122,0.494,0.211]；加[0.508,0.117,0.635,0.211]；班[0.649,0.121,0.780,0.211]。签名线约从(0.280,0.780)至(0.720,0.780)，粗约3个源图像素，线上下均无签名。\n若另制“仅划掉自愿”的状态，建议一道黑色细横线从(0.230,0.166)至(0.498,0.166)，粗约4个源图像素，即整图高度的0.0017。该范围穿过前两字中部，保留字形辨认依据，并在“加”字左缘之前停止；不要将此线加入当前原始未签版本。\n1680×2376画幅符合A4比例，字形边缘清楚，可直接承担PHYSICAL_SURFACE_CONTENT准确纸面及后续平面合成内容源职责，无需裁切。此结论不包含摄影纸张质感、手部接触或最终合成效果的验收。",
+          "review_focus": "本图预期仅作为PHYSICAL_SURFACE_CONTENT准确纸面，不是摄影或互动照片。请看实际PNG：是否仅有单行大号黑体“自愿加班”，四字准确、无多余文字；标题位于页顶、下部仅一条空白签名线，其余留白；纵横比接近A4，分辨率能支持之后照片平面合成。请报告标题四字各自的可见范围及签名线位置（归一化坐标），建议一道黑色细横线仅划过“自愿”的起止坐标和粗细；不要求纸面图版本身有摄影纹理。",
+          "candidate_output_layout": null,
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": null,
+          "plane_composite_suggestion": null,
+          "evidence_references": []
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset",
+            "artifact_id": "asset-865595edbe90",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-b004f0cdde1e",
+            "version": 2
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset",
+              "artifact_id": "asset-865595edbe90",
+              "version": null
+            },
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-b004f0cdde1e",
+              "version": 2
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T05:46:56.432364Z",
+      "updated_at": "2026-09-12T05:47:35.619386Z"
+    },
+    {
+      "id": "specialist-turn-919dba5d37fc4eba99d90ee5cd343891",
+      "sequence": 4,
+      "tool_name": "project.get",
+      "arguments": {
+        "project_id": "project-d2fa0fa72d76"
+      },
+      "reason": "当前轻量索引未返回原始字版的字号和排版参数；现有工具没有单独资产版本读取接口，需从已保存版本取回text_plate，确保划线状态只新增一道线而不重猜或改变原版式。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "project.get",
+        "status": "SUCCEEDED",
+        "output": {
+          "document": {
+            "project": {
+              "id": "project-d2fa0fa72d76",
+              "name": "视频前完整验收 · 第三轮空项目",
+              "parent_project_id": null,
+              "episode_number": 1,
+              "episode_title": "第 1 集",
+              "source_mode": "IDEA_EXPANSION",
+              "run_mode": "AUTO_DRAFT",
+              "production_profile": "AI_SHORT_DRAMA",
+              "preferred_method_skill_ids": [],
+              "creative_direction": "",
+              "content_planning_output": "SCRIPT_AND_SHOTS",
+              "language": "zh-CN",
+              "aspect_ratio": "9:16",
+              "target_duration_seconds": 54.0,
+              "input_text": "请从这个空项目出发，创作并完成一部45–60秒、9:16竖屏、真人摄影质感短剧的视频生成前全部制作准备。现实职场题材，两名成年主要人物，一个主要室内场景；人物、故事、台词、片名和镜头由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前面的信息。对白像真人会说的话，不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面需要清楚的面部与表演，人物和空间统一，动作与对白留出自然可表演的时间。\n\n完成完整剧本、分镜、全部必要人物/场景/道具和剧情状态的原创图片、镜头所需的构图参考、正文与具体媒体的绑定，以及所有生成组可执行的视频输入和提示词路线准备。图片从零制作，不借用其他项目素材。按真实结果判断清晰度、身份、状态和输入是否满足用途；有实际问题就自主修订，保留可用结果。制作细节由你决定，无需逐步询问确认。\n\n如选定路线确实需要声音参考，也在本次资产内准备并核验，不把尚未听到的生成对白当作已验收。\n\n本次停止点是所有视频生成前准备完成。视频参数按2K、9:16准备，允许语言编译和保存生成路线，但不要创建、入队、提交或执行任何视频生成，也不要继续后期声音、剪辑或导出。准备完成后直接结束本次任务，说明已完成内容、实际图片及仍需之后视频验证的动态表现。",
+              "input_images": [],
+              "linked_asset_project_ids": [],
+              "voice_reference_revision": 0,
+              "stage": "INPUT",
+              "current_script_version_id": "project-d2fa0fa72d76-script-v2",
+              "current_bible_version_id": "project-d2fa0fa72d76-bible-v1",
+              "current_manifest_id": null,
+              "created_at": "2026-09-12T05:35:54.000+00:00",
+              "updated_at": "2026-09-12T05:48:40.122+00:00"
+            },
+            "assets": [
+              {
+                "id": "asset-865595edbe90",
+                "project_id": "project-d2fa0fa72d76",
+                "kind": "PROP",
+                "name": "自愿加班单",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "一张白色A4竖向加班单，唯一可读正文为页顶四字“自愿加班”；无公章、标志、金额、日期或额外条款。",
+                  "tone_or_temperament": null,
+                  "visual_attributes": [
+                    "白色普通办公纸，竖向排版",
+                    "页顶“自愿加班”以大号黑体排成单行，前两字与后两字可明确区分",
+                    "下部一条空白签名横线，其余大面积留白",
+                    "单面打印，背面空白"
+                  ],
+                  "wardrobe_or_materials": [
+                    "普通不反光白纸",
+                    "原印字为黑色；划线为同一支黑色按动笔留下的一道墨线"
+                  ],
+                  "background_constraints": [
+                    "不是辞职信、劳动合同或已生效的法律认定",
+                    "禁止添加人名签字、已批准章、二维码或密集小字",
+                    "后续准确纸面及其状态须在当前项目原创制作"
+                  ],
+                  "texture_constraints": [
+                    "真实纸纤维与自然弯曲，不能做成漂浮的字幕卡"
+                  ],
+                  "continuity_anchors": [
+                    "状态一：完整标题，无墨线，无签字，正向朝林夏",
+                    "状态二：只用一道横线划过“自愿”两字，仍能辨认原字；不划掉“加班”，不新写替换字，不出现任何签名",
+                    "林夏将状态二在桌面旋转半圈，正向朝周启，并把黑色按动笔递向他；周启不接笔",
+                    "状态三：周启把状态二沿纸张短边方向对折一次，印字面折在里面；没有新增纸张和新增签字"
+                  ],
+                  "named_views_or_zones": [
+                    "原始完整纸面",
+                    "“自愿”被划掉但仍未签字的纸面",
+                    "主管对折收回状态"
+                  ],
+                  "presentation_mode": "PHYSICAL_MASTER",
+                  "required_visible_text": [
+                    "自愿加班"
+                  ],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "PROP_MASTER_SINGLE",
+                  "requested_views": [
+                    "PROP_PRODUCT",
+                    "PROP_STATE"
+                  ],
+                  "strategy_rationale": "原始与划线后的准确状态是必要连续性信息；无需制造密集合同内容，折纸状态是否单独制图由具体镜头需要决定。"
+                },
+                "current_version_id": "asset-version-e4525527b3bd",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-e4525527b3bd",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "唯一关键剧情道具：一张白色A4竖向纸，页顶只有醒目的黑色标题“自愿加班”，下部留有一条空白签名横线。开场完整未签；林夏划掉标题前两字“自愿”，将纸转向主管；结尾仍无人签字，由主管对折收回。理解冲突依靠实际对白和交还动作，不依赖阅读小字。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T05:40:22.363+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T05:40:22.363+00:00"
+                  },
+                  {
+                    "id": "asset-version-b004f0cdde1e",
+                    "version": 2,
+                    "origin_type": "LOCAL_DERIVED",
+                    "descriptor": "原创准确纸面／原始未签。唯一文字“自愿加班”，标题完整无划线，下部签名横线空白。A4比例白底PNG，作为后续物理纸张照片平面合成的内容源，不承担纸纤维、光照、纸边或手部接触依据。",
+                    "media_type": "IMAGE",
+                    "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v2-asset-version-b004f0cdde1e-text-plate.png",
+                    "external_url": null,
+                    "mime_type": "image/png",
+                    "width": 1680,
+                    "height": 2376,
+                    "duration_seconds": null,
+                    "file_size_bytes": 39053,
+                    "parent_version_id": "asset-version-e4525527b3bd",
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": {
+                      "purpose": "PHYSICAL_SURFACE_CONTENT",
+                      "content_state": {
+                        "name": "原始未签：完整标题、签名线空白",
+                        "required_visible_text": [
+                          "自愿加班"
+                        ]
+                      },
+                      "size": "1680x2376",
+                      "background_color": "#FFFFFF",
+                      "foreground_color": "#000000",
+                      "content_box": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        1.0
+                      ],
+                      "text_align": "left",
+                      "vertical_align": "center",
+                      "stroke_width": 1,
+                      "stroke_color": "#000000",
+                      "title": null,
+                      "exact_lines": [],
+                      "text_blocks": [
+                        {
+                          "text": "自愿加班",
+                          "content_box": [
+                            0.18,
+                            0.1,
+                            0.64,
+                            0.13
+                          ],
+                          "font_size": 240,
+                          "text_align": "center",
+                          "vertical_align": "center",
+                          "color": "#000000"
+                        }
+                      ],
+                      "append_text_blocks": [],
+                      "lines": [
+                        {
+                          "start": [
+                            0.28,
+                            0.78
+                          ],
+                          "end": [
+                            0.72,
+                            0.78
+                          ],
+                          "width": 3,
+                          "color": "#000000"
+                        }
+                      ],
+                      "layout_description": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                      "font_family": "STHeiti Medium"
+                    },
+                    "source": {
+                      "source_type": "LOCAL_DERIVED",
+                      "source_label": "本地确定性精确文字图版",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": "local",
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": "pillow-text-plate-v1",
+                      "prompt": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                      "created_at": "2026-09-12T05:46:40.118+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T05:46:40.118+00:00"
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [],
+          "takes": [],
+          "exports": [],
+          "route_evidence": [],
+          "video_inspections": [],
+          "take_comparisons": [],
+          "audio_inspections": [],
+          "episode_reviews": [],
+          "progress": {
+            "total_shots": 0,
+            "shots_with_selected_take": 0,
+            "total_tasks": 0,
+            "terminal_tasks": 0,
+            "failed_tasks": 0,
+            "unresolved_tasks": 0,
+            "passed_takes": 0,
+            "stale_takes": 0,
+            "manifest_ready": false,
+            "export_ready": false
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "project",
+            "artifact_id": "project-d2fa0fa72d76",
+            "version": null
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T05:48:37.585552Z",
+      "updated_at": "2026-09-12T05:48:40.470710Z"
+    },
+    {
+      "id": "specialist-turn-0f0dce26e0164d688a027aec2e36fbfa",
+      "sequence": 7,
+      "tool_name": "image.composite_plane",
+      "arguments": {
+        "project_id": "project-d2fa0fa72d76",
+        "request": {
+          "base_asset_version_id": "asset-version-b004f0cdde1e",
+          "layers": [
+            {
+              "source_asset_version_id": "asset-version-690c75d280ff",
+              "source_quad": [
+                {
+                  "x": 0.225,
+                  "y": 0.162
+                },
+                {
+                  "x": 0.505,
+                  "y": 0.162
+                },
+                {
+                  "x": 0.505,
+                  "y": 0.17
+                },
+                {
+                  "x": 0.225,
+                  "y": 0.17
+                }
+              ],
+              "target_quad": [
+                {
+                  "x": 0.225,
+                  "y": 0.162
+                },
+                {
+                  "x": 0.505,
+                  "y": 0.162
+                },
+                {
+                  "x": 0.505,
+                  "y": 0.17
+                },
+                {
+                  "x": 0.225,
+                  "y": 0.17
+                }
+              ],
+              "blend_mode": "multiply"
+            }
+          ],
+          "descriptor": "原创准确纸面／划线未签：以原始未签字版为底，仅本地叠加一道约4像素黑横线，范围(0.230,0.166)至(0.498,0.166)，只划过“自愿”，原字仍可辨认；“加班”与下部空白签名线保持原像素。1680×2376 A4比例白底内容源，不是摄影、握纸或互动照片。原始未签版本独立保留。"
+        }
+      },
+      "reason": "保留已核验原始字版的全部像素，只把已观察的一道黑线叠在“自愿”上，制作尺寸和排版完全一致的划线未签状态。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "image.composite_plane",
+        "status": "SUCCEEDED",
+        "output": {
+          "asset": {
+            "id": "asset-865595edbe90",
+            "project_id": "project-d2fa0fa72d76",
+            "kind": "PROP",
+            "name": "自愿加班单",
+            "bible_entity_id": null,
+            "brief": {
+              "identity_anchor": "一张白色A4竖向加班单，唯一可读正文为页顶四字“自愿加班”；无公章、标志、金额、日期或额外条款。",
+              "tone_or_temperament": null,
+              "visual_attributes": [
+                "白色普通办公纸，竖向排版",
+                "页顶“自愿加班”以大号黑体排成单行，前两字与后两字可明确区分",
+                "下部一条空白签名横线，其余大面积留白",
+                "单面打印，背面空白"
+              ],
+              "wardrobe_or_materials": [
+                "普通不反光白纸",
+                "原印字为黑色；划线为同一支黑色按动笔留下的一道墨线"
+              ],
+              "background_constraints": [
+                "不是辞职信、劳动合同或已生效的法律认定",
+                "禁止添加人名签字、已批准章、二维码或密集小字",
+                "后续准确纸面及其状态须在当前项目原创制作"
+              ],
+              "texture_constraints": [
+                "真实纸纤维与自然弯曲，不能做成漂浮的字幕卡"
+              ],
+              "continuity_anchors": [
+                "状态一：完整标题，无墨线，无签字，正向朝林夏",
+                "状态二：只用一道横线划过“自愿”两字，仍能辨认原字；不划掉“加班”，不新写替换字，不出现任何签名",
+                "林夏将状态二在桌面旋转半圈，正向朝周启，并把黑色按动笔递向他；周启不接笔",
+                "状态三：周启把状态二沿纸张短边方向对折一次，印字面折在里面；没有新增纸张和新增签字"
+              ],
+              "named_views_or_zones": [
+                "原始完整纸面",
+                "“自愿”被划掉但仍未签字的纸面",
+                "主管对折收回状态"
+              ],
+              "presentation_mode": "PHYSICAL_MASTER",
+              "required_visible_text": [
+                "自愿加班"
+              ],
+              "reference_strategy": "LIGHTWEIGHT",
+              "layout_profile": "PROP_MASTER_SINGLE",
+              "requested_views": [
+                "PROP_PRODUCT",
+                "PROP_STATE"
+              ],
+              "strategy_rationale": "原始与划线后的准确状态是必要连续性信息；无需制造密集合同内容，折纸状态是否单独制图由具体镜头需要决定。"
+            },
+            "current_version_id": "asset-version-e4525527b3bd",
+            "approved_version_id": null,
+            "versions": [
+              {
+                "id": "asset-version-e4525527b3bd",
+                "version": 1,
+                "origin_type": "MANUAL",
+                "descriptor": "唯一关键剧情道具：一张白色A4竖向纸，页顶只有醒目的黑色标题“自愿加班”，下部留有一条空白签名横线。开场完整未签；林夏划掉标题前两字“自愿”，将纸转向主管；结尾仍无人签字，由主管对折收回。理解冲突依靠实际对白和交还动作，不依赖阅读小字。",
+                "media_type": "TEXT_REFERENCE",
+                "local_path": null,
+                "external_url": null,
+                "mime_type": null,
+                "width": null,
+                "height": null,
+                "duration_seconds": null,
+                "file_size_bytes": null,
+                "parent_version_id": null,
+                "image_task_id": null,
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": null,
+                "source": {
+                  "source_type": "MANUAL",
+                  "source_label": "用户创建的资产说明",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": null,
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": null,
+                  "prompt": null,
+                  "created_at": "2026-09-12T05:40:22.363+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:40:22.363+00:00"
+              },
+              {
+                "id": "asset-version-b004f0cdde1e",
+                "version": 2,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "原创准确纸面／原始未签。唯一文字“自愿加班”，标题完整无划线，下部签名横线空白。A4比例白底PNG，作为后续物理纸张照片平面合成的内容源，不承担纸纤维、光照、纸边或手部接触依据。",
+                "media_type": "IMAGE",
+                "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v2-asset-version-b004f0cdde1e-text-plate.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 1680,
+                "height": 2376,
+                "duration_seconds": null,
+                "file_size_bytes": 39053,
+                "parent_version_id": "asset-version-e4525527b3bd",
+                "image_task_id": null,
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": {
+                  "purpose": "PHYSICAL_SURFACE_CONTENT",
+                  "content_state": {
+                    "name": "原始未签：完整标题、签名线空白",
+                    "required_visible_text": [
+                      "自愿加班"
+                    ]
+                  },
+                  "size": "1680x2376",
+                  "background_color": "#FFFFFF",
+                  "foreground_color": "#000000",
+                  "content_box": [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  "text_align": "left",
+                  "vertical_align": "center",
+                  "stroke_width": 1,
+                  "stroke_color": "#000000",
+                  "title": null,
+                  "exact_lines": [],
+                  "text_blocks": [
+                    {
+                      "text": "自愿加班",
+                      "content_box": [
+                        0.18,
+                        0.1,
+                        0.64,
+                        0.13
+                      ],
+                      "font_size": 240,
+                      "text_align": "center",
+                      "vertical_align": "center",
+                      "color": "#000000"
+                    }
+                  ],
+                  "append_text_blocks": [],
+                  "lines": [
+                    {
+                      "start": [
+                        0.28,
+                        0.78
+                      ],
+                      "end": [
+                        0.72,
+                        0.78
+                      ],
+                      "width": 3,
+                      "color": "#000000"
+                    }
+                  ],
+                  "layout_description": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                  "font_family": "STHeiti Medium"
+                },
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地确定性精确文字图版",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-text-plate-v1",
+                  "prompt": "A4竖向比例210:297。页顶单行大号黑色无衬线标题“自愿加班”，下部仅一条空白签名横线，其余纯白大面积留白。此图仅提供准确可印刷纸面内容与统一版式，不是摄影纸张或互动构图。",
+                  "created_at": "2026-09-12T05:46:40.118+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:46:40.118+00:00"
+              },
+              {
+                "id": "asset-version-690c75d280ff",
+                "version": 3,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "中间施工图，不采用为剧情状态或摄影道具。仅供裁取一道4像素黑线，在原始纸面PNG的“自愿”两字中部局部乘算；不采样本图文字，不替换原始版式。",
+                "media_type": "IMAGE",
+                "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v3-asset-version-690c75d280ff-text-plate.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 1680,
+                "height": 2376,
+                "duration_seconds": null,
+                "file_size_bytes": 33109,
+                "parent_version_id": "asset-version-b004f0cdde1e",
+                "image_task_id": null,
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": {
+                  "purpose": "PHYSICAL_SURFACE_CONTENT",
+                  "content_state": {
+                    "name": "局部划线施工源，非最终道具状态",
+                    "required_visible_text": [
+                      "自愿加班"
+                    ]
+                  },
+                  "size": "1680x2376",
+                  "background_color": "#FFFFFF",
+                  "foreground_color": "#000000",
+                  "content_box": [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  "text_align": "left",
+                  "vertical_align": "center",
+                  "stroke_width": 0,
+                  "stroke_color": "#000000",
+                  "title": null,
+                  "exact_lines": [],
+                  "text_blocks": [
+                    {
+                      "text": "自愿加班",
+                      "content_box": [
+                        0.15,
+                        0.6,
+                        0.7,
+                        0.15
+                      ],
+                      "font_size": 180,
+                      "text_align": "center",
+                      "vertical_align": "center",
+                      "color": null
+                    }
+                  ],
+                  "append_text_blocks": [],
+                  "lines": [
+                    {
+                      "start": [
+                        0.23,
+                        0.166
+                      ],
+                      "end": [
+                        0.498,
+                        0.166
+                      ],
+                      "width": 4,
+                      "color": "#000000"
+                    }
+                  ],
+                  "layout_description": "局部合成施工源：只将y=0.166附近一道黑线的狭窄白底区域乘算到原始准确字版同坐标；本图下方文字仅满足固定文案，不采样、不用于任何最终道具参考。原始字版的全部文字和签名线像素从真实原始PNG保留。",
+                  "font_family": "STHeiti Medium"
+                },
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地确定性精确文字图版",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-text-plate-v1",
+                  "prompt": "局部合成施工源：只将y=0.166附近一道黑线的狭窄白底区域乘算到原始准确字版同坐标；本图下方文字仅满足固定文案，不采样、不用于任何最终道具参考。原始字版的全部文字和签名线像素从真实原始PNG保留。",
+                  "created_at": "2026-09-12T05:49:42.328+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:49:42.328+00:00"
+              },
+              {
+                "id": "asset-version-2d9b208484bb",
+                "version": 4,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "原创准确纸面／划线未签：以原始未签字版为底，仅本地叠加一道约4像素黑横线，范围(0.230,0.166)至(0.498,0.166)，只划过“自愿”，原字仍可辨认；“加班”与下部空白签名线保持原像素。1680×2376 A4比例白底内容源，不是摄影、握纸或互动照片。原始未签版本独立保留。",
+                "media_type": "IMAGE",
+                "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v4-asset-version-2d9b208484bb-plane.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 1680,
+                "height": 2376,
+                "duration_seconds": null,
+                "file_size_bytes": 43140,
+                "parent_version_id": "asset-version-b004f0cdde1e",
+                "image_task_id": null,
+                "derivation_references": [
+                  {
+                    "asset_version_id": "asset-version-b004f0cdde1e",
+                    "source_project_id": "project-d2fa0fa72d76",
+                    "reference_role": "COMPOSITION",
+                    "reference_authority": "AUTHORITATIVE",
+                    "purpose": "保留平面外及明确遮挡区的原图像素。",
+                    "subject_alias": "自愿加班单"
+                  },
+                  {
+                    "asset_version_id": "asset-version-690c75d280ff",
+                    "source_project_id": "project-d2fa0fa72d76",
+                    "reference_role": "SUPPORTING_VISUAL",
+                    "reference_authority": "AUTHORITATIVE",
+                    "purpose": "按记录的四角对应变换此来源的实际像素，不重新生成文字或图形。",
+                    "subject_alias": "自愿加班单"
+                  }
+                ],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": null,
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地图像透视合成",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-plane-composite-v1",
+                  "prompt": "{\"base_asset_version_id\":\"asset-version-b004f0cdde1e\",\"layers\":[{\"source_asset_version_id\":\"asset-version-690c75d280ff\",\"source_quad\":[{\"x\":0.225,\"y\":0.162},{\"x\":0.505,\"y\":0.162},{\"x\":0.505,\"y\":0.17},{\"x\":0.225,\"y\":0.17}],\"target_quad\":[{\"x\":0.225,\"y\":0.162},{\"x\":0.505,\"y\":0.162},{\"x\":0.505,\"y\":0.17},{\"x\":0.225,\"y\":0.17}],\"blend_mode\":\"multiply\",\"source_white_point\":null,\"paper_ink\":null}],\"protected_regions\":[],\"target_paper_cleanup\":null,\"descriptor\":\"原创准确纸面／划线未签：以原始未签字版为底，仅本地叠加一道约4像素黑横线，范围(0.230,0.166)至(0.498,0.166)，只划过“自愿”，原字仍可辨认；“加班”与下部空白签名线保持原像素。1680×2376 A4比例白底内容源，不是摄影、握纸或互动照片。原始未签版本独立保留。\"}",
+                  "created_at": "2026-09-12T05:51:07.033+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:51:07.033+00:00"
+              }
+            ]
+          },
+          "version": {
+            "id": "asset-version-2d9b208484bb",
+            "version": 4,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "原创准确纸面／划线未签：以原始未签字版为底，仅本地叠加一道约4像素黑横线，范围(0.230,0.166)至(0.498,0.166)，只划过“自愿”，原字仍可辨认；“加班”与下部空白签名线保持原像素。1680×2376 A4比例白底内容源，不是摄影、握纸或互动照片。原始未签版本独立保留。",
+            "media_type": "IMAGE",
+            "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v4-asset-version-2d9b208484bb-plane.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 1680,
+            "height": 2376,
+            "duration_seconds": null,
+            "file_size_bytes": 43140,
+            "parent_version_id": "asset-version-b004f0cdde1e",
+            "image_task_id": null,
+            "derivation_references": [
+              {
+                "asset_version_id": "asset-version-b004f0cdde1e",
+                "source_project_id": "project-d2fa0fa72d76",
+                "reference_role": "COMPOSITION",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "保留平面外及明确遮挡区的原图像素。",
+                "subject_alias": "自愿加班单"
+              },
+              {
+                "asset_version_id": "asset-version-690c75d280ff",
+                "source_project_id": "project-d2fa0fa72d76",
+                "reference_role": "SUPPORTING_VISUAL",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "按记录的四角对应变换此来源的实际像素，不重新生成文字或图形。",
+                "subject_alias": "自愿加班单"
+              }
+            ],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "本地图像透视合成",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-plane-composite-v1",
+              "prompt": "{\"base_asset_version_id\":\"asset-version-b004f0cdde1e\",\"layers\":[{\"source_asset_version_id\":\"asset-version-690c75d280ff\",\"source_quad\":[{\"x\":0.225,\"y\":0.162},{\"x\":0.505,\"y\":0.162},{\"x\":0.505,\"y\":0.17},{\"x\":0.225,\"y\":0.17}],\"target_quad\":[{\"x\":0.225,\"y\":0.162},{\"x\":0.505,\"y\":0.162},{\"x\":0.505,\"y\":0.17},{\"x\":0.225,\"y\":0.17}],\"blend_mode\":\"multiply\",\"source_white_point\":null,\"paper_ink\":null}],\"protected_regions\":[],\"target_paper_cleanup\":null,\"descriptor\":\"原创准确纸面／划线未签：以原始未签字版为底，仅本地叠加一道约4像素黑横线，范围(0.230,0.166)至(0.498,0.166)，只划过“自愿”，原字仍可辨认；“加班”与下部空白签名线保持原像素。1680×2376 A4比例白底内容源，不是摄影、握纸或互动照片。原始未签版本独立保留。\"}",
+              "created_at": "2026-09-12T05:51:07.033+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:51:07.033+00:00"
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset",
+            "artifact_id": "asset-865595edbe90",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-2d9b208484bb",
+            "version": 4
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset",
+              "artifact_id": "asset-865595edbe90",
+              "version": null
+            },
+            {
+              "project_id": "project-d2fa0fa72d76",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-2d9b208484bb",
+              "version": 4
+            }
+          ],
+          "current_state": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-865595edbe90",
+            "base_asset_version_id": "asset-version-b004f0cdde1e",
+            "source_asset_version_ids": [
+              "asset-version-690c75d280ff"
+            ],
+            "version.id": "asset-version-2d9b208484bb",
+            "version.version": 4,
+            "version.local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-d2fa0fa72d76/assets/asset-865595edbe90/v4-asset-version-2d9b208484bb-plane.png",
+            "version.width": 1680,
+            "version.height": 2376,
+            "asset.current_version_id": "asset-version-e4525527b3bd",
+            "composition_completed": true,
+            "visual_acceptance": "NOT_ASSESSED"
+          },
+          "changed_ids": {
+            "created_asset_version_ids": [
+              "asset-version-2d9b208484bb"
+            ]
+          }
+        }
+      },
+      "requested_at": "2026-09-12T05:51:04.078856Z",
+      "updated_at": "2026-09-12T05:51:07.077172Z"
+    }
+  ]
+}

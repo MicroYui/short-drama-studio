@@ -223,7 +223,12 @@ def register_tools(registry: ToolRegistry, service: ProjectToolService) -> None:
             id="project.get",
             version=1,
             category=ToolCategory.PROJECT,
-            description="Load the complete current aggregate for one project.",
+            description=(
+                "Load the project's current aggregate. The specialist model view retains current/approved media and "
+                "exact versions selected or produced by this WorkOrder, without unrelated version history. "
+                "For exact parameters or a large result from a known Tool attempt, prefer agent.get_tool_attempt "
+                "with its actual attempt_ref; artifact.read_current is a content index, not a media recipe reader."
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=ProjectGetInput,
