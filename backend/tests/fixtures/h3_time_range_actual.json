@@ -1,0 +1,658 @@
+{
+  "source": {
+    "work_order_id": "work-order-5f47ef21087143c69d54f76fb53eb3fa",
+    "project_id": "project-5b8286dc63e6",
+    "case": "Actual failed local language compilation; no video submitted. Minimal read-only snapshot for timing validation.",
+    "fixture_note": "Read-only actual t6/t12 arguments, shots and rejected prose; four media local_path addresses normalized to /fixtures/<version>.png. Validator does not open media; rejected prose is unchanged."
+  },
+  "document": {
+    "project": {
+      "id": "project-5b8286dc63e6",
+      "name": "现实短剧 · 完整制作",
+      "parent_project_id": null,
+      "episode_number": 1,
+      "episode_title": "第 1 集",
+      "source_mode": "IDEA_EXPANSION",
+      "run_mode": "AUTO_DRAFT",
+      "production_profile": "AI_SHORT_DRAMA",
+      "preferred_method_skill_ids": [],
+      "creative_direction": "",
+      "content_planning_output": "SCRIPT_AND_SHOTS",
+      "language": "中文普通话",
+      "aspect_ratio": "9:16",
+      "target_duration_seconds": 54.0,
+      "input_text": "请从这个空项目出发，创作并制作一部 45–60 秒、9:16 竖屏的完整真人质感短剧。采用现实职场题材，两名成年主要人物，一个主要室内场景。具体人物、故事、台词、片名和镜头都由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过自己的行动和回应改变局势，转折有前因，结尾回收前面的信息。对白要像真人会说的话；不要靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面追求自然摄影质感、清楚的面部与表演、统一的人物和空间，动作与对白留出实际可表演的时间。\n\n请完成剧本、分镜、本片全部必要的角色/场景/道具与镜头参考图片、真实视频、声音、字幕和剪辑，最终交付能播放和导出的完整成片。图片和视频从零制作，不借用其他项目的旧素材。用当前已经配置的真实图像和 H3 视频能力完成所需生成。\n\n制作细节和正常修订由你自主决定，持续推进至完整影片完成，不需要逐步等我确认。依据实际图片、视频和声音判断质量，发现影响观看的问题就做必要的局部修正。最后说明完成的内容、真实结果及仍然存在的限制，给出成片位置。\n",
+      "input_images": [],
+      "linked_asset_project_ids": [],
+      "voice_reference_revision": 0,
+      "stage": "PLANNED",
+      "current_script_version_id": "project-5b8286dc63e6-script-v3",
+      "current_bible_version_id": "project-5b8286dc63e6-bible-v1",
+      "current_manifest_id": null,
+      "created_at": "2026-09-11T17:30:55.467+00:00",
+      "updated_at": "2026-09-12T01:08:15.799+00:00"
+    },
+    "script_versions": [
+      {
+        "id": "project-5b8286dc63e6-script-v3",
+        "project_id": "project-5b8286dc63e6",
+        "version": 3,
+        "source_mode": "IDEA_EXPANSION",
+        "original_text": "第1场｜《一起签》｜内景·公司小会议室·傍晚\n《一起签》\n\n第1场　内景·公司小会议室·傍晚\n\n小会议桌两侧，许岚和主管赵衡相对坐着。桌上只有一份情况说明、一张留有红色修改痕迹的报价单和一支黑色签字笔。报价单右下角已经有赵衡的确认签名。\n\n赵衡把情况说明推到许岚面前，把笔横放在空白的“经办”栏上。\n\n赵衡：报价出错了。说明你签一下，就说你没核对。\n\n许岚拿起笔，拔下笔帽放在手边，笔尖停在纸上方。她没有落笔，而是抽出说明下面的报价单，把右下角的确认签名转向赵衡。\n\n许岚：这版是你改的。我还问过你，能不能发。\n\n赵衡看了一眼自己的签名，伸手把报价单按在桌上。\n\n赵衡：我说能发，你就不再看一遍？\n\n许岚停了一下，点头，把情况说明放到两人中间。\n\n许岚：我的经办，我签。你的复核，也别空着。\n\n她把笔放在仍然空白的“复核”栏旁，收回手。\n\n赵衡没接笔，先看她。\n\n赵衡：非得分这么清？\n\n许岚：出了错可以一起补，责任也得一起认。\n\n赵衡张了张嘴，没有接话。他低头看看两处空白签名栏，又看了一眼被自己按住的报价单。手慢慢松开。\n\n他拿起笔，在“复核”栏签字，把笔递回许岚。\n\n赵衡：说明我来交。\n\n许岚看他一眼，接过笔，在“经办”栏签字。\n\n赵衡没有再催，把两张纸叠齐，收在自己面前。许岚把笔帽扣上，肩膀松下来。\n\n纸上两处签名栏都不再空着。结束。",
+        "screenplay_text": "第1场｜《一起签》｜内景·公司小会议室·傍晚\n《一起签》\n\n第1场　内景·公司小会议室·傍晚\n\n小会议桌两侧，许岚和主管赵衡相对坐着。桌上只有一份情况说明、一张留有红色修改痕迹的报价单和一支黑色签字笔。报价单右下角已经有赵衡的确认签名。\n\n赵衡把情况说明推到许岚面前，把笔横放在空白的“经办”栏上。\n\n赵衡：报价出错了。说明你签一下，就说你没核对。\n\n许岚拿起笔，拔下笔帽放在手边，笔尖停在纸上方。她没有落笔，而是抽出说明下面的报价单，把右下角的确认签名转向赵衡。\n\n许岚：这版是你改的。我还问过你，能不能发。\n\n赵衡看了一眼自己的签名，伸手把报价单按在桌上。\n\n赵衡：我说能发，你就不再看一遍？\n\n许岚停了一下，点头，把情况说明放到两人中间。\n\n许岚：我的经办，我签。你的复核，也别空着。\n\n她把笔放在仍然空白的“复核”栏旁，收回手。\n\n赵衡没接笔，先看她。\n\n赵衡：非得分这么清？\n\n许岚：出了错可以一起补，责任也得一起认。\n\n赵衡张了张嘴，没有接话。他低头看看两处空白签名栏，又看了一眼被自己按住的报价单。手慢慢松开。\n\n他拿起笔，在“复核”栏签字，把笔递回许岚。\n\n赵衡：说明我来交。\n\n许岚看他一眼，接过笔，在“经办”栏签字。\n\n赵衡没有再催，把两张纸叠齐，收在自己面前。许岚把笔帽扣上，肩膀松下来。\n\n纸上两处签名栏都不再空着。结束。",
+        "spoken_text": "报价出错了。说明你签一下，就说你没核对。\n这版是你改的。我还问过你，能不能发。\n我说能发，你就不再看一遍？\n我的经办，我签。你的复核，也别空着。\n非得分这么清？\n出了错可以一起补，责任也得一起认。\n说明我来交。",
+        "subtitle_text": "报价出错了。说明你签一下，就说你没核对。\n这版是你改的。我还问过你，能不能发。\n我说能发，你就不再看一遍？\n我的经办，我签。你的复核，也别空着。\n非得分这么清？\n出了错可以一起补，责任也得一起认。\n说明我来交。",
+        "lines": [
+          {
+            "id": "line-yqq-01",
+            "speaker": "赵衡",
+            "speaker_character_id": null,
+            "original_text": "报价出错了。说明你签一下，就说你没核对。",
+            "spoken_text": "报价出错了。说明你签一下，就说你没核对。",
+            "subtitle_text": "报价出错了。说明你签一下，就说你没核对。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-02",
+            "speaker": "许岚",
+            "speaker_character_id": null,
+            "original_text": "这版是你改的。我还问过你，能不能发。",
+            "spoken_text": "这版是你改的。我还问过你，能不能发。",
+            "subtitle_text": "这版是你改的。我还问过你，能不能发。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-03",
+            "speaker": "赵衡",
+            "speaker_character_id": null,
+            "original_text": "我说能发，你就不再看一遍？",
+            "spoken_text": "我说能发，你就不再看一遍？",
+            "subtitle_text": "我说能发，你就不再看一遍？",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-04",
+            "speaker": "许岚",
+            "speaker_character_id": null,
+            "original_text": "我的经办，我签。你的复核，也别空着。",
+            "spoken_text": "我的经办，我签。你的复核，也别空着。",
+            "subtitle_text": "我的经办，我签。你的复核，也别空着。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-05",
+            "speaker": "赵衡",
+            "speaker_character_id": null,
+            "original_text": "非得分这么清？",
+            "spoken_text": "非得分这么清？",
+            "subtitle_text": "非得分这么清？",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-06",
+            "speaker": "许岚",
+            "speaker_character_id": null,
+            "original_text": "出了错可以一起补，责任也得一起认。",
+            "spoken_text": "出了错可以一起补，责任也得一起认。",
+            "subtitle_text": "出了错可以一起补，责任也得一起认。",
+            "audio_kind": "DIALOGUE"
+          },
+          {
+            "id": "line-yqq-07",
+            "speaker": "赵衡",
+            "speaker_character_id": null,
+            "original_text": "说明我来交。",
+            "spoken_text": "说明我来交。",
+            "subtitle_text": "说明我来交。",
+            "audio_kind": "DIALOGUE"
+          }
+        ],
+        "structured_scenes": [
+          {
+            "id": "scene-5441e73077d5",
+            "heading": "第1场｜《一起签》｜内景·公司小会议室·傍晚",
+            "summary": "报价出错后，主管赵衡要经办人许岚独自认下未核对的责任。许岚拿出他修改并签字确认的报价单，承认自己的经办职责，同时要求复核栏也留下他的名字。赵衡先签复核并表示说明由自己交；许岚随后签经办。两人签全后，赵衡将两张纸收在自己面前，双方共同担责。",
+            "line_ids": [
+              "line-yqq-01",
+              "line-yqq-02",
+              "line-yqq-03",
+              "line-yqq-04",
+              "line-yqq-05",
+              "line-yqq-06",
+              "line-yqq-07"
+            ],
+            "screenplay_text": "《一起签》\n\n第1场　内景·公司小会议室·傍晚\n\n小会议桌两侧，许岚和主管赵衡相对坐着。桌上只有一份情况说明、一张留有红色修改痕迹的报价单和一支黑色签字笔。报价单右下角已经有赵衡的确认签名。\n\n赵衡把情况说明推到许岚面前，把笔横放在空白的“经办”栏上。\n\n赵衡：报价出错了。说明你签一下，就说你没核对。\n\n许岚拿起笔，拔下笔帽放在手边，笔尖停在纸上方。她没有落笔，而是抽出说明下面的报价单，把右下角的确认签名转向赵衡。\n\n许岚：这版是你改的。我还问过你，能不能发。\n\n赵衡看了一眼自己的签名，伸手把报价单按在桌上。\n\n赵衡：我说能发，你就不再看一遍？\n\n许岚停了一下，点头，把情况说明放到两人中间。\n\n许岚：我的经办，我签。你的复核，也别空着。\n\n她把笔放在仍然空白的“复核”栏旁，收回手。\n\n赵衡没接笔，先看她。\n\n赵衡：非得分这么清？\n\n许岚：出了错可以一起补，责任也得一起认。\n\n赵衡张了张嘴，没有接话。他低头看看两处空白签名栏，又看了一眼被自己按住的报价单。手慢慢松开。\n\n他拿起笔，在“复核”栏签字，把笔递回许岚。\n\n赵衡：说明我来交。\n\n许岚看他一眼，接过笔，在“经办”栏签字。\n\n赵衡没有再催，把两张纸叠齐，收在自己面前。许岚把笔帽扣上，肩膀松下来。\n\n纸上两处签名栏都不再空着。结束。",
+            "narrative_purpose": "开场用递笔要求独自签字建立推责冲突；预先在场的确认签名成为转折依据。许岚不是拒绝自己的责任，而是以放下笔、要求复核签名守住边界。赵衡通过先签复核并收走说明的行动让步，结尾两栏签全回收开头只推向一人的笔与空白签名栏。只完成本场共同担责的争议，不虚构客户损失已经解决。",
+            "target_duration_seconds": 54.0,
+            "entry_state": {
+              "setting": "傍晚，公司一间小会议室；两名成年人隔同一张小会议桌相对坐着，全场不换地点。",
+              "character_states": [
+                "许岚是报价经办人，尚未签情况说明。",
+                "赵衡是许岚的直属主管及报价复核人，要求许岚独自承认未核对。"
+              ],
+              "prop_states": [
+                "情况说明的经办、复核两栏均为空白。",
+                "另一张报价单有红色修改痕迹，右下角已有赵衡的确认签名。",
+                "一支黑色带帽签字笔可供两人使用。"
+              ],
+              "known_facts": [
+                "报价已出错。",
+                "赵衡修改并确认过发出的那版报价。"
+              ],
+              "open_threads": [
+                "这份情况说明是否只由许岚承担责任。"
+              ]
+            },
+            "exit_state": {
+              "setting": "同一会议室，同一时段，两人仍在桌子两侧。",
+              "character_states": [
+                "赵衡已签复核，明确说说明由自己去交，并将两张纸收在自己面前。",
+                "许岚已签经办，完成对自身职责的承认，肩膀放松。"
+              ],
+              "prop_states": [
+                "情况说明先增加赵衡的复核签名，后增加许岚的经办签名。",
+                "报价单的原有红色修改与确认签名未改变。",
+                "两张纸叠齐置于赵衡面前，签字笔已扣帽。"
+              ],
+              "known_facts": [
+                "经办和复核的责任均留有记录。",
+                "本场没有展示客户问题处理结果，也没有第三人介入。"
+              ],
+              "open_threads": []
+            }
+          }
+        ],
+        "structure_stale_scene_ids": [],
+        "review_report": null,
+        "review_disposition": null,
+        "final_cold_read_report": null,
+        "ending_contract": null,
+        "story_intent": null,
+        "source_contract": null,
+        "planning_run_id": null,
+        "approval_status": "APPROVED",
+        "freshness": "CURRENT",
+        "parent_version_id": "project-5b8286dc63e6-script-v2",
+        "change_reason": "当前场次编辑",
+        "created_at": "2026-09-11T18:00:24.604420+00:00"
+      }
+    ],
+    "bible_versions": [
+      {
+        "id": "project-5b8286dc63e6-bible-v1",
+        "project_id": "project-5b8286dc63e6",
+        "version": 1,
+        "characters": [],
+        "locations": [],
+        "props": [],
+        "style": {
+          "medium": "未指定",
+          "genre": "未指定",
+          "cinematography": "未指定",
+          "color": "未指定",
+          "texture": "未指定",
+          "forbidden": []
+        },
+        "approval_status": "APPROVED",
+        "freshness": "CURRENT",
+        "parent_version_id": null,
+        "created_at": "2026-09-11T17:30:55.467+00:00"
+      }
+    ],
+    "assets": [],
+    "shots": [
+      {
+        "id": "shot-yqq-08",
+        "project_id": "project-5b8286dc63e6",
+        "sequence": 10,
+        "scene_id": "scene-5441e73077d5",
+        "duration_seconds": 5.0,
+        "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+        "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+        "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+        "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+        "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+        "dialogue_line_ids": [
+          "line-yqq-06"
+        ],
+        "references": [
+          {
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "id": "cue-yqq-s08-xulan-identity",
+            "asset_version_id": "asset-version-3a8b4ea6267b",
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 2,
+            "alias": "许岚",
+            "required_tags": [
+              "身份参考"
+            ],
+            "purpose": "第8镜0–5秒全程的SUBJECT_IDENTITY/AUTHORITATIVE。固定许岚的面容、成年年龄感、侧分齐肩黑发及米白衬衫；同一文件同时贡献服装，不重复发送。中性背景站姿不贡献会议室、座位或开镜构图，不作硬首帧。",
+            "image_reference_role": "SUBJECT_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-4024e0462bfc",
+            "id": "cue-yqq-s08-room-space",
+            "asset_version_id": "asset-version-d42fba8ad6bb",
+            "field": "camera",
+            "text_start": 5,
+            "text_end": 8,
+            "alias": "公司小会议室",
+            "required_tags": [
+              "SCENE_MASTER"
+            ],
+            "purpose": "第8镜0–5秒全程的SCENE_IDENTITY/AUTHORITATIVE。贡献同一会议室材质、东西对坐位置、东窗柔光与南侧轴线；许岚东座、赵衡西座且画外。原图为南侧朝北空景，不镜像冒充西南近景，不将空桌状态或完整房间构图强加给本镜。",
+            "image_reference_role": "SCENE_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "id": "cue-yqq-s08-xulan-closeup",
+            "asset_version_id": "asset-version-07155ca88530",
+            "field": null,
+            "text_start": null,
+            "text_end": null,
+            "alias": "许岚东座胸上近景",
+            "required_tags": [
+              "shot-yqq-08",
+              "chest-up"
+            ],
+            "purpose": "第8镜0–5秒的COMPOSITION/SUPPORTING：原生900×1600竖幅胸上近景，许岚略偏画右、看画左画外，面部清楚，米白衬衫及局部会议室色光连续。0–4.5秒说完整原句，4.5–5秒闭嘴等回应；静态闭唇不锁死动态口型。仅补构图、视线与克制表情基调，不替换身份母图，不作硬首帧，不贡献画外手、纸笔或赵衡的状态。",
+            "image_reference_role": "COMPOSITION",
+            "usage": "GENERATION"
+          }
+        ],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 4.5,
+            "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+            "framing": "胸上近景",
+            "camera": "西南侧眼平固定",
+            "action": "手留在自己桌边不动，面对赵衡说完原句。",
+            "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+            "emotion": "愿意合作，也明确守住责任边界。",
+            "dialogue_line_ids": [
+              "line-yqq-06"
+            ],
+            "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+            "references": []
+          },
+          {
+            "start_seconds": 4.5,
+            "end_seconds": 5.0,
+            "visual": "许岚说完后仍看着赵衡。",
+            "framing": "同一近景",
+            "camera": "固定不变",
+            "action": "闭嘴等回应，不伸手拿笔。",
+            "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "短暂室内静默和自然呼吸。",
+            "references": []
+          }
+        ],
+        "continuity": {
+          "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+          "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+          "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+          "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+          "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+          "action_out": "许岚说完第六句，仍等赵衡回应。"
+        },
+        "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+        "merge_candidate": false,
+        "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 2
+      },
+      {
+        "id": "shot-yqq-12-reaction",
+        "project_id": "project-5b8286dc63e6",
+        "sequence": 17,
+        "scene_id": "scene-5441e73077d5",
+        "duration_seconds": 1.5,
+        "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+        "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+        "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+        "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+        "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+        "dialogue_line_ids": [],
+        "references": [],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 1.5,
+            "visual": "@赵衡向画右下看许岚签字，不再催。",
+            "framing": "胸上近景。",
+            "camera": "南偏东固定。",
+            "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+            "performance": "下颌放松，眼神不催促，不点头指挥。",
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "连续书写声约1.2秒后停止，无新增词句。",
+            "references": [
+              {
+                "subject_asset_id": "asset-5f4d7485e6b8",
+                "id": "shot-yqq-12-reaction-beat-0-ref-0",
+                "asset_version_id": "asset-version-89add4b760e5",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "赵衡",
+                "required_tags": [
+                  "shot-yqq-12-reaction",
+                  "west-seat",
+                  "look-screen-right-down",
+                  "chest-up"
+                ],
+                "purpose": "用于本镜0–1.5秒赵衡西座闭口等待的胸上近景构图、画右下视线与静态表情。实际955×1696原像素裁图，保留已采用身份、浅蓝衬衫及局部会议室柔光；不替换身份母图，不是硬首帧，不提供画外签字完成、纸笔状态或声音证据。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              }
+            ]
+          }
+        ],
+        "continuity": {
+          "character_positions": "赵西画左，许东画外，两人原座不变。",
+          "eyeline": "赵看画右下南中说明，不看门外。",
+          "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+          "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+          "action_in": "许正在画外签经办，赵不干预。",
+          "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+        },
+        "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+        "merge_candidate": false,
+        "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 2
+      }
+    ],
+    "execution_plan": [],
+    "reference_plan": [],
+    "manifests": []
+  },
+  "cases": [
+    {
+      "turn_id": "specialist-turn-40ee43499ac842eb880bf31b2913b15e",
+      "sequence": 6,
+      "request": {
+        "shot_id": "shot-yqq-08",
+        "method_skill_ids": [
+          "method.drama_series"
+        ],
+        "route": "REFERENCE",
+        "resolution": "2K",
+        "aspect_ratio": "9:16",
+        "duration_seconds": 5,
+        "revision_instructions": "仅编译当前许岚回应近景，不扩展到同组其他镜头。当前shot revision2和已选媒体为准。三图顺序固定：身份与服装、会议室空间、胸上构图；均为软reference_image，不作硬首帧。保持写实自然摄影，许岚东座画右、朝画左同坐姿高度看赵衡，相机西南眼平固定、南侧轴线。仅许岚画内连续一次说完整原句“出了错可以一起补，责任也得一起认。”设计0–4.5秒发声，随后自然闭口停顿至5秒；不省字、不重复、不加口音，不把设计时间写成已验证语音时长。前半句愿合作，逗号略停，后半句坚定不提高音量，无胜利笑。静态构图闭唇不锁死动态口型。采用胸上范围，双手、纸笔、笔帽与赵衡画外；不展示新动作，不预演下一镜松手，不从空景推断空桌。保持低连续室内底噪和自然呼吸，无旁白、第三人或音乐。保留当前画外连续性为设计意图，不宣称实证。原生参考分别1536×2048、2304×1536、900×1600，与2K视频输出标签分开。仅准备，尚无实际表演、口型、声音或跨镜连续性验证。",
+        "media_inputs": [
+          {
+            "kind": "IMAGE",
+            "role": "reference_image",
+            "source": {
+              "local_path": "/fixtures/asset-version-3a8b4ea6267b.png"
+            },
+            "asset_version_id": "asset-version-3a8b4ea6267b",
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "reference_alias": "许岚",
+            "binding_purpose": "0–5秒SUBJECT_IDENTITY/AUTHORITATIVE：唯一身份及服装依据，约29岁成年女性、椭圆脸、柔和下颌、侧分齐肩黑直发耳后收发、米白长袖衬衫。同图同时贡献服装，不重复发送；中性背景与站姿不贡献会议室、座位或构图，不作硬首帧。",
+            "reference_tags": [
+              "身份参考",
+              "服装参考",
+              "not-first-frame"
+            ],
+            "image_reference_role": "SUBJECT_IDENTITY"
+          },
+          {
+            "kind": "IMAGE",
+            "role": "reference_image",
+            "source": {
+              "local_path": "/fixtures/asset-version-d42fba8ad6bb.png"
+            },
+            "asset_version_id": "asset-version-d42fba8ad6bb",
+            "subject_asset_id": "asset-4024e0462bfc",
+            "reference_alias": "公司小会议室",
+            "binding_purpose": "0–5秒SCENE_IDENTITY/AUTHORITATIVE：同一会议室材质、东西对坐位置、东窗柔光与南侧轴线；许岚东座，赵衡西座且画外。原图南侧朝北空景，只贡献空间身份，不镜像冒充西南近景，不强加空桌状态或完整房间构图，不作硬首帧。",
+            "reference_tags": [
+              "SCENE_MASTER",
+              "EAST_XULAN",
+              "WEST_ZHAOHENG",
+              "EAST_WINDOW_LIGHT"
+            ],
+            "image_reference_role": "SCENE_IDENTITY"
+          },
+          {
+            "kind": "IMAGE",
+            "role": "reference_image",
+            "source": {
+              "local_path": "/fixtures/asset-version-07155ca88530.png"
+            },
+            "asset_version_id": "asset-version-07155ca88530",
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "reference_alias": "许岚东座胸上近景",
+            "binding_purpose": "0–5秒COMPOSITION/SUPPORTING：原生900×1600竖幅，许岚略偏画右，看画左画外，清楚面部、米白衬衫和局部会议室色光。软构图、视线及克制表情参考，不替换身份母图，不作硬首帧，静态闭唇不锁死说话口型，不贡献画外手、纸笔或赵衡状态。",
+            "reference_tags": [
+              "shot-yqq-08",
+              "east-seat",
+              "southwest-camera",
+              "look-screen-left",
+              "chest-up",
+              "no-visible-props"
+            ],
+            "image_reference_role": "COMPOSITION"
+          }
+        ]
+      },
+      "shot": {
+        "id": "shot-yqq-08",
+        "project_id": "project-5b8286dc63e6",
+        "sequence": 10,
+        "scene_id": "scene-5441e73077d5",
+        "duration_seconds": 5.0,
+        "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+        "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+        "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+        "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+        "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+        "dialogue_line_ids": [
+          "line-yqq-06"
+        ],
+        "references": [
+          {
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "id": "cue-yqq-s08-xulan-identity",
+            "asset_version_id": "asset-version-3a8b4ea6267b",
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 2,
+            "alias": "许岚",
+            "required_tags": [
+              "身份参考"
+            ],
+            "purpose": "第8镜0–5秒全程的SUBJECT_IDENTITY/AUTHORITATIVE。固定许岚的面容、成年年龄感、侧分齐肩黑发及米白衬衫；同一文件同时贡献服装，不重复发送。中性背景站姿不贡献会议室、座位或开镜构图，不作硬首帧。",
+            "image_reference_role": "SUBJECT_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-4024e0462bfc",
+            "id": "cue-yqq-s08-room-space",
+            "asset_version_id": "asset-version-d42fba8ad6bb",
+            "field": "camera",
+            "text_start": 5,
+            "text_end": 8,
+            "alias": "公司小会议室",
+            "required_tags": [
+              "SCENE_MASTER"
+            ],
+            "purpose": "第8镜0–5秒全程的SCENE_IDENTITY/AUTHORITATIVE。贡献同一会议室材质、东西对坐位置、东窗柔光与南侧轴线；许岚东座、赵衡西座且画外。原图为南侧朝北空景，不镜像冒充西南近景，不将空桌状态或完整房间构图强加给本镜。",
+            "image_reference_role": "SCENE_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-85d4f6cc7d52",
+            "id": "cue-yqq-s08-xulan-closeup",
+            "asset_version_id": "asset-version-07155ca88530",
+            "field": null,
+            "text_start": null,
+            "text_end": null,
+            "alias": "许岚东座胸上近景",
+            "required_tags": [
+              "shot-yqq-08",
+              "chest-up"
+            ],
+            "purpose": "第8镜0–5秒的COMPOSITION/SUPPORTING：原生900×1600竖幅胸上近景，许岚略偏画右、看画左画外，面部清楚，米白衬衫及局部会议室色光连续。0–4.5秒说完整原句，4.5–5秒闭嘴等回应；静态闭唇不锁死动态口型。仅补构图、视线与克制表情基调，不替换身份母图，不作硬首帧，不贡献画外手、纸笔或赵衡的状态。",
+            "image_reference_role": "COMPOSITION",
+            "usage": "GENERATION"
+          }
+        ],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 4.5,
+            "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+            "framing": "胸上近景",
+            "camera": "西南侧眼平固定",
+            "action": "手留在自己桌边不动，面对赵衡说完原句。",
+            "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+            "emotion": "愿意合作，也明确守住责任边界。",
+            "dialogue_line_ids": [
+              "line-yqq-06"
+            ],
+            "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+            "references": []
+          },
+          {
+            "start_seconds": 4.5,
+            "end_seconds": 5.0,
+            "visual": "许岚说完后仍看着赵衡。",
+            "framing": "同一近景",
+            "camera": "固定不变",
+            "action": "闭嘴等回应，不伸手拿笔。",
+            "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "短暂室内静默和自然呼吸。",
+            "references": []
+          }
+        ],
+        "continuity": {
+          "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+          "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+          "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+          "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+          "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+          "action_out": "许岚说完第六句，仍等赵衡回应。"
+        },
+        "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+        "merge_candidate": false,
+        "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 2
+      },
+      "rejected_prompt": "subject_definitions: @许岚 = <Subject 1>; Xu Lan (许岚), extracted from <Picture 1> (1536×2048): a Chinese woman about 29, oval face, soft jawline, natural brows and skin texture, side-parted shoulder-length straight black hair tucked behind her ears. Her outfit is a plain ivory long-sleeved blouse with closed cuffs and dark-gray trousers; only her upper body appears here. This is the authoritative identity and clothing source.\n@公司小会议室 = <Subject 2>; the small company meeting room, extracted from <Picture 2> (2304×1536): a north–south light-oak table, two opposing dark-gray armless chairs on its east and west sides, a north partition with frosted glass above a light-gray lower section, a closed pale-wood door at the north end of the west wall, and a high east window. Xu occupies the east seat; Zhao Heng occupies the west seat, off-screen.\n@许岚东座胸上近景 = <Picture 3>; the 900×1600 chest-up composition reference for this shot throughout 0–5 seconds: Xu slightly screen-right, looking off-screen left, with restrained resolve and local meeting-room background. It supports framing and eyeline, not a separate identity.\n\nsummary: A 5.00-second, 9:16, 2K single chest-up shot in natural photographic realism: Xu Lan calmly offers cooperation while firmly insisting on shared responsibility, addressing the silent, off-screen Zhao Heng.\n\nretention_analysis: <Picture 1> supplies <Subject 1>'s face, hair and clothing throughout; exclude its neutral background and standing pose.\n<Picture 2> supplies <Subject 2>'s materials, east/west seating topology and soft eastern light; show only the background appropriate to the close-up. Do not copy its empty-table state, centered wide view or mirror its layout.\n<Picture 3> softly guides this shot's right-weighted chest-up framing, leftward gaze and restrained expression throughout 0–5 seconds. <Picture 1> remains authoritative for identity. Do not freeze the reference's closed lips during speech or infer unseen hands, props or Zhao's actions from it.\nAll three are soft reference images, not hard first/last frames or inserted shots. Their source pixel dimensions are separate from the 2K video output. Off-screen continuity below is planned staging, not verified preceding footage; no adopted previous media boundary has been observed.\n\ndetailed_description: [Shot 1] At 00:00.000, begin a continuous chest-up view of <Subject 1> seated on the east side of the table in <Subject 2>, facing west. Follow <Picture 3>'s soft composition: her face sits slightly screen-right, her full hair silhouette remains visible, and screen-left space serves her gaze toward Zhao's eyes at the same seated height. Zhao remains entirely off-screen. Keep Xu's face clear and her posture steady. Her hands, both documents, pen and cap remain outside the crop.\n\nThe camera is southwest of the table, on the south side of the dialogue axis, fixed at eye level and aimed at Xu. No orbit, axis crossing or camera movement. Maintain the early-evening room's soft east-window daylight and neutral overhead illumination, with natural skin detail and stable exposure.\n\nMaintain these planned states outside the frame without revealing them: Xu's hands have already withdrawn to her own table edge; both are empty and remain still. The situation statement lies south-center, facing Zhao, with both signature fields blank. The uncapped black signing pen rests beside the review field, tip north and tail south. The quotation lies north-center facing Zhao, retaining its red corrections and existing lower-right confirmation signature; Zhao's left hand still presses its north edge. The cap remains at the southern part of the table's east edge, beside Xu's left hand. None of these positions, contacts or signature states changes during this shot.\n\n00:00.000–00:04.500 is the planned window for one complete utterance. Looking steadily screen-left at Zhao rather than seeking the camera, Xu Lan (许岚) (S1), visible and speaking with synchronized mouth articulation, says in standard Mandarin at normal conversational volume: <d>[Chinese] 出了错可以一起补，责任也得一起认。</d> The first clause offers cooperation evenly; pause briefly at the comma, then finish the second clause firmly without raising her voice. Do not repeat or omit words. Her expression remains controlled, without a sarcastic eyebrow lift or triumphant smile. No pointing, paper pushing, downward glance to prepare a signature or reach for the pen. Zhao listens silently off-screen.\n\n00:04.500–00:05.000: after finishing, Xu closes her lips and continues looking at Zhao, awaiting his reply. Hold the same framing, seated posture and steady breathing, with no victory smile. All off-screen prop states remain unchanged. End at 5.00 seconds on her composed, expectant gaze, ready for the planned direct cut to Zhao's reaction; do not include that next shot or anticipate his release of the quotation.\n\noverall_soundscape: Low, continuous indoor room tone beneath Xu's single on-screen utterance and subtle natural breathing. The final half-second contains room tone and breathing only. No voiceover, Zhao speech, third-person voices, added prop sounds or sound accents. No generated subtitles, captions, logos or watermarks.\n\nnon_diegetic_music: N/A"
+    },
+    {
+      "turn_id": "specialist-turn-25f976ec9d794cdc936141b9a1bdc31d",
+      "sequence": 12,
+      "request": {
+        "shot_id": "shot-yqq-12-reaction",
+        "method_skill_ids": [
+          "method.drama_series"
+        ],
+        "route": "REFERENCE",
+        "resolution": "2K",
+        "aspect_ratio": "9:16",
+        "duration_seconds": 4,
+        "revision_instructions": "仅编译当前赵衡反应单镜。原镜最终使用时长1.5秒，H3合法源请求为4秒：建议取源0–1.5秒，1.5–4秒只延续同一自然等待作未使用余量，不增加剧情或切镜。0–约1.2秒画外许岚书写声，约1.2秒声止，此后只有连续低室内底声；无人说话、无旁白、无音乐。唯一图片保留COMPOSITION软参考职责，不改成硬首帧、不替换身份母图。沿用已观察的成年赵衡、侧分黑短发、浅蓝首扣解开衬衫、闭嘴、放松下颌肩颈；西座脸居画左看画右下，南偏东固定反角、南侧轴、东窗柔光。双手、许岚和纸笔均画外，不伸手收纸、不点头催促。画外签字完成和声音停止是计划而非已验证事实。只编译完整可保存Prompt与有序引用，禁止任何视频提交。",
+        "media_inputs": [
+          {
+            "kind": "IMAGE",
+            "role": "reference_image",
+            "source": {
+              "local_path": "/fixtures/asset-version-89add4b760e5.png"
+            },
+            "asset_version_id": "asset-version-89add4b760e5",
+            "subject_asset_id": "asset-5f4d7485e6b8",
+            "reference_alias": "赵衡",
+            "binding_purpose": "用于本镜0–1.5秒赵衡西座闭口等待的胸上近景构图、画右下视线与静态表情。实际955×1696原像素裁图，保留已采用身份、浅蓝衬衫及局部会议室柔光；不替换身份母图，不是硬首帧，不提供画外签字完成、纸笔状态或声音证据。",
+            "reference_tags": [
+              "shot-yqq-12-reaction",
+              "west-seat",
+              "look-screen-right-down",
+              "chest-up"
+            ],
+            "image_reference_role": "COMPOSITION"
+          }
+        ]
+      },
+      "shot": {
+        "id": "shot-yqq-12-reaction",
+        "project_id": "project-5b8286dc63e6",
+        "sequence": 17,
+        "scene_id": "scene-5441e73077d5",
+        "duration_seconds": 1.5,
+        "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+        "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+        "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+        "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+        "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+        "dialogue_line_ids": [],
+        "references": [],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 1.5,
+            "visual": "@赵衡向画右下看许岚签字，不再催。",
+            "framing": "胸上近景。",
+            "camera": "南偏东固定。",
+            "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+            "performance": "下颌放松，眼神不催促，不点头指挥。",
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "连续书写声约1.2秒后停止，无新增词句。",
+            "references": [
+              {
+                "subject_asset_id": "asset-5f4d7485e6b8",
+                "id": "shot-yqq-12-reaction-beat-0-ref-0",
+                "asset_version_id": "asset-version-89add4b760e5",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "赵衡",
+                "required_tags": [
+                  "shot-yqq-12-reaction",
+                  "west-seat",
+                  "look-screen-right-down",
+                  "chest-up"
+                ],
+                "purpose": "用于本镜0–1.5秒赵衡西座闭口等待的胸上近景构图、画右下视线与静态表情。实际955×1696原像素裁图，保留已采用身份、浅蓝衬衫及局部会议室柔光；不替换身份母图，不是硬首帧，不提供画外签字完成、纸笔状态或声音证据。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              }
+            ]
+          }
+        ],
+        "continuity": {
+          "character_positions": "赵西画左，许东画外，两人原座不变。",
+          "eyeline": "赵看画右下南中说明，不看门外。",
+          "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+          "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+          "action_in": "许正在画外签经办，赵不干预。",
+          "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+        },
+        "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+        "merge_candidate": false,
+        "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 2
+      },
+      "rejected_prompt": "subject_definitions: @赵衡 = <Picture 1>. This is a soft composition anchor for Zhao Heng (赵衡) in [Shot 1], 0.00–1.50 seconds, not a hard first frame or a replacement identity master. He is an adult man with a square-rounded face, short side-parted black hair, and a light-blue shirt with its top button open. The reference establishes his chest-up framing, face left of center, down-right gaze, closed mouth, and relaxed jaw, neck and shoulders.\n\nsummary: A 4.00-second, 9:16 single-shot reaction in a small company meeting room at dusk: Zhao Heng silently waits while Xu Lan finishes signing offscreen; use source 0.00–1.50 seconds, with 1.50–4.00 seconds continuing the same wait as unused editing margin.\n\nretention_analysis: Use <Picture 1> for the declared reaction composition and static waiting state during 0.00–1.50 seconds, retaining Zhao's adopted appearance, the local warm light-gray wall and soft east-window illumination. Continue that setup through the remaining hold. This is neither an additional shot nor a hard frame constraint. Only Zhao is visible; Xu Lan, both characters' hands, the tabletop, papers, pen and cap remain outside the frame. The image does not establish full camera coordinates, offscreen signing, prop states or sound. Previous adopted video and audio boundaries are unknown; the offscreen continuity below is planned target action, not verified previous-media evidence.\n\ndetailed_description: [Shot 1] At 00:00.000, begin a continuous fixed chest-up reverse angle from south-southeast, maintaining the southern camera axis and east-window soft light. Zhao remains seated on the west side, his face on screen left with negative space toward his lower-right eyeline, following the soft composition in <Picture 1>. He looks down-right toward the statement at south-center, never toward the doorway. His mouth stays closed, his jaw and shoulders relaxed, and his gaze unhurried. Both hands remain in front of him on his own side, below the frame. He does not nod, direct Xu Lan, intervene or reach to collect the papers.\n\nThe planned offscreen starting state has Xu Lan seated east, already writing in the statement's handling signature field with the same uncapped black pen in her right hand; her left fingertips steady the blank paper edge. The statement remains at south-center with its title end facing west, and Zhao's review signature already present. The quotation at north-center and the separate cap on the southern portion of the east edge remain unmoved. None of these objects or actions becomes visible.\n\nFrom 0.00 to approximately 1.20 seconds, generate continuous pen-on-paper writing from Xu Lan's offscreen position, already underway at the start. Zhao simply waits without urging her. At approximately 1.20 seconds, the writing stops, signaling the planned completion of her handling signature. Entirely offscreen, her right hand lifts the uncapped pen clear of the paper and withdraws east beyond its edge; her left hand leaves the paper. Do not add a separate lift or paper sound.\n\nFrom approximately 1.20 to 1.50 seconds, Zhao maintains the same silent, relaxed down-right attention while only low room ambience continues. He has not collected anything. The intended edit exits after the writing stops, at 1.50 seconds, for the separately planned static result insert showing both signatures; that insert is outside this generation.\n\nFrom 1.50 to 4.00 seconds, continue the same natural closed-mouth wait without further action, camera movement, reframing or cuts. End with Zhao still in the west seat, hands out of view on his own side, gaze down-right, and the same composition and lighting. No dialogue, voiceover, visible writing, subtitles, logos or watermarks.\n\noverall_soundscape: Low, continuous indoor room tone throughout. The sole foreground cue is Xu Lan's planned offscreen writing during the opening approximately 1.20 seconds, as timed above; afterward, room tone alone. No speech or additional sound events. Do not assume a verified audio match to previous media.\n\nnon_diegetic_music: N/A"
+    }
+  ]
+}

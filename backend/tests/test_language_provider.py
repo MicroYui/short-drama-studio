@@ -823,6 +823,7 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
         "route_selected_upstream": True,
         "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
         "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
+        "timing_markers": "在正文中按顺序使用每个 beat 的 required_timing_marker；可用数值完全等价的 MM:SS.mmm 起止区间，不能改变边界、漏段或把对白移到其他区间。",
         "continuity_handoff": "有实际连续性依赖时使用已观察的采用媒体边界；未提供观察时只保留计划意图，不携入当前镜头未列出的可见资产。",
     }
 

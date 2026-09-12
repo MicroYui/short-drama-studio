@@ -38,6 +38,7 @@ from short_drama.providers.h3_media_bindings import (
 from short_drama.style_context import declared_style_value
 from short_drama.studio_references import assert_current_script_structure
 from short_drama.providers.h3_output_format import h3_prompt_document
+from short_drama.providers.h3_timing import find_shot_time_range, find_time_range, time_range_marker
 from short_drama.providers.h3_dialogue_spans import (
     H3RequestDialogueSpan, assert_complete_dialogue_request, generation_unit_dialogue_spans,
     request_speaker_ids, shot_dialogue_spans,
@@ -345,12 +346,15 @@ def validate_h3_generation_unit_prompt_ir(
         )
         for index, window in enumerate(unit.shot_windows, start=1)
     ]
-    marker_positions = [stripped.find(marker) for marker in markers]
+    narrative_start = positions[-3] + len(fields[-3])
+    narrative = stripped[narrative_start:positions[-2]]
+    marker_positions = [find_shot_time_range(narrative, index, window.source_in_seconds,
+                                             window.source_in_seconds + window.duration_seconds)
+                        for index, window in enumerate(unit.shot_windows, start=1)]
     if all(position >= 0 for position in marker_positions) and (
         marker_positions != sorted(marker_positions)
     ):
         raise ValueError("H3 generation-unit prompt reordered editorial shot windows")
-    soundscape_start = stripped.find("overall_soundscape:")
     shot_segments: list[str] = []
     for index, window in enumerate(unit.shot_windows, start=1):
         shot = shot_by_id.get(window.shot_id)
@@ -363,10 +367,10 @@ def validate_h3_generation_unit_prompt_ir(
             window.source_in_seconds,
             window.duration_seconds,
         )
-        if marker not in stripped:
+        if marker_positions[index - 1] < 0:
             raise ValueError(f"H3 generation-unit prompt omitted locked window {marker}")
-        segment_end = marker_positions[index] if index < len(markers) else soundscape_start
-        segment = stripped[marker_positions[index - 1] : segment_end]
+        segment_end = marker_positions[index] if index < len(markers) else len(narrative)
+        segment = narrative[marker_positions[index - 1] : segment_end]
         shot_segments.append(segment)
         for span in spans:
             if span.parts[0].shot_id != shot.id:
@@ -486,7 +490,8 @@ def _validate_dialogue_spans(
         _beat_time_marker(offset_seconds + beat.start_seconds, offset_seconds + beat.end_seconds)
         for beat in shot.timeline_beats
     ]
-    positions = [narrative.find(marker) for marker in markers]
+    positions = [find_time_range(narrative, offset_seconds + beat.start_seconds,
+                                 offset_seconds + beat.end_seconds) for beat in shot.timeline_beats]
     # Existing group prose may describe beat timing inside its required Shot N
     # window without repeating every exact beat marker. Validate explicit ranges
     # when all are present; do not invent a new group-format requirement here.
@@ -692,8 +697,7 @@ def _generation_unit_window_marker(
     duration_seconds: float,
 ) -> str:
     return (
-        f"[Shot {index}] [{source_in_seconds:.2f}-"
-        f"{source_in_seconds + duration_seconds:.2f} seconds]"
+        f"[Shot {index}] " + time_range_marker(source_in_seconds, source_in_seconds + duration_seconds)
     )
 
 
@@ -989,7 +993,7 @@ def _timeline_description(
 
 
 def _beat_time_marker(start_seconds: float, end_seconds: float) -> str:
-    return f"[{start_seconds:.2f}-{end_seconds:.2f} seconds]"
+    return time_range_marker(start_seconds, end_seconds)
 
 
 def _timeline_beat_description(

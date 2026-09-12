@@ -25,6 +25,7 @@ from short_drama.providers.h3_prompt_skill import (
 )
 from short_drama.providers.h3_media_bindings import is_h3_composition_reference, resolve_h3_media_bindings
 from short_drama.providers.h3_output_format import h3_prompt_document, resolve_h3_output_format
+from short_drama.providers.h3_timing import time_range_marker
 from short_drama.providers.h3_dialogue_spans import (
     assert_complete_dialogue_request, dialogue_span_payload, generation_unit_dialogue_spans,
     request_dialogue_span_payload, request_speaker_ids,
@@ -651,7 +652,9 @@ def build_language_prompt_input(
             "camera": shot.camera,
             "audio_intent": shot.audio_intent,
             "timeline_beats": [
-                beat.model_dump(mode="json") for beat in shot.timeline_beats
+                {**beat.model_dump(mode="json"),
+                 "required_timing_marker": time_range_marker(beat.start_seconds, beat.end_seconds)}
+                for beat in shot.timeline_beats
             ],
             "continuity": shot.continuity.model_dump(mode="json"),
             "transition_out": shot.transition_out,
@@ -666,6 +669,7 @@ def build_language_prompt_input(
             "route_selected_upstream": True,
             "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
             "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
+            "timing_markers": "在正文中按顺序使用每个 beat 的 required_timing_marker；可用数值完全等价的 MM:SS.mmm 起止区间，不能改变边界、漏段或把对白移到其他区间。",
             "continuity_handoff": "有实际连续性依赖时使用已观察的采用媒体边界；未提供观察时只保留计划意图，不携入当前镜头未列出的可见资产。",
             "dialogue": _DIALOGUE_POLICY,
         },
