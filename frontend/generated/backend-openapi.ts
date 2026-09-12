@@ -9396,21 +9396,31 @@ export interface components {
         ReferencePackEntryCreateRequest: {
             /** @default NOT_APPLICABLE */
             angle: components["schemas"]["ReferenceAngle"];
-            /** Asset Version Id */
+            /**
+             * Asset Version Id
+             * @description Exact current usable DRAFT/APPROVED image, including one stored in another asset. One composition image may have separate entries for several depicted subjects; register only the actual uses needed by their cues. No file is moved or approved.
+             */
             asset_version_id: string;
             /** Description */
             description: string;
             /** @default NOT_APPLICABLE */
             framing: components["schemas"]["ReferenceFraming"];
-            /** Lineage Root Version Id */
+            /**
+             * Lineage Root Version Id
+             * @description Optional exact current usable IMAGE owned by subject_asset_id that establishes this subject's lineage. Not an arbitrary editing parent or the composition container's base image. Omit when no such lineage is being asserted; CANONICAL_MASTER uses its own source image.
+             */
             lineage_root_version_id?: string | null;
             /**
              * Priority
              * @default 0
              */
             priority: number;
+            /** @description Use within this subject's pack; must match its kind. CANONICAL_MASTER requires the subject's own image. An interaction/state/composition reference does not replace that identity source. */
             role: components["schemas"]["ReferenceRole"];
-            /** Subject Asset Id */
+            /**
+             * Subject Asset Id
+             * @description CHARACTER/LOCATION/PROP whose reference pack receives this use. This is the depicted subject, not necessarily the asset containing the image. A REFERENCE container can be used directly by its own COMPOSITION Shot cue without a pack; do not register a pack on that container.
+             */
             subject_asset_id: string;
             /** Tags */
             tags?: string[];
@@ -10552,9 +10562,15 @@ export interface components {
          * @description Semantic reference requested by one time-bounded part of a shot.
          */
         ShotReferenceCue: {
-            /** Alias */
+            /**
+             * Alias
+             * @description Readable name without @. Within one Shot, a name identifies one subject and exact media/state. Use different aliases for a closed-folder composition and its open-page image, even for the same prop.
+             */
             alias: string;
-            /** Asset Version Id */
+            /**
+             * Asset Version Id
+             * @description Exact selected media UUID with the subject's own-image/reference-pack relationship. The same image may serve multiple subjects only with each subject's valid relationship; do not change ownership or invent a pack merely because the image contains an object.
+             */
             asset_version_id?: string | null;
             /** Field */
             field?: ("visual" | "action" | "performance" | "camera") | null;
@@ -10566,8 +10582,13 @@ export interface components {
             purpose: string;
             /** Required Tags */
             required_tags?: string[];
-            /** Subject Asset Id */
+            /**
+             * Subject Asset Id
+             * @description Actual referenced object. Its selected image must be owned by this asset or registered in this subject's reference pack. A self-owned REFERENCE image may be used directly as a COMPOSITION cue, without a pack or approval. A room's pack entry does not establish another prop's use.
+             */
             subject_asset_id: string;
+            /** @description 新正文引用优先复制唯一原文 exact；重复时补紧邻的 prefix/suffix，无需手算位置。基于所属 Shot 或 Beat 的 field 定位，保存为规范 text_start/text_end。同时提供显式偏移时必须与唯一匹配一致；此输入提示不另存为引用状态。 */
+            text_anchor?: components["schemas"]["ShotTextAnchor"] | null;
             /**
              * Text End
              * @description 正文 @ 引用的结束 Unicode 字符位置（不包含终点），与 text_start 成对。时段内引用放到对应 timeline_beat.references；它的偏移基于该时段的 field 文本。
@@ -10575,7 +10596,7 @@ export interface components {
             text_end?: number | null;
             /**
              * Text Start
-             * @description 正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；仅不对应任何正文文字的整镜构图参考才省略。
+             * @description 已有人工选区的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数），与 text_end 成对。新引用可改传 text_anchor，由程序定位；保留已有偏移和自定义 alias。仅不对应任何正文文字的整镜构图参考才省略。
              */
             text_start?: number | null;
             /**
@@ -10617,6 +10638,24 @@ export interface components {
             planning_notes?: string | null;
             /** Requirements */
             requirements?: components["schemas"]["ReferenceRequirement"][];
+        };
+        /** ShotTextAnchor */
+        ShotTextAnchor: {
+            /**
+             * Exact
+             * @description 逐字复制所属 field 中本次引用的文字，例如 @林乔；不按 alias 猜显示文本。
+             */
+            exact: string;
+            /**
+             * Prefix
+             * @description 同一文字出现多次时，复制紧邻所选出现之前的原文以消歧；不包含 exact。
+             */
+            prefix?: string | null;
+            /**
+             * Suffix
+             * @description 必要时复制紧邻所选出现之后的原文以消歧；不包含 exact。
+             */
+            suffix?: string | null;
         };
         /**
          * ShotTimelineBeat

@@ -18746,6 +18746,7 @@
             "default": "NOT_APPLICABLE"
           },
           "asset_version_id": {
+            "description": "Exact current usable DRAFT/APPROVED image, including one stored in another asset. One composition image may have separate entries for several depicted subjects; register only the actual uses needed by their cues. No file is moved or approved.",
             "title": "Asset Version Id",
             "type": "string"
           },
@@ -18768,6 +18769,7 @@
                 "type": "null"
               }
             ],
+            "description": "Optional exact current usable IMAGE owned by subject_asset_id that establishes this subject's lineage. Not an arbitrary editing parent or the composition container's base image. Omit when no such lineage is being asserted; CANONICAL_MASTER uses its own source image.",
             "title": "Lineage Root Version Id"
           },
           "priority": {
@@ -18778,9 +18780,11 @@
             "type": "integer"
           },
           "role": {
-            "$ref": "#/components/schemas/ReferenceRole"
+            "$ref": "#/components/schemas/ReferenceRole",
+            "description": "Use within this subject's pack; must match its kind. CANONICAL_MASTER requires the subject's own image. An interaction/state/composition reference does not replace that identity source."
           },
           "subject_asset_id": {
+            "description": "CHARACTER/LOCATION/PROP whose reference pack receives this use. This is the depicted subject, not necessarily the asset containing the image. A REFERENCE container can be used directly by its own COMPOSITION Shot cue without a pack; do not register a pack on that container.",
             "title": "Subject Asset Id",
             "type": "string"
           },
@@ -22189,6 +22193,7 @@
         "description": "Semantic reference requested by one time-bounded part of a shot.",
         "properties": {
           "alias": {
+            "description": "Readable name without @. Within one Shot, a name identifies one subject and exact media/state. Use different aliases for a closed-folder composition and its open-page image, even for the same prop.",
             "maxLength": 80,
             "minLength": 1,
             "title": "Alias",
@@ -22203,6 +22208,7 @@
                 "type": "null"
               }
             ],
+            "description": "Exact selected media UUID with the subject's own-image/reference-pack relationship. The same image may serve multiple subjects only with each subject's valid relationship; do not change ownership or invent a pack merely because the image contains an object.",
             "title": "Asset Version Id"
           },
           "field": {
@@ -22259,10 +22265,22 @@
             "type": "array"
           },
           "subject_asset_id": {
+            "description": "Actual referenced object. Its selected image must be owned by this asset or registered in this subject's reference pack. A self-owned REFERENCE image may be used directly as a COMPOSITION cue, without a pack or approval. A room's pack entry does not establish another prop's use.",
             "maxLength": 200,
             "minLength": 1,
             "title": "Subject Asset Id",
             "type": "string"
+          },
+          "text_anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotTextAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "新正文引用优先复制唯一原文 exact；重复时补紧邻的 prefix/suffix，无需手算位置。基于所属 Shot 或 Beat 的 field 定位，保存为规范 text_start/text_end。同时提供显式偏移时必须与唯一匹配一致；此输入提示不另存为引用状态。"
           },
           "text_end": {
             "anyOf": [
@@ -22287,7 +22305,7 @@
                 "type": "null"
               }
             ],
-            "description": "正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；仅不对应任何正文文字的整镜构图参考才省略。",
+            "description": "已有人工选区的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数），与 text_end 成对。新引用可改传 text_anchor，由程序定位；保留已有偏移和自定义 alias。仅不对应任何正文文字的整镜构图参考才省略。",
             "title": "Text Start"
           },
           "usage": {
@@ -22401,6 +22419,46 @@
           }
         },
         "title": "ShotReferencePlanUpdateRequest",
+        "type": "object"
+      },
+      "ShotTextAnchor": {
+        "additionalProperties": false,
+        "properties": {
+          "exact": {
+            "description": "逐字复制所属 field 中本次引用的文字，例如 @林乔；不按 alias 猜显示文本。",
+            "minLength": 1,
+            "title": "Exact",
+            "type": "string"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "同一文字出现多次时，复制紧邻所选出现之前的原文以消歧；不包含 exact。",
+            "title": "Prefix"
+          },
+          "suffix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "必要时复制紧邻所选出现之后的原文以消歧；不包含 exact。",
+            "title": "Suffix"
+          }
+        },
+        "required": [
+          "exact"
+        ],
+        "title": "ShotTextAnchor",
         "type": "object"
       },
       "ShotTimelineBeat-Input": {
