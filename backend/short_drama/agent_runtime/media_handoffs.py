@@ -99,6 +99,36 @@ def _observation(
     return json.dumps(identity, ensure_ascii=False, sort_keys=True), body, related | {work.id}, refs
 
 
+def media_turn_observations(
+    work: WorkOrder, turn: SpecialistTurnRecord, project_id: str,
+) -> list[tuple[str, dict[str, JsonValue], set[str], list[ArtifactRef]]]:
+    """Project each actual saved use while retaining its original Tool turn."""
+    if turn.tool_name != "artifact.add_reference_entries":
+        observation = _observation(work, turn, project_id)
+        return [] if observation is None else [observation]
+    result = turn.result or {}
+    output = _dict(result.get("output"))
+    pack = _dict(output.get("pack"))
+    entries, entry_ids = pack.get("entries"), output.get("entry_ids")
+    if not isinstance(entries, list) or not isinstance(entry_ids, list):
+        return []
+    by_id = {entry.get("id"): entry for entry in entries
+             if isinstance(entry, dict) and isinstance(entry.get("id"), str)}
+    observations: list[tuple[str, dict[str, JsonValue], set[str], list[ArtifactRef]]] = []
+    for entry_id in entry_ids:
+        if not isinstance(entry_id, str) or entry_id not in by_id:
+            continue
+        # Reuse the single-use projection only on a copy; saved_observation
+        # still points to the complete original batch request and receipt.
+        projected_turn = turn.model_copy(update={"tool_name": "artifact.add_reference_entry",
+            "result": {**result, "output": {"pack": pack, "entry": by_id[entry_id]}}})
+        observation = _observation(work, projected_turn, project_id)
+        if observation is not None:
+            observation[1]["tool_name"] = turn.tool_name
+            observations.append(observation)
+    return observations
+
+
 def observed_media_handoffs(
     store: AgentRuntimeStore, *, run_id: str, project_id: str,
     selected_ids: set[str] | None = None, exclude_work_order_id: str | None = None,
@@ -120,15 +150,12 @@ def observed_media_handoffs(
         if work.id == exclude_work_order_id or (selected_ids is None and work.status == DelegationStatus.COMPLETED):
             continue
         for turn in work.specialist_turns:
-            observation = _observation(work, turn, project_id)
-            if observation is None:
-                continue
-            key, body, related, refs = observation
-            if selected_ids is not None and not selected_ids & related:
-                continue
-            previous = selected.get(key)
-            if previous is None or previous[1].updated_at < turn.updated_at:
-                selected[key] = (work, turn, body, refs)
+            for key, body, related, refs in media_turn_observations(work, turn, project_id):
+                if selected_ids is not None and not selected_ids & related:
+                    continue
+                previous = selected.get(key)
+                if previous is None or previous[1].updated_at < turn.updated_at:
+                    selected[key] = (work, turn, body, refs)
 
     rows: list[JsonValue] = []
     visible_refs: dict[tuple[str, str, str, int | None], ArtifactRef] = {}

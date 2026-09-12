@@ -60,7 +60,7 @@ def test_real_partial_qa_and_registration_reach_leader_before_work_completes_and
     payload = leader_input(AgentRuntimeStore(path), context)
     rows = cast(list[dict[str, JsonValue]], payload["media_observations"])
     assert len(rows) == 6
-    assert {row["asset_version_id"] for row in rows} == {ROOM, FOLDER, PEN}
+    assert {cast(str, row["asset_version_id"]) for row in rows} == {ROOM, FOLDER, PEN}
     assert all(row["work_order_status"] == "IN_PROGRESS" for row in rows)
     for row in rows:
         turn = next(turn for turn in source.specialist_turns if turn.id == row["attempt_id"])
@@ -129,7 +129,7 @@ def test_inflight_inspection_is_visible_without_result_and_scopes_remain_indepen
     after = worker_input(AgentRuntimeStore(tmp_path / "agent.sqlite3"), receiver, context)
     reviews = [row for row in cast(list[dict[str, JsonValue]], after["media_observations"]) if row["kind"] == "image_inspection"]
     assert len(reviews) == 2
-    assert {cast(dict[str, JsonValue], row["result"])["recommended"] for row in reviews} == {True, False}
+    assert {cast(bool, cast(dict[str, JsonValue], row["result"])["recommended"]) for row in reviews} == {True, False}
     assert any(cast(dict[str, JsonValue], row["result"]).get("crop_suggestion") == {"box": [115, 184, 957, 1680]} for row in reviews)
 
 
@@ -215,4 +215,73 @@ def test_many_small_observations_remain_recoverable_with_whole_request_budget(tm
     assert actual["goal"] == payload["goal"]
     marker = actual["working_set"]["media_observations"]
     assert isinstance(marker, dict)
-    assert store.get_context_snapshot(marker["context_ref"], context.run_id) == payload
+    assert store.get_context_snapshot(cast(str, marker["context_ref"]), context.run_id) == payload
+
+
+def test_actual_batch_uses_keep_per_version_scope_and_later_single_entry_updates(tmp_path: Path) -> None:
+    from short_drama.agent_runtime.models import SpecialistTurnRecord, SpecialistTurnStatus
+    from tests.test_reference_pack_batch import prepare, invoke
+
+    service, project_id, case, args = prepare(tmp_path, 2)
+    result, saved = invoke(service, args)
+    runtime = service.production_manager.runtime
+    run = runtime.create_run(project_id=project_id, objective="Finish the remaining paper photography", root_agent="leader")
+    work = runtime.create_work_order(run.id, sender="leader", recipient_role="paper-builder", objective=run.objective, why_now="Partial delivery")
+    batch = SpecialistTurnRecord(id="paper-batch", sequence=18, tool_name="artifact.add_reference_entries",
+        arguments=args, reason="Register four selected paper states", status=SpecialistTurnStatus.COMPLETED,
+        result=cast(dict[str, JsonValue], result.model_dump(mode="json")))
+    work.specialist_turns = [batch]
+    work.status = DelegationStatus.IN_PROGRESS
+    runtime.store.save_work_order(work)
+    original_batch = batch.model_dump(mode="json")
+    all_rows, _ = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id)
+    assert len(all_rows) == 4
+    selected = saved.pack.entries[1]
+    rows, _ = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id, selected_ids={selected.asset_version_id})
+    assert len(rows) == 1
+    row = cast(dict[str, JsonValue], rows[0])
+    assert row["asset_version_id"] == selected.asset_version_id and row["kind"] == "saved_reference_use"
+    assert cast(dict[str, JsonValue], row["result"])["entry"] == selected.model_dump(mode="json")
+    assert row["attempt_id"] == batch.id and row["tool_name"] == "artifact.add_reference_entries"
+    assert "score" not in row and "recommended" not in row
+
+    # A later ordinary single-entry edit must replace just this use, without
+    # retaining a second copy from its original batch or dropping other states.
+    single_args = deepcopy(case.turns[1].arguments)
+    single_args["project_id"] = project_id
+    cast(dict[str, JsonValue], single_args["request"])["description"] = "Updated actual paper-state use"
+    single = service.tool_registry.invoke("artifact.add_reference_entry", single_args)
+    assert single.error is None and single.output
+    updated = SpecialistTurnRecord(id="later-paper-use", sequence=19, tool_name="artifact.add_reference_entry",
+        arguments=single_args, reason="Revise this use", status=SpecialistTurnStatus.COMPLETED,
+        result=cast(dict[str, JsonValue], single.model_dump(mode="json")))
+    work.specialist_turns.append(updated)
+    runtime.store.save_work_order(work)
+    rows, _ = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id)
+    assert len(rows) == 4
+    changed = next(cast(dict[str, JsonValue], row) for row in rows if isinstance(row, dict) and row["asset_version_id"] == selected.asset_version_id)
+    assert changed["attempt_id"] == updated.id
+    assert cast(dict[str, JsonValue], changed["result"])["entry"] == single.output["entry"]
+    assert batch.model_dump(mode="json") == original_batch
+
+
+def test_batch_observation_exposes_requested_saved_ids_not_every_existing_pack_entry(tmp_path: Path) -> None:
+    from short_drama.agent_runtime.media_handoffs import media_turn_observations
+    from short_drama.reference_planner import ReferencePackEntriesCreateRequest
+    from tests.test_reference_pack_batch import prepare, invoke
+
+    service, project_id, _case, args = prepare(tmp_path)
+    request = ReferencePackEntriesCreateRequest.model_validate(args["request"])
+    unrelated = request.entries[0].model_dump(mode="json")
+    unrelated["role"] = "CHARACTER_BODY"
+    unrelated["description"] = "Separately saved body reference"
+    assert service.tool_registry.invoke("artifact.add_reference_entry", {"project_id": project_id, "request": unrelated}).error is None
+    result, saved = invoke(service, args)
+    assert len(saved.pack.entries) == 3 and len(saved.entry_ids) == 2
+    _store, work, _context = runtime_work(tmp_path / "runtime.sqlite3")
+    turn = SpecialistTurnRecord(id="batch-two", sequence=3, tool_name="artifact.add_reference_entries",
+        arguments=args, reason="Register selected uses", status=SpecialistTurnStatus.COMPLETED,
+        result=cast(dict[str, JsonValue], result.model_dump(mode="json")))
+    rows = media_turn_observations(work, turn, project_id)
+    assert len(rows) == 2
+    assert {cast(str, cast(dict[str, JsonValue], cast(dict[str, JsonValue], row[1]["result"])["entry"])["id"]) for row in rows} == set(saved.entry_ids)

@@ -1,0 +1,443 @@
+[
+  {
+    "role": "林夏人物制作",
+    "work_order_id": "work-order-05f4de0c2cd548a6bc7c14005631034a",
+    "source_project_id": "project-d2fa0fa72d76",
+    "source": "Fresh3 SQLite read-only saved specialist_turns; PNG test pixels are synthetic, not a replayed quality judgment",
+    "assets": [
+      {
+        "id": "asset-3e6673f533a5",
+        "name": "林夏",
+        "kind": "CHARACTER",
+        "versions": [
+          {
+            "id": "asset-version-c4e4b77543bc",
+            "width": 2160,
+            "height": 3840,
+            "media_type": "IMAGE"
+          },
+          {
+            "id": "asset-version-346713c6ba52",
+            "width": 577,
+            "height": 768,
+            "media_type": "IMAGE"
+          }
+        ]
+      }
+    ],
+    "turns": [
+      {
+        "id": "specialist-turn-ddcafdec66e24fc8b91aac6ef64fb033",
+        "sequence": 9,
+        "requested_at": "2026-09-12T05:52:11.875382Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-3e6673f533a5",
+            "asset_version_id": "asset-version-c4e4b77543bc",
+            "role": "CANONICAL_MASTER",
+            "framing": "FULL_BODY",
+            "tags": [
+              "林夏",
+              "原创身份",
+              "固定服装",
+              "雾蓝衬衫",
+              "炭灰直筒裤",
+              "黑色低马尾",
+              "非首帧"
+            ],
+            "description": "林夏首次原创身份与固定服装母版，实际2160×3840。主体别名：林夏；作为SUBJECT_IDENTITY/AUTHORITATIVE建立成年女性鹅蛋脸、清楚五官及黑色低马尾；作为WARDROBE/AUTHORITATIVE固定雾蓝翻领长袖衬衫、扣合袖口、炭灰直筒裤、黑色素面平底式鞋与深棕无标肩包。已观察全身完整、自然站姿、平和表情和摄影质感，未见影响用途的明显人体畸形。细小虹膜纹理、毛孔及袖口扣件未充分辨明。仅贡献身份、体态与服装，不限制后续动作、表情、机位及肩包的剧情位置；不代表会议室空间，不作镜头首帧。同一实际图片承担多个职责时只发送一次。",
+            "priority": 90
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-ed793e8c6f3c",
+          "asset_version_id": "asset-version-c4e4b77543bc",
+          "lineage_root_version_id": "asset-version-c4e4b77543bc",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "FULL_BODY",
+          "tags": [
+            "林夏",
+            "原创身份",
+            "固定服装",
+            "雾蓝衬衫",
+            "炭灰直筒裤",
+            "黑色低马尾",
+            "非首帧"
+          ],
+          "description": "林夏首次原创身份与固定服装母版，实际2160×3840。主体别名：林夏；作为SUBJECT_IDENTITY/AUTHORITATIVE建立成年女性鹅蛋脸、清楚五官及黑色低马尾；作为WARDROBE/AUTHORITATIVE固定雾蓝翻领长袖衬衫、扣合袖口、炭灰直筒裤、黑色素面平底式鞋与深棕无标肩包。已观察全身完整、自然站姿、平和表情和摄影质感，未见影响用途的明显人体畸形。细小虹膜纹理、毛孔及袖口扣件未充分辨明。仅贡献身份、体态与服装，不限制后续动作、表情、机位及肩包的剧情位置；不代表会议室空间，不作镜头首帧。同一实际图片承担多个职责时只发送一次。",
+          "priority": 90
+        }
+      },
+      {
+        "id": "specialist-turn-09d4bed29f08498b8fc737466eb255a2",
+        "sequence": 10,
+        "requested_at": "2026-09-12T05:52:48.308074Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-3e6673f533a5",
+            "asset_version_id": "asset-version-346713c6ba52",
+            "role": "CHARACTER_FACE",
+            "lineage_root_version_id": "asset-version-c4e4b77543bc",
+            "angle": "NOT_APPLICABLE",
+            "framing": "FACE_CLOSE_UP",
+            "tags": [
+              "林夏",
+              "脸部身份",
+              "原像素裁切",
+              "黑色低马尾",
+              "非首帧"
+            ],
+            "description": "主体别名：林夏。选用为SUBJECT_IDENTITY/AUTHORITATIVE脸部身份辅助参考，源于已采用的原创全身母版asset-version-c4e4b77543bc，实际577×768。已观察头顶、发际线、双颊、下颌、必要颈部及可见低马尾完整；鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与母图一致，成年年龄感自然，未见裁切截断、拉伸或像素损伤。用于近景和互动构图生成时减少全身图缩小导致的五官识别损失，不放大、不重绘，也不新增毛孔或虹膜细节；不替代全身服装母版，不限定表情、姿态、机位，不作镜头首帧或会议室空间参考。",
+            "priority": 100
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-7e128b154475",
+          "asset_version_id": "asset-version-346713c6ba52",
+          "lineage_root_version_id": "asset-version-c4e4b77543bc",
+          "role": "CHARACTER_FACE",
+          "angle": "NOT_APPLICABLE",
+          "framing": "FACE_CLOSE_UP",
+          "tags": [
+            "林夏",
+            "脸部身份",
+            "原像素裁切",
+            "黑色低马尾",
+            "非首帧"
+          ],
+          "description": "主体别名：林夏。选用为SUBJECT_IDENTITY/AUTHORITATIVE脸部身份辅助参考，源于已采用的原创全身母版asset-version-c4e4b77543bc，实际577×768。已观察头顶、发际线、双颊、下颌、必要颈部及可见低马尾完整；鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与母图一致，成年年龄感自然，未见裁切截断、拉伸或像素损伤。用于近景和互动构图生成时减少全身图缩小导致的五官识别损失，不放大、不重绘，也不新增毛孔或虹膜细节；不替代全身服装母版，不限定表情、姿态、机位，不作镜头首帧或会议室空间参考。",
+          "priority": 100
+        }
+      }
+    ]
+  },
+  {
+    "role": "周启人物制作",
+    "work_order_id": "work-order-505b14867dd04aec9942d985e549e437",
+    "source_project_id": "project-d2fa0fa72d76",
+    "source": "Fresh3 SQLite read-only saved specialist_turns; PNG test pixels are synthetic, not a replayed quality judgment",
+    "assets": [
+      {
+        "id": "asset-cd4ea66d5166",
+        "name": "周启",
+        "kind": "CHARACTER",
+        "versions": [
+          {
+            "id": "asset-version-136d4a9038b9",
+            "width": 2304,
+            "height": 3456,
+            "media_type": "IMAGE"
+          },
+          {
+            "id": "asset-version-05d30f686774",
+            "width": 487,
+            "height": 731,
+            "media_type": "IMAGE"
+          }
+        ]
+      }
+    ],
+    "turns": [
+      {
+        "id": "specialist-turn-fb51627a93194d589bc53dc85c015911",
+        "sequence": 9,
+        "requested_at": "2026-09-12T05:51:39.236366Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-cd4ea66d5166",
+            "asset_version_id": "asset-version-136d4a9038b9",
+            "role": "CANONICAL_MASTER",
+            "angle": "FRONT",
+            "framing": "FULL_BODY",
+            "tags": [
+              "周启",
+              "人物身份",
+              "固定服装",
+              "全身体态",
+              "平静自然"
+            ],
+            "description": "周启的原创人物身份及固定服装母版，2304×3456。已实际观察：约38岁普通中国男性，略方脸、黑色侧分短发、无眼镜无明显胡须，眉眼放松；浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋清楚，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，保留皮肤、眼下纹理和衣料褶皱。本图对周启身份、衣着和身体比例提供权威依据；近景可配合同源脸部裁图。不固定镜头姿态、办公室布景或方位，不承担构图首帧、互动接触及动态表演验收。",
+            "priority": 90
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-1b23b089e44c",
+          "asset_version_id": "asset-version-136d4a9038b9",
+          "lineage_root_version_id": "asset-version-136d4a9038b9",
+          "role": "CANONICAL_MASTER",
+          "angle": "FRONT",
+          "framing": "FULL_BODY",
+          "tags": [
+            "周启",
+            "人物身份",
+            "固定服装",
+            "全身体态",
+            "平静自然"
+          ],
+          "description": "周启的原创人物身份及固定服装母版，2304×3456。已实际观察：约38岁普通中国男性，略方脸、黑色侧分短发、无眼镜无明显胡须，眉眼放松；浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋清楚，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，保留皮肤、眼下纹理和衣料褶皱。本图对周启身份、衣着和身体比例提供权威依据；近景可配合同源脸部裁图。不固定镜头姿态、办公室布景或方位，不承担构图首帧、互动接触及动态表演验收。",
+          "priority": 90
+        }
+      },
+      {
+        "id": "specialist-turn-0452b67480d74e68ad858651bb94a07d",
+        "sequence": 10,
+        "requested_at": "2026-09-12T05:52:00.415056Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-cd4ea66d5166",
+            "asset_version_id": "asset-version-05d30f686774",
+            "role": "CHARACTER_FACE",
+            "lineage_root_version_id": "asset-version-136d4a9038b9",
+            "angle": "FRONT",
+            "framing": "FACE_CLOSE_UP",
+            "tags": [
+              "周启",
+              "人物身份",
+              "正面脸部",
+              "同源原像素裁切",
+              "平静自然"
+            ],
+            "description": "周启的正面脸部身份参考，487×731 PNG，从已采用的2304×3456全身母版原像素裁取，未放大或重绘。已实际观察：完整保留黑色侧分短发、双耳及下颌并有必要余量；略方脸、发际、眉眼间距、鼻翼及唇形与母版一致，双眼和深色虹膜可辨，皮肤及轻微眼下纹理自然，无影响识别的模糊、裁断、拉伸或像素损坏。作为主体“周启”的SUBJECT_IDENTITY/AUTHORITATIVE输入，贡献同一人物的脸型、五官、发型和成年年龄感；精细棕色色阶不由此图锁定。全身服装与体态使用同源全身母版。本裁图不固定镜头姿态或表情，不提供场景空间、互动接触、镜头首帧或动态表演验收。",
+            "priority": 100
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-5425ce4aaef1",
+          "asset_version_id": "asset-version-05d30f686774",
+          "lineage_root_version_id": "asset-version-136d4a9038b9",
+          "role": "CHARACTER_FACE",
+          "angle": "FRONT",
+          "framing": "FACE_CLOSE_UP",
+          "tags": [
+            "周启",
+            "人物身份",
+            "正面脸部",
+            "同源原像素裁切",
+            "平静自然"
+          ],
+          "description": "周启的正面脸部身份参考，487×731 PNG，从已采用的2304×3456全身母版原像素裁取，未放大或重绘。已实际观察：完整保留黑色侧分短发、双耳及下颌并有必要余量；略方脸、发际、眉眼间距、鼻翼及唇形与母版一致，双眼和深色虹膜可辨，皮肤及轻微眼下纹理自然，无影响识别的模糊、裁断、拉伸或像素损坏。作为主体“周启”的SUBJECT_IDENTITY/AUTHORITATIVE输入，贡献同一人物的脸型、五官、发型和成年年龄感；精细棕色色阶不由此图锁定。全身服装与体态使用同源全身母版。本裁图不固定镜头姿态或表情，不提供场景空间、互动接触、镜头首帧或动态表演验收。",
+          "priority": 100
+        }
+      }
+    ]
+  },
+  {
+    "role": "剧情纸张道具制作",
+    "work_order_id": "work-order-cb2028bdf2ee42acada0e14746c0ae2a",
+    "source_project_id": "project-d2fa0fa72d76",
+    "source": "Fresh3 SQLite read-only saved specialist_turns; PNG test pixels are synthetic, not a replayed quality judgment",
+    "assets": [
+      {
+        "id": "asset-865595edbe90",
+        "name": "自愿加班单",
+        "kind": "PROP",
+        "versions": [
+          {
+            "id": "asset-version-b004f0cdde1e",
+            "width": 1680,
+            "height": 2376,
+            "media_type": "IMAGE"
+          },
+          {
+            "id": "asset-version-2d9b208484bb",
+            "width": 1680,
+            "height": 2376,
+            "media_type": "IMAGE"
+          },
+          {
+            "id": "asset-version-7f515957460f",
+            "width": 1792,
+            "height": 2560,
+            "media_type": "IMAGE"
+          },
+          {
+            "id": "asset-version-66917e030ed2",
+            "width": 1792,
+            "height": 2560,
+            "media_type": "IMAGE"
+          }
+        ]
+      }
+    ],
+    "turns": [
+      {
+        "id": "specialist-turn-373ec55a04974a43b2acdeb847b74a95",
+        "sequence": 18,
+        "requested_at": "2026-09-12T05:57:41.712021Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-865595edbe90",
+            "asset_version_id": "asset-version-7f515957460f",
+            "role": "CANONICAL_MASTER",
+            "angle": "FRONT",
+            "framing": "FULL_BODY",
+            "tags": [
+              "原始未签",
+              "完整标题",
+              "空白签名线",
+              "物理道具摄影",
+              "A4竖向白纸"
+            ],
+            "description": "主体：唯一一张自愿加班单。已采用的原始未签摄影外观母图，1792×2560。页顶单行大号黑体“自愿加班”准确完整，无划线；下部签名横线空白，其余留白。贡献该道具的纸张形态、材质、印字布局及此时状态，不贡献人物身份、会议室空间、握纸或递笔动作。后续图像输入可声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限本道具外观与原始未签状态。整纸与纸角可见，纸面约1500×2100像素；摄影纸面合成采样须排除周围灰背景。划线完成后的镜头改用本包划线未签状态，不能把本图混作划线后起态；本图不证明动态文字保持。",
+            "priority": 100
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-6bbabcbc2ba7",
+          "asset_version_id": "asset-version-7f515957460f",
+          "lineage_root_version_id": "asset-version-7f515957460f",
+          "role": "CANONICAL_MASTER",
+          "angle": "FRONT",
+          "framing": "FULL_BODY",
+          "tags": [
+            "原始未签",
+            "完整标题",
+            "空白签名线",
+            "物理道具摄影",
+            "A4竖向白纸"
+          ],
+          "description": "主体：唯一一张自愿加班单。已采用的原始未签摄影外观母图，1792×2560。页顶单行大号黑体“自愿加班”准确完整，无划线；下部签名横线空白，其余留白。贡献该道具的纸张形态、材质、印字布局及此时状态，不贡献人物身份、会议室空间、握纸或递笔动作。后续图像输入可声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限本道具外观与原始未签状态。整纸与纸角可见，纸面约1500×2100像素；摄影纸面合成采样须排除周围灰背景。划线完成后的镜头改用本包划线未签状态，不能把本图混作划线后起态；本图不证明动态文字保持。",
+          "priority": 100
+        }
+      },
+      {
+        "id": "specialist-turn-019beb1edf9442719ba0c45be1ba254c",
+        "sequence": 19,
+        "requested_at": "2026-09-12T05:57:57.321652Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-865595edbe90",
+            "asset_version_id": "asset-version-66917e030ed2",
+            "role": "PROP_STATE",
+            "lineage_root_version_id": "asset-version-7f515957460f",
+            "angle": "FRONT",
+            "framing": "FULL_BODY",
+            "tags": [
+              "划线未签",
+              "只划自愿",
+              "加班完整",
+              "空白签名线",
+              "物理道具摄影",
+              "A4竖向白纸"
+            ],
+            "description": "主体：与原始未签母图相同的唯一一张自愿加班单。已采用的划线未签摄影状态，1792×2560。页顶准确文字“自愿加班”，仅一道细黑横线穿过“自愿”中部，原字可辨，线尾在“加”左缘之前停止；“加班”完整，下部签名线仍空白。实图对比确认除指定划线外，纸张轮廓、标题与签名线位置、留白、光照及接触影与原始摄影一致，无可见接缝。后续图像输入可声明PROP_IDENTITY/AUTHORITATIVE，权威范围只限本道具外观与划线完成且无人签字的状态；不能用于划线动作发生前的起态。贡献纸张材质和状态，不贡献人物、会议室、手势或递笔关系。用于共面合成时只采样纸内区域，排除灰背景；正读展示不要求后续机位把纸转向观众。未证明动态划线、旋转或折纸中的文字保持。",
+            "priority": 95
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-3ac25697d330",
+          "asset_version_id": "asset-version-66917e030ed2",
+          "lineage_root_version_id": "asset-version-7f515957460f",
+          "role": "PROP_STATE",
+          "angle": "FRONT",
+          "framing": "FULL_BODY",
+          "tags": [
+            "划线未签",
+            "只划自愿",
+            "加班完整",
+            "空白签名线",
+            "物理道具摄影",
+            "A4竖向白纸"
+          ],
+          "description": "主体：与原始未签母图相同的唯一一张自愿加班单。已采用的划线未签摄影状态，1792×2560。页顶准确文字“自愿加班”，仅一道细黑横线穿过“自愿”中部，原字可辨，线尾在“加”左缘之前停止；“加班”完整，下部签名线仍空白。实图对比确认除指定划线外，纸张轮廓、标题与签名线位置、留白、光照及接触影与原始摄影一致，无可见接缝。后续图像输入可声明PROP_IDENTITY/AUTHORITATIVE，权威范围只限本道具外观与划线完成且无人签字的状态；不能用于划线动作发生前的起态。贡献纸张材质和状态，不贡献人物、会议室、手势或递笔关系。用于共面合成时只采样纸内区域，排除灰背景；正读展示不要求后续机位把纸转向观众。未证明动态划线、旋转或折纸中的文字保持。",
+          "priority": 95
+        }
+      },
+      {
+        "id": "specialist-turn-473b77f7be444834b3f18a73416f7812",
+        "sequence": 20,
+        "requested_at": "2026-09-12T05:58:14.723936Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-865595edbe90",
+            "asset_version_id": "asset-version-b004f0cdde1e",
+            "role": "PROP_STATE",
+            "angle": "FRONT",
+            "framing": "DETAIL",
+            "tags": [
+              "原始未签",
+              "完整标题",
+              "空白签名线",
+              "准确字版",
+              "PHYSICAL_SURFACE_CONTENT",
+              "平面合成内容源"
+            ],
+            "description": "主体：唯一一张自愿加班单的原始未签纸面内容。已核验并采用的1680×2376白底PNG，页顶只有单行大号黑体“自愿加班”，无划线；下部空白签名线，其余留白，无其他文字。作为准确文字、字形和纸内相对排版的权威来源，可整图作为共面合成source；不提供摄影纸纹、纸边、光照、人物、空间或手部接触证据，不是镜头首帧。后续生成若使用本图，声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限原始未签的准确纸面内容；纸张形态与材质另用本包原始未签摄影母图。划线动作前使用此状态，划线完成后改用对应划线未签字版。正读内容不要求后续机位把纸转向观众，也不证明视频中的动态文字保持。",
+            "priority": 80
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-6d103be28fd9",
+          "asset_version_id": "asset-version-b004f0cdde1e",
+          "lineage_root_version_id": null,
+          "role": "PROP_STATE",
+          "angle": "FRONT",
+          "framing": "DETAIL",
+          "tags": [
+            "原始未签",
+            "完整标题",
+            "空白签名线",
+            "准确字版",
+            "PHYSICAL_SURFACE_CONTENT",
+            "平面合成内容源"
+          ],
+          "description": "主体：唯一一张自愿加班单的原始未签纸面内容。已核验并采用的1680×2376白底PNG，页顶只有单行大号黑体“自愿加班”，无划线；下部空白签名线，其余留白，无其他文字。作为准确文字、字形和纸内相对排版的权威来源，可整图作为共面合成source；不提供摄影纸纹、纸边、光照、人物、空间或手部接触证据，不是镜头首帧。后续生成若使用本图，声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限原始未签的准确纸面内容；纸张形态与材质另用本包原始未签摄影母图。划线动作前使用此状态，划线完成后改用对应划线未签字版。正读内容不要求后续机位把纸转向观众，也不证明视频中的动态文字保持。",
+          "priority": 80
+        }
+      },
+      {
+        "id": "specialist-turn-100cc0cc74b4446bb45b1d0c1b659dc4",
+        "sequence": 21,
+        "requested_at": "2026-09-12T05:58:33.696622Z",
+        "arguments": {
+          "project_id": "project-d2fa0fa72d76",
+          "request": {
+            "subject_asset_id": "asset-865595edbe90",
+            "asset_version_id": "asset-version-2d9b208484bb",
+            "role": "PROP_STATE",
+            "angle": "FRONT",
+            "framing": "DETAIL",
+            "tags": [
+              "划线未签",
+              "只划自愿",
+              "加班完整",
+              "空白签名线",
+              "准确字版",
+              "PHYSICAL_SURFACE_CONTENT",
+              "平面合成内容源"
+            ],
+            "description": "主体：唯一一张自愿加班单的划线未签纸面内容。已核验并采用的1680×2376白底PNG，沿原始未签准确字版本地派生，仅叠加一道细黑横线穿过“自愿”中部，原字仍可辨；线尾在“加”字左缘之前停止，“加班”完整未划。下部签名线仍空白，标题字形、位置和其余留白与原始字版一致，无多余文字或可见合成接缝。作为准确文字、指定划线状态和纸内排版的权威来源，可整图作为共面合成source。后续生成若使用本图，声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限划线完成且无人签字的纸面内容；不提供摄影纸纹、纸边、光照、人物、空间或手部接触证据，不是镜头首帧。纸张形态与材质另用本包划线未签摄影状态。不得将本图用于划线动作发生前的起态；正读内容不要求后续机位把纸转向观众，不证明动态划线、旋转或折纸中的文字保持。",
+            "priority": 75
+          }
+        },
+        "saved_entry": {
+          "id": "reference-entry-f5b4b7e50832",
+          "asset_version_id": "asset-version-2d9b208484bb",
+          "lineage_root_version_id": null,
+          "role": "PROP_STATE",
+          "angle": "FRONT",
+          "framing": "DETAIL",
+          "tags": [
+            "划线未签",
+            "只划自愿",
+            "加班完整",
+            "空白签名线",
+            "准确字版",
+            "PHYSICAL_SURFACE_CONTENT",
+            "平面合成内容源"
+          ],
+          "description": "主体：唯一一张自愿加班单的划线未签纸面内容。已核验并采用的1680×2376白底PNG，沿原始未签准确字版本地派生，仅叠加一道细黑横线穿过“自愿”中部，原字仍可辨；线尾在“加”字左缘之前停止，“加班”完整未划。下部签名线仍空白，标题字形、位置和其余留白与原始字版一致，无多余文字或可见合成接缝。作为准确文字、指定划线状态和纸内排版的权威来源，可整图作为共面合成source。后续生成若使用本图，声明PROP_IDENTITY/AUTHORITATIVE，权威范围仅限划线完成且无人签字的纸面内容；不提供摄影纸纹、纸边、光照、人物、空间或手部接触证据，不是镜头首帧。纸张形态与材质另用本包划线未签摄影状态。不得将本图用于划线动作发生前的起态；正读内容不要求后续机位把纸转向观众，不证明动态划线、旋转或折纸中的文字保持。",
+          "priority": 75
+        }
+      }
+    ]
+  }
+]

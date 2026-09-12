@@ -91,6 +91,31 @@ class ReferencePackEntryMutationResponse(DomainModel):
     project: ProjectAggregate
 
 
+class ReferencePackEntriesCreateRequest(DomainModel):
+    entries: list[ReferencePackEntryCreateRequest] = Field(min_length=1, max_length=16,
+        description="Already selected uses of existing images for one subject. Different versions and roles may share the subject's exact lineage root; no generation or approval is performed.")
+
+    @model_validator(mode="after")
+    def one_subject_and_distinct_uses(self) -> ReferencePackEntriesCreateRequest:
+        subject_id = self.entries[0].subject_asset_id
+        seen: dict[tuple[str, ReferenceRole, ReferenceAngle, ReferenceFraming], int] = {}
+        for index, entry in enumerate(self.entries):
+            if entry.subject_asset_id != subject_id:
+                raise ValueError(f"entries[{index}] belongs to a different subject; a batch registers one subject's uses")
+            key = (entry.asset_version_id, entry.role, entry.angle, entry.framing)
+            if key in seen:
+                raise ValueError(f"entries[{index}] repeats the same version/role/angle/framing as entries[{seen[key]}]")
+            seen[key] = index
+        return self
+
+
+class ReferencePackEntriesMutationResponse(DomainModel):
+    pack: ReferencePack
+    entry_ids: list[str] = Field(description="Actual saved entry IDs in request order; full entries occur once in pack.entries.")
+    created_entry_ids: list[str]
+    reused_entry_ids: list[str]
+
+
 def reference_entry_context(document: ProjectDocument, request: ReferencePackEntryCreateRequest) -> str:
     """Small relationship facts for a failed request, not a saved entry."""
     assets = {asset.id: asset for asset in document.assets}

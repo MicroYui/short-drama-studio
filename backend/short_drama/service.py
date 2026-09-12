@@ -480,6 +480,8 @@ from short_drama.reference_planner import (
     KeyframeBriefCompileResponse,
     ReferencePackEntryCreateRequest,
     ReferencePackEntryMutationResponse,
+    ReferencePackEntriesCreateRequest,
+    ReferencePackEntriesMutationResponse,
     ReferencePlanPreviewRequest,
     ReferencePlanPreviewResponse,
     ShotReferencePlanUpdateRequest,
@@ -11169,6 +11171,48 @@ class ShortDramaService:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
             return self._add_reference_pack_entry_document(document, request, persist=True)
+
+    def add_reference_pack_entries(
+        self, project_id: str, request: ReferencePackEntriesCreateRequest,
+    ) -> ReferencePackEntriesMutationResponse:
+        entry_ids: list[str] = []
+        created_ids: list[str] = []
+        reused_ids: list[str] = []
+
+        def apply_entries(document: ProjectDocument) -> bool:
+            existing_ids = {entry.id for pack in document.reference_packs for entry in pack.entries}
+            errors: list[str] = []
+            for index, entry in enumerate(request.entries):
+                try:
+                    # Qualification and lineage are shared with the single-entry
+                    # path. Only inspect the explicitly selected local files.
+                    for version_id in dict.fromkeys([entry.asset_version_id, entry.lineage_root_version_id]):
+                        if version_id is None:
+                            continue
+                        _owner, version = self._find_asset_version(document, version_id)
+                        if not version.local_path and not version.external_url:
+                            raise WorkflowConflictError("Selected image has no media: " + version_id)
+                        if version.local_path:
+                            path = Path(version.local_path)
+                            if not path.is_file() or path.stat().st_size == 0:
+                                raise WorkflowConflictError("Selected image file is missing or empty: " + version_id)
+                    result = self._add_reference_pack_entry_document(document, entry, preserve_existing=True)
+                    entry_ids.append(result.entry.id)
+                    (reused_ids if result.entry.id in existing_ids else created_ids).append(result.entry.id)
+                except (ValueError, KeyError, OSError) as exc:
+                    errors.append(f"/request/entries/{index}: {exc}; " + reference_entry_context(document, entry))
+            if errors:
+                raise WorkflowConflictError("Reference pack batch is invalid; nothing was saved:\n" + "\n".join(errors))
+            return bool(created_ids)
+
+        # Both service instances and shared episodes read/validate inside the
+        # same short SQLite transaction; no model or provider work occurs here.
+        with self._lock:
+            document = self.repository.register_reference_pack_entries(project_id, apply_entries)
+            pack = next(pack for pack in document.reference_packs
+                        if pack.subject_asset_id == request.entries[0].subject_asset_id)
+            return ReferencePackEntriesMutationResponse(pack=pack, entry_ids=entry_ids,
+                created_entry_ids=created_ids, reused_entry_ids=reused_ids)
 
     def _add_reference_pack_entry_document(
         self, document: ProjectDocument, request: ReferencePackEntryCreateRequest, *, persist: bool = False, preserve_existing: bool = False,

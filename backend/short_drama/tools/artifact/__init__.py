@@ -62,6 +62,8 @@ from short_drama.production_contracts import (
 from short_drama.reference_planner import (
     ReferencePackEntryCreateRequest,
     ReferencePackEntryMutationResponse,
+    ReferencePackEntriesCreateRequest,
+    ReferencePackEntriesMutationResponse,
 )
 from short_drama.stock_assets import (
     StockAssetImportRequest,
@@ -75,6 +77,7 @@ from short_drama.tools.contracts import (
     ToolExecution,
     ToolModel,
     ToolSpec,
+    ToolWriteReceipt,
 )
 from short_drama.tools.artifact_views import (
     AssetPlanCompactReadResponse,
@@ -260,6 +263,10 @@ class ArtifactToolService(Protocol):
         request: ReferencePackEntryCreateRequest,
     ) -> ReferencePackEntryMutationResponse: ...
 
+    def add_reference_pack_entries(
+        self, project_id: str, request: ReferencePackEntriesCreateRequest,
+    ) -> ReferencePackEntriesMutationResponse: ...
+
 
 class AssetPlanAttemptPatchOperation(StrEnum):
     """RFC 6902 operations supported by compact AssetPlan attempt repair."""
@@ -384,6 +391,11 @@ class AssetVersionReviewInput(ToolModel):
 class ReferencePackEntryAddInput(ToolModel):
     project_id: str
     request: ReferencePackEntryCreateRequest
+
+
+class ReferencePackEntriesAddInput(ToolModel):
+    project_id: str
+    request: ReferencePackEntriesCreateRequest
 
 
 class ProductionDocumentCreateInput(ToolModel):
@@ -1947,6 +1959,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             version=1,
             category=ToolCategory.ARTIFACT,
             description=(
+                "登记或修改一个参考用途；同一主体多条已确定用途可用 artifact.add_reference_entries 一起保存。"
                 "把已明确选用、CURRENT 且有可用图片媒体的精确版本加入主体 "
                 "ReferencePack，声明身份、角度、空间或道具职责。DRAFT 与 "
                 "APPROVED 均可；登记不自动审核，不改变资产的 current_version_id "
@@ -1963,6 +1976,35 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             tags=frozenset({"asset", "reference-pack", "shot-input"}),
         )
     )
+
+    def add_reference_entries(request: ReferencePackEntriesAddInput) -> ToolExecution[ReferencePackEntriesMutationResponse]:
+        result = service.add_reference_pack_entries(request.project_id, request.request)
+        refs = [ArtifactRef(project_id=request.project_id, artifact_type="reference_pack", artifact_id=result.pack.id)]
+        refs.extend(ArtifactRef(project_id=request.project_id, artifact_type="reference_pack_entry", artifact_id=entry_id)
+                    for entry_id in result.entry_ids)
+        refs.extend(ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=version_id)
+                    for version_id in dict.fromkeys(entry.asset_version_id for entry in request.request.entries))
+        current_state: dict[str, JsonValue] = {"reference_pack_id": result.pack.id,
+            "subject_asset_id": result.pack.subject_asset_id,
+            "reference_entry_ids": [entry_id for entry_id in result.entry_ids],
+            "reused_reference_entry_ids": [entry_id for entry_id in result.reused_entry_ids]}
+        return ToolExecution(output=result, artifact_refs=tuple(refs), receipt=ToolWriteReceipt(
+            artifact_refs=refs, current_state=current_state,
+            changed_ids={"created_reference_entry_ids": result.created_entry_ids}))
+
+    registry.register(ToolSpec(
+        id="artifact.add_reference_entries", version=1, category=ToolCategory.ARTIFACT,
+        description=(
+            "一次登记同一主体多张已选图片的用途与谱系；逐项验证后一起保存，无需逐条语言往返。"
+            "entries 复用单条登记字段，允许同图不同用途、多版本共用实际母图；CURRENT 可用 DRAFT/APPROVED 均可。"
+            "只登记已经明确的选择，不自动审核、不改 current/approved、不生成媒体或要求 Shot/AssetPlan。"
+            "同自然键相同内容重试复用；已有元数据不同或任一项无效则整批不写，返回具体 entries 索引。"
+            "要修改一个已有用途仍用 artifact.add_reference_entry；实际新观察或选择尚未完成时不提前登记。"
+            "返回实际 pack 与按请求顺序的 entry_ids、created/reused IDs，完整条目只在 pack.entries 中出现一次。"
+        ), effect=ToolEffect.WRITE, idempotent=True,
+        input_model=ReferencePackEntriesAddInput, output_model=ReferencePackEntriesMutationResponse,
+        handler=add_reference_entries, tags=frozenset({"asset", "reference-pack", "shot-input"}),
+    ))
 
 
 def register_asset_plan_attempt_tools(
@@ -2029,6 +2071,7 @@ __all__ = [
     "ProductionSpecGetInput",
     "ProductionSpecReplaceInput",
     "ReferencePackEntryAddInput",
+    "ReferencePackEntriesAddInput",
     "StockAssetImportInput",
     "StockAssetSearchInput",
     "register_asset_plan_attempt_tools",

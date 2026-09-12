@@ -747,6 +747,19 @@ class ShortDramaRepository:
             connection.execute("BEGIN IMMEDIATE")
             self._save_project_on_connection(connection, document)
 
+    def register_reference_pack_entries(
+        self, project_id: str, apply_entries: Callable[[ProjectDocument], bool],
+    ) -> ProjectDocument:
+        """Validate all chosen uses against current shared media, then save once."""
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            document = self._read_effective_project(connection, project_id)
+            if document is None:
+                raise KeyError(project_id)
+            if apply_entries(document):
+                self._save_project_on_connection(connection, document)
+            return document
+
     def save_shot_media_registration(
         self, document: ProjectDocument, changed_shot_ids: Sequence[str], *,
         validate_merged: Callable[[ProjectDocument], None], write_content: bool = True,
