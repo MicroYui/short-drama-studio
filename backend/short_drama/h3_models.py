@@ -463,8 +463,10 @@ class H3ShotRouteDirective(DomainModel):
     reuse_take_id: str | None = Field(default=None, min_length=1, max_length=200)
     reference_selection_candidate_ids: list[str] | None = None
     camera_previs_motion: H3CameraMotionPreset | None = None
-    prompt_override: str | None = Field(default=None, min_length=1, max_length=7000)
-    media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12)
+    prompt_override: str | None = Field(default=None, min_length=1, max_length=7000,
+        description="Exact compiled prompt for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.")
+    media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12,
+        description="Ordered authored media for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.")
 
     @model_validator(mode="after")
     def validate_route_choice(self) -> H3ShotRouteDirective:

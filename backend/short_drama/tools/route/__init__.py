@@ -288,6 +288,8 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         description=("Prepare one current shot/group through current plan, selected inputs, one H3 prompt compilation and saved route. "
             "Use shot_id or clip_group_id; no manual plan IDs or prompt transfer. Defaults to preparation only; enqueue=true "
             "explicitly queues real H3 generation. Repeat/resume by operation_id reuses completed prompt/route/tasks. "
+            "When shot_id belongs to an existing ClipGroup, preparation covers that whole group; "
+            "a subset-only work order must hand off to the group owner instead of changing its scope. "
             "Existing selected bindings determine media unless an ordered media_inputs choice is supplied. "
             "This preserves the chosen input strategy; it does not evaluate whether identity cards alone "
             "can establish the planned space/action. Mark staged-frame/sheet references COMPOSITION/LAYOUT_GUIDE "
@@ -390,6 +392,8 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             description=(
                 "读取当前或指定历史版本的 GenerationPlan 和 GenerationUnit，"
                 "供 H3 路由 Agent 与后续执行 Worker 精确交接。"
+                "尚未编译时返回具体缺项；不自动创建计划。完整当前组准备可用"
+                " route.prepare_h3_group（enqueue=false），无需先手工创建计划。"
             ),
             effect=ToolEffect.READ,
             idempotent=True,
@@ -426,7 +430,10 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                 "Compile an H3 prompt from one canonical shot or an exact generation-plan "
                 "document/version/unit. Pass Agent-selected method_skill_ids and ordered "
                 "media_inputs from route.get_generation_unit_context; for a unit, send the result to route.plan_h3 as its explicit "
-                "prompt_override with the same media order. Does not submit video."
+                "prompt_override with the same media order. A single-shot response has no generation-unit candidate "
+                "and cannot supply authored prompt/media to plan_h3. For full current-group preparation use "
+                "prepare_h3_group with enqueue=false; for a subset hand off the exact result to its group owner. "
+                "Does not submit video."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,

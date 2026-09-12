@@ -23,9 +23,28 @@ from short_drama.service import ShortDramaService
 from short_drama.studio_trace import trace_context
 from short_drama.tools.contracts import ToolCallStatus
 from short_drama.video_inspection import selected_generation_reference_ids, semantic_reference_entries
-from tests.test_h3_generation_unit_language import _fixture
+from tests.test_h3_generation_unit_language import FakePromptCompiler, _fixture
 from tests.test_h3_context_ir import FakeIR, due
 from tests.test_short_drama_h3 import FakeH3Client
+
+
+def test_reading_an_uncompiled_plan_explains_preparation_without_creating_one(tmp_path: Path) -> None:
+    fake = FakePromptCompiler()
+    service = ShortDramaService(database_path=tmp_path / "data.sqlite3", workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: fake)
+    document = service.initialize_fixture().document
+    assert document.generation_plan_document_id is None
+    before = service.repository.get_project(document.project.id)
+    result = service.tool_registry.invoke("route.get_generation_plan", {"project_id": document.project.id})
+    assert result.status == ToolCallStatus.FAILED and result.error is not None
+    assert "No current GenerationPlan has been compiled" in result.error.message
+    assert "route.prepare_h3_group with enqueue=false" in result.error.message
+    assert "part of a group" in result.error.message
+    assert result.output is None and result.artifact_refs == []
+    assert service.repository.get_project(document.project.id) == before
+    assert service.repository.list_tasks(document.project.id) == []
+    assert service.repository.list_h3_route_plans(document.project.id) == []
+    assert fake.calls == []
 
 
 def test_prepare_and_restart_enqueue_keep_one_language_result_route_and_real_task(tmp_path: Path) -> None:

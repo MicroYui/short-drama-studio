@@ -8,6 +8,6 @@
 
 当前镜头已经明确选择的图片可以直接进入本组输入，不因历史DRAFT标签再安排一次批准。以当前可用候选、具体媒体和用途为依据；剪辑用途的图版不会混入视频模型图片列表。
 
-若工作单包含完整的视频准备，可以在当前单元编译成功后把原样的 `compiled_prompt` 与 `media_inputs` 直接交给 `route.plan_h3` 落盘，再处理下一单元。提示词编译和本地路线保存都不等于调用 H3；是否在两者之间交接由当前工作单的语义范围决定。跨工作单交接时使用持久化工件或精确 ToolAttemptRef，不能用简短完成摘要代替最终 Prompt。
+若工作单包含完整当前组的视频准备，可使用 `route.prepare_h3_group`、`enqueue=false` 完成输入、编译与路线保存；默认准备不创建视频任务。需要逐项控制时，在当前 GenerationUnit 编译成功后把原样的 `compiled_prompt`、`media_inputs` 和 `candidate_id` 交给 `route.plan_h3`。单镜编译不创建生成组候选，不能把该结果作为 authored prompt/media 写入单镜路线。工作单只覆盖现有组内部分镜头时，将精确结果交回组负责人，不擅自拆组或改走会丢失已编译内容的自动路线。提示词编译和本地路线保存都不等于调用 H3；是否在两者之间交接由当前工作单的语义范围决定。跨工作单交接时使用持久化工件或精确 ToolAttemptRef，不能用简短完成摘要代替最终 Prompt。
 
 编译失败后，在下一次调用的 `revision_instructions` 中传入具体修订意见。只写在 Tool reason 或工作单说明里，内部语言编译器不会收到。校验失败的 ToolAttempt 保留完整草稿，可经 `source_prompt` 交回编译器修订，不能当作已通过的 Prompt 执行。超长时压缩重复定义与解释，保留全部独有事实和官方字段标题；`summary`、`retention_analysis` 等是必要格式，不是应删除的包装。禁止截取不完整返回值冒充最终 Prompt。成功响应的 `candidate_id` 可直接用于该单元的路线 directive。

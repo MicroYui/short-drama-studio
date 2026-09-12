@@ -7688,6 +7688,16 @@ class ShortDramaService:
     ) -> GenerationPlanReadResponse:
         with self._lock:
             document = self._require_project_document(project_id)
+            if document.generation_plan_document_id is None:
+                raise ArtifactNotFoundError(
+                    "No current GenerationPlan has been compiled for this project. "
+                    "For preparation of a current whole shot/group, use "
+                    "route.prepare_h3_group with enqueue=false; it resolves the current group "
+                    "and never queues video in preparation-only mode. For explicit plan control, "
+                    "use route.compile_generation_plan with the current Storyboard and "
+                    "ProductionSpec references. If your work order covers only part of a group, "
+                    "return its compiled prompt to the group owner instead of expanding scope."
+                )
             production_document = self._managed_project_document(
                 document,
                 document.generation_plan_document_id,
@@ -10833,7 +10843,13 @@ class ShortDramaService:
             duration_seconds=duration,
             source_prompt=source_prompt or "",
             compiled_prompt=compiled_prompt,
-            validation_notes=validation_notes,
+            validation_notes=[*validation_notes,
+                "Single-shot prompt only: no generation-unit candidate was created. "
+                "route.plan_h3 authored prompt/media requires a generation-unit candidate. "
+                "For complete current-group preparation use route.prepare_h3_group with "
+                "enqueue=false; for a partial-group work order, hand this exact result "
+                "to the group owner without changing the group or creating video tasks.",
+            ],
         )
 
     def _previous_adopted_media_boundary(
