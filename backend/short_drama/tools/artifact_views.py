@@ -121,6 +121,19 @@ class StoryboardCompactReadResponse(DomainModel):
     output_slot: CompactOutputSlot | None = None
 
 
+class StoryboardShotDirectoryEntry(DomainModel):
+    shot_id: str
+    sequence: int
+    scene_id: str | None
+    duration_seconds: float
+
+
+class StoryboardGroupDirectoryEntry(DomainModel):
+    clip_group_id: str
+    shot_ids: list[str]
+    duration_seconds: float
+
+
 class StoryboardMutationSummary(DomainModel):
     """Content identity retained after a Storyboard write, without shot prose."""
 
@@ -135,6 +148,10 @@ class StoryboardMutationSummary(DomainModel):
     shots: list[str] = Field(default_factory=list[str])
     clip_groups: list[str] = Field(default_factory=list[str])
     script_line_ids: list[str] = Field(default_factory=list[str])
+    shot_directory: list[StoryboardShotDirectoryEntry] | None = Field(
+        default=None, description="Saved shot order and design durations; absent in older receipts. No performance or audio validation implied.")
+    clip_group_directory: list[StoryboardGroupDirectoryEntry] | None = Field(
+        default=None, description="Saved group membership in render order and design duration; not prepared or generated video.")
 
 
 class StoryboardMutationSummaryResponse(ProductionArtifactMutationSummaryResponse):
@@ -288,6 +305,14 @@ def storyboard_mutation_summary(
             shots=[item.id for item in storyboard.shots],
             clip_groups=[item.id for item in storyboard.clip_groups],
             script_line_ids=storyboard.script_line_ids,
+            shot_directory=[StoryboardShotDirectoryEntry(
+                shot_id=item.id, sequence=item.sequence, scene_id=item.scene_id,
+                duration_seconds=item.duration_seconds,
+            ) for item in storyboard.shots],
+            clip_group_directory=[StoryboardGroupDirectoryEntry(
+                clip_group_id=item.id, shot_ids=list(item.shot_ids),
+                duration_seconds=item.duration_seconds,
+            ) for item in storyboard.clip_groups],
         ),
         document=compact_document(result.document),
         version=compact_version(result.version),

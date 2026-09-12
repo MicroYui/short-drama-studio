@@ -74,7 +74,7 @@ from short_drama.agent_runtime.asset_plan_context import asset_work_read_is_stal
 from short_drama.agent_runtime.asset_version_context import asset_construction_state, selected_asset_version_ids
 from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
-    BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result,
+    BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result, project_leader_completion_actions,
 )
 from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
 from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
@@ -1652,6 +1652,10 @@ class LanguageProductionPlanner:
                     project_result=_specialist_read_observation_result,
                 )
                 payload["working_set"] = read_working_set
+                payload["context"] = project_leader_completion_actions(
+                    cast(dict[str, JsonValue], payload["context"]), read_working_set,
+                    store=self.context_compiler.store, run_id=context.run_id,
+                )
                 observed_artifact_refs = _artifact_refs_from_json(read_working_set.get("artifact_refs"))
                 run = self.context_compiler.store.get_run(context.run_id)
                 if run is not None:
@@ -4514,6 +4518,8 @@ def _compact_specialist_tool_result(
             "computed_duration_seconds": storyboard.get(
                 "computed_duration_seconds"
             ),
+            "shot_directory": storyboard.get("shot_directory"),
+            "clip_group_directory": storyboard.get("clip_group_directory"),
             "scene_count": len(scene_nodes) if isinstance(scene_nodes, list) else 0,
             "clip_group_count": (
                 len(clip_groups) if isinstance(clip_groups, list) else 0

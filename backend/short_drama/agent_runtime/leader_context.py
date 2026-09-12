@@ -166,6 +166,61 @@ def saved_tool_result_ref(project_id: str, run_id: str, snapshot_id: str) -> dic
     }
 
 
+def project_leader_completion_actions(
+    context: dict[str, JsonValue], working_set: Mapping[str, JsonValue], *,
+    store: AgentRuntimeStore, run_id: str,
+) -> dict[str, JsonValue]:
+    """Share identical completion fields only with their exact saved result.
+
+    This changes the outgoing view, never the ContextPack or historical result.
+    Legacy digests without result identity and scoped/different handoffs stay
+    intact. The durable pointer survives subsequent working-set budget offload.
+    """
+    actions = context.get("recent_actions")
+    handoffs = working_set.get("completion_handoffs")
+    if not isinstance(actions, list) or not isinstance(handoffs, list):
+        return context
+    projected: list[JsonValue] = []
+    for action in actions:
+        projected.append(action)
+        if not isinstance(action, dict) or action.get("status") != "SUCCEEDED":
+            continue
+        digest = action.get("agent_result")
+        if not isinstance(digest, dict) or digest.get("status") != "COMPLETED" or not digest.get("result_id"):
+            continue
+        matches = [row for row in handoffs if isinstance(row, dict)
+            and row.get("result_id") == digest["result_id"]
+            and row.get("work_order_id") == action.get("work_order_id")
+            and row.get("status") == "COMPLETED" and row.get("matched_artifact_ids") is None]
+        if len(matches) != 1:
+            continue
+        handoff = matches[0]
+        saved = handoff.get("saved_result")
+        if not isinstance(saved, dict) or not isinstance(saved.get("context_ref"), str) or saved.get("pointer") != "/result":
+            continue
+        snapshot_id = cast(str, saved["context_ref"])
+        snapshot = store.get_context_snapshot(snapshot_id, run_id)
+        source = None if snapshot is None else snapshot.get("result")
+        if (not isinstance(source, dict) or source.get("id") != digest["result_id"]
+                or source.get("work_order_id") != action.get("work_order_id")
+                or source.get("status") != "COMPLETED"):
+            continue
+        visible = handoff.get("result")
+        if not isinstance(visible, dict):
+            continue
+        if visible.get("context_ref") == snapshot_id and visible.get("pointer") == "/result":
+            visible = source
+        shared = [key for key in ("deliverable", "completion_receipts", "findings")
+            if digest.get(key) and digest[key] == visible.get(key) == source.get(key)]
+        if shared:
+            projected[-1] = {**action, "agent_result": {
+                **{key: value for key, value in digest.items() if key not in shared},
+                "shared_completion_fields": cast(JsonValue, shared),
+                "saved_result": {"context_ref": snapshot_id, "pointer": "/result"},
+            }}
+    return {**context, "recent_actions": projected}
+
+
 def persist_leader_tool_result(
     store: AgentRuntimeStore, action: ActionRecord, *,
     arguments: Mapping[str, JsonValue], result: dict[str, JsonValue],

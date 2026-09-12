@@ -1,0 +1,1841 @@
+{
+  "source": {
+    "leader_input": "20260912T065828830601-e5371efb-model.input.json",
+    "work_order_id": "work-order-5283251087e94f008f1231735172fe6d",
+    "note": "Actual first Leader action/result and finalize receipt, unchanged. Directories select only saved ID/order/scene/duration/membership fields from six original group writes."
+  },
+  "action": {
+    "id": "action-9d08b33049144a6aaf0ae82b396aa7cb",
+    "work_order_id": "work-order-5283251087e94f008f1231735172fe6d",
+    "kind": "DELEGATION",
+    "status": "SUCCEEDED",
+    "summary": "《这回你讲》第1场完整分镜已逐组保存并完成装配，当前集可见6个镜头组、12个镜头，总设计时长58秒，覆盖全部12句对白。保留了看方案后的回应、方案夹归还、让位及结尾“我记”的动作与停顿。未修改剧本或其他分工的资产说明，未绑定未经选用的图片，未生成视频。58秒仍是制作估算，不代表实际表演或声音已验收。",
+    "tool_result_ref": null,
+    "agent_result": {
+      "status": "COMPLETED",
+      "concise_summary": "《这回你讲》第1场完整分镜已逐组保存并完成装配，当前集可见6个镜头组、12个镜头，总设计时长58秒，覆盖全部12句对白。保留了看方案后的回应、方案夹归还、让位及结尾“我记”的动作与停顿。未修改剧本或其他分工的资产说明，未绑定未经选用的图片，未生成视频。58秒仍是制作估算，不代表实际表演或声音已验收。",
+      "deliverable": {
+        "result_location": "当前集分镜，第1场",
+        "storyboard_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "storyboard",
+          "artifact_id": "production-document-321b29c0b269",
+          "version": 1
+        },
+        "storyboard_version_id": "production-document-version-84d6097d7d31",
+        "scene_id": "scene-8f377e65cf6f",
+        "total_design_duration_seconds": 58,
+        "dialogue_coverage": {
+          "source_line_count": 12,
+          "covered_line_count": 12,
+          "remaining_line_count": 0
+        },
+        "clip_group_directory": [
+          "clip-qiantai-g01",
+          "clip-qiantai-g02",
+          "clip-qiantai-g03",
+          "clip-qiantai-g04",
+          "clip-qiantai-g05",
+          "clip-qiantai-g06"
+        ],
+        "shot_directory": [
+          {
+            "sequence": 1,
+            "shot_id": "shot-qiantai-01",
+            "duration_seconds": 4.5
+          },
+          {
+            "sequence": 2,
+            "shot_id": "shot-qiantai-02",
+            "duration_seconds": 4
+          },
+          {
+            "sequence": 3,
+            "shot_id": "shot-qiantai-03",
+            "duration_seconds": 5
+          },
+          {
+            "sequence": 4,
+            "shot_id": "shot-qiantai-04",
+            "duration_seconds": 4
+          },
+          {
+            "sequence": 5,
+            "shot_id": "shot-qiantai-05",
+            "duration_seconds": 5.5
+          },
+          {
+            "sequence": 6,
+            "shot_id": "shot-qiantai-06",
+            "duration_seconds": 2.5
+          },
+          {
+            "sequence": 7,
+            "shot_id": "shot-qiantai-07",
+            "duration_seconds": 6.5
+          },
+          {
+            "sequence": 8,
+            "shot_id": "shot-qiantai-08",
+            "duration_seconds": 4.5
+          },
+          {
+            "sequence": 9,
+            "shot_id": "shot-qiantai-09",
+            "duration_seconds": 5
+          },
+          {
+            "sequence": 10,
+            "shot_id": "shot-qiantai-10",
+            "duration_seconds": 6.5
+          },
+          {
+            "sequence": 11,
+            "shot_id": "shot-qiantai-11",
+            "duration_seconds": 6.5
+          },
+          {
+            "sequence": 12,
+            "shot_id": "shot-qiantai-12",
+            "duration_seconds": 3.5
+          }
+        ],
+        "reference_requirements": [
+          {
+            "purpose": "人物身份与服装",
+            "subjects": [
+              "周宁",
+              "郑川"
+            ],
+            "requirement": "沿用各自已交付的原创人物母版及脸部参考；身份图不自动作为剧情首帧，不为普通动作预制整套姿态图。"
+          },
+          {
+            "purpose": "空间与双人调度",
+            "subjects": [
+              "设计公司小会议室"
+            ],
+            "requirement": "依据已交付空景建立竖屏人物入景，明确桌头、相邻侧位和共享桌面。具体构图须支持坐下、递夹及让位；空景不能证明演员接触距离或未展示的反角。"
+          },
+          {
+            "purpose": "道具身份及关键状态",
+            "subjects": [
+              "深蓝色方案夹",
+              "浅灰色笔记本",
+              "黑色签字笔"
+            ],
+            "requirement": "方案夹需支持闭合、打开及对比页展示；笔记本在结尾前保持合上，最后由郑川打开并持笔准备记录。陈列母图不定义剧情桌面位置。"
+          },
+          {
+            "purpose": "可读的剧情证据",
+            "requirement": "对比页须让观众分辨隔断由入口附近移至侧边、入口变宽，不能以删除隔断替代再利用。归还方案夹应保留接触与松手的先后；结尾构图须呈现周宁在桌头打开方案、郑川在邻侧准备记录。仅针对实际缺口补必要构图或状态参考。"
+          }
+        ],
+        "scope_limits": [
+          "本工单完成分镜、镜头组及参考需求，不承担具体图片绑定和生成路线准备。",
+          "已生成的基础图片属于并行分工成果，本工单未将其存在等同于逐镜输入已就绪。",
+          "未创建、入队、提交或执行视频任务，也未进行后期声音、剪辑或导出。"
+        ]
+      },
+      "findings": [
+        "装配与保存结果显示第1场共有12个镜头、6个镜头组，12句来源对白全部覆盖，未覆盖句数为0。",
+        "镜头设计保留主讲权被接管、主动接受试问、具体解法、郑川看方案后的变化，以及归还方案和记录任务交换的因果。",
+        "58秒处于用户要求的45–60秒区间，但尚无实际对白音轨或动态表演可供测量。",
+        "并行人物和空间母版已有可用交付；具体双人入景、道具接触和逐镜构图仍需后续图片支持。"
+      ],
+      "completion_receipts": [
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "storyboard",
+            "artifact_id": "production-document-321b29c0b269",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "storyboard_draft",
+            "artifact_id": "production-document-645e2d0302ec",
+            "version": 7
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_document",
+            "artifact_id": "production-document-645e2d0302ec",
+            "version": 7
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-01",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-02",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-03",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-04",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-05",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-06",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-07",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-08",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-09",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-10",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-11",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-12",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g01",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g02",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g03",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g04",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g05",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "artifact_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g06",
+            "version": 1
+          },
+          "record_verified": true,
+          "current_state": {},
+          "files": []
+        },
+        {
+          "kind": "saved_result_read",
+          "read": {
+            "tool_name": "agent.read_context",
+            "project_id": "project-06116be431fa",
+            "run_id": "agent-run-1da35fafba184e80b3dd1990268e9d20",
+            "instruction": "For each context_ref/pointer, call this Tool with these project_id/run_id, snapshot_id=context_ref, pointer unchanged, offset=0 and limit=6000. Follow next_offset for further pages. Each locator addresses exact saved content, not necessarily current content; refresh changed content before editing. visible_at is a JSON pointer to the same body in this model input; use the snapshot if that body has been externalized."
+          }
+        },
+        {
+          "kind": "saved_tool_result",
+          "sequence": 9,
+          "tool_name": "shot.append_storyboard_group",
+          "status": "SUCCEEDED",
+          "observed_at": "2026-09-12T06:57:10.080762+00:00",
+          "artifact_refs": [
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "storyboard_draft",
+              "artifact_id": "production-document-645e2d0302ec",
+              "version": 7
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "production_document",
+              "artifact_id": "production-document-645e2d0302ec",
+              "version": 7
+            }
+          ],
+          "saved_result": {
+            "context_ref": "context-completion-tool-work-order-5283251087e94f008f1231735172fe6d-specialist-turn-6f787db580b54b378ae68b9d1727338a",
+            "pointer": ""
+          }
+        },
+        {
+          "kind": "saved_tool_result",
+          "sequence": 10,
+          "tool_name": "shot.finalize_storyboard",
+          "status": "SUCCEEDED",
+          "observed_at": "2026-09-12T06:57:19.445957+00:00",
+          "artifact_refs": [
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "storyboard",
+              "artifact_id": "production-document-321b29c0b269",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-01",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-02",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-03",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-04",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-05",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-06",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-07",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-08",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-09",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-10",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-11",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "shot",
+              "artifact_id": "shot-qiantai-12",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g01",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g02",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g03",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g04",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g05",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "clip_group",
+              "artifact_id": "clip-qiantai-g06",
+              "version": 1
+            }
+          ],
+          "saved_result": {
+            "context_ref": "context-completion-tool-work-order-5283251087e94f008f1231735172fe6d-specialist-turn-4f436cc114474c93b1afaefb4230795b",
+            "pointer": ""
+          }
+        }
+      ],
+      "evidence_ref_ids": []
+    },
+    "artifact_ref_ids": [
+      "artifact-9",
+      "artifact-10",
+      "artifact-11",
+      "artifact-12",
+      "artifact-13",
+      "artifact-14",
+      "artifact-15",
+      "artifact-16",
+      "artifact-17",
+      "artifact-18",
+      "artifact-19",
+      "artifact-20",
+      "artifact-21",
+      "artifact-22",
+      "artifact-23",
+      "artifact-24",
+      "artifact-25",
+      "artifact-26",
+      "artifact-27",
+      "artifact-28",
+      "artifact-29"
+    ]
+  },
+  "result": {
+    "id": "agent-result-2bb45468c4094c33921e83341b4ba15b",
+    "work_order_id": "work-order-5283251087e94f008f1231735172fe6d",
+    "status": "COMPLETED",
+    "concise_summary": "《这回你讲》第1场完整分镜已逐组保存并完成装配，当前集可见6个镜头组、12个镜头，总设计时长58秒，覆盖全部12句对白。保留了看方案后的回应、方案夹归还、让位及结尾“我记”的动作与停顿。未修改剧本或其他分工的资产说明，未绑定未经选用的图片，未生成视频。58秒仍是制作估算，不代表实际表演或声音已验收。",
+    "deliverable": {
+      "result_location": "当前集分镜，第1场",
+      "storyboard_ref": {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard",
+        "artifact_id": "production-document-321b29c0b269",
+        "version": 1
+      },
+      "storyboard_version_id": "production-document-version-84d6097d7d31",
+      "scene_id": "scene-8f377e65cf6f",
+      "total_design_duration_seconds": 58,
+      "dialogue_coverage": {
+        "source_line_count": 12,
+        "covered_line_count": 12,
+        "remaining_line_count": 0
+      },
+      "clip_group_directory": [
+        "clip-qiantai-g01",
+        "clip-qiantai-g02",
+        "clip-qiantai-g03",
+        "clip-qiantai-g04",
+        "clip-qiantai-g05",
+        "clip-qiantai-g06"
+      ],
+      "shot_directory": [
+        {
+          "sequence": 1,
+          "shot_id": "shot-qiantai-01",
+          "duration_seconds": 4.5
+        },
+        {
+          "sequence": 2,
+          "shot_id": "shot-qiantai-02",
+          "duration_seconds": 4
+        },
+        {
+          "sequence": 3,
+          "shot_id": "shot-qiantai-03",
+          "duration_seconds": 5
+        },
+        {
+          "sequence": 4,
+          "shot_id": "shot-qiantai-04",
+          "duration_seconds": 4
+        },
+        {
+          "sequence": 5,
+          "shot_id": "shot-qiantai-05",
+          "duration_seconds": 5.5
+        },
+        {
+          "sequence": 6,
+          "shot_id": "shot-qiantai-06",
+          "duration_seconds": 2.5
+        },
+        {
+          "sequence": 7,
+          "shot_id": "shot-qiantai-07",
+          "duration_seconds": 6.5
+        },
+        {
+          "sequence": 8,
+          "shot_id": "shot-qiantai-08",
+          "duration_seconds": 4.5
+        },
+        {
+          "sequence": 9,
+          "shot_id": "shot-qiantai-09",
+          "duration_seconds": 5
+        },
+        {
+          "sequence": 10,
+          "shot_id": "shot-qiantai-10",
+          "duration_seconds": 6.5
+        },
+        {
+          "sequence": 11,
+          "shot_id": "shot-qiantai-11",
+          "duration_seconds": 6.5
+        },
+        {
+          "sequence": 12,
+          "shot_id": "shot-qiantai-12",
+          "duration_seconds": 3.5
+        }
+      ],
+      "reference_requirements": [
+        {
+          "purpose": "人物身份与服装",
+          "subjects": [
+            "周宁",
+            "郑川"
+          ],
+          "requirement": "沿用各自已交付的原创人物母版及脸部参考；身份图不自动作为剧情首帧，不为普通动作预制整套姿态图。"
+        },
+        {
+          "purpose": "空间与双人调度",
+          "subjects": [
+            "设计公司小会议室"
+          ],
+          "requirement": "依据已交付空景建立竖屏人物入景，明确桌头、相邻侧位和共享桌面。具体构图须支持坐下、递夹及让位；空景不能证明演员接触距离或未展示的反角。"
+        },
+        {
+          "purpose": "道具身份及关键状态",
+          "subjects": [
+            "深蓝色方案夹",
+            "浅灰色笔记本",
+            "黑色签字笔"
+          ],
+          "requirement": "方案夹需支持闭合、打开及对比页展示；笔记本在结尾前保持合上，最后由郑川打开并持笔准备记录。陈列母图不定义剧情桌面位置。"
+        },
+        {
+          "purpose": "可读的剧情证据",
+          "requirement": "对比页须让观众分辨隔断由入口附近移至侧边、入口变宽，不能以删除隔断替代再利用。归还方案夹应保留接触与松手的先后；结尾构图须呈现周宁在桌头打开方案、郑川在邻侧准备记录。仅针对实际缺口补必要构图或状态参考。"
+        }
+      ],
+      "scope_limits": [
+        "本工单完成分镜、镜头组及参考需求，不承担具体图片绑定和生成路线准备。",
+        "已生成的基础图片属于并行分工成果，本工单未将其存在等同于逐镜输入已就绪。",
+        "未创建、入队、提交或执行视频任务，也未进行后期声音、剪辑或导出。"
+      ]
+    },
+    "created_artifacts": [
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard",
+        "artifact_id": "production-document-321b29c0b269",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 7
+      }
+    ],
+    "completion_receipts": [
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "storyboard",
+          "artifact_id": "production-document-321b29c0b269",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "storyboard_draft",
+          "artifact_id": "production-document-645e2d0302ec",
+          "version": 7
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "production_document",
+          "artifact_id": "production-document-645e2d0302ec",
+          "version": 7
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-01",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-02",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-03",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-04",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-05",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-06",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-07",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-08",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-09",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-10",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-11",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-12",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g01",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g02",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g03",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g04",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g05",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g06",
+          "version": 1
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "kind": "saved_result_read",
+        "read": {
+          "tool_name": "agent.read_context",
+          "project_id": "project-06116be431fa",
+          "run_id": "agent-run-1da35fafba184e80b3dd1990268e9d20",
+          "instruction": "For each context_ref/pointer, call this Tool with these project_id/run_id, snapshot_id=context_ref, pointer unchanged, offset=0 and limit=6000. Follow next_offset for further pages. Each locator addresses exact saved content, not necessarily current content; refresh changed content before editing. visible_at is a JSON pointer to the same body in this model input; use the snapshot if that body has been externalized."
+        }
+      },
+      {
+        "kind": "saved_tool_result",
+        "sequence": 9,
+        "tool_name": "shot.append_storyboard_group",
+        "status": "SUCCEEDED",
+        "observed_at": "2026-09-12T06:57:10.080762+00:00",
+        "artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "storyboard_draft",
+            "artifact_id": "production-document-645e2d0302ec",
+            "version": 7
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_document",
+            "artifact_id": "production-document-645e2d0302ec",
+            "version": 7
+          }
+        ],
+        "saved_result": {
+          "context_ref": "context-completion-tool-work-order-5283251087e94f008f1231735172fe6d-specialist-turn-6f787db580b54b378ae68b9d1727338a",
+          "pointer": ""
+        }
+      },
+      {
+        "kind": "saved_tool_result",
+        "sequence": 10,
+        "tool_name": "shot.finalize_storyboard",
+        "status": "SUCCEEDED",
+        "observed_at": "2026-09-12T06:57:19.445957+00:00",
+        "artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "storyboard",
+            "artifact_id": "production-document-321b29c0b269",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-01",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-02",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-03",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-04",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-05",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-06",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-07",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-08",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-09",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-10",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-11",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "shot",
+            "artifact_id": "shot-qiantai-12",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g01",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g02",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g03",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g04",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g05",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-qiantai-g06",
+            "version": 1
+          }
+        ],
+        "saved_result": {
+          "context_ref": "context-completion-tool-work-order-5283251087e94f008f1231735172fe6d-specialist-turn-4f436cc114474c93b1afaefb4230795b",
+          "pointer": ""
+        }
+      }
+    ],
+    "updated_artifacts": [],
+    "findings": [
+      "装配与保存结果显示第1场共有12个镜头、6个镜头组，12句来源对白全部覆盖，未覆盖句数为0。",
+      "镜头设计保留主讲权被接管、主动接受试问、具体解法、郑川看方案后的变化，以及归还方案和记录任务交换的因果。",
+      "58秒处于用户要求的45–60秒区间，但尚无实际对白音轨或动态表演可供测量。",
+      "并行人物和空间母版已有可用交付；具体双人入景、道具接触和逐镜构图仍需后续图片支持。"
+    ],
+    "decisions": [
+      "保留当前剧本全文及原对白，不因时长估算改写故事。",
+      "以主讲机会与记录任务交换结束，不增加客户签单、订单到账或第三人宣布结果。",
+      "使用现有角色名称和资产主体表达参考需求，不将资产ID填入Bible角色身份字段。",
+      "动作状态属于设计意图，后续可依实际构图局部调整非关键手势和覆盖，但不得删掉关键交接或改变物件归属。"
+    ],
+    "assumptions": [
+      "人物外貌、服装、家具和物件细部以后续明确选用的实际母版为准。",
+      "纸面设计时长可以通过自然对白与相关简单动作并行实现；这一判断仍需日后授权的视频阶段验证。"
+    ],
+    "unresolved_questions": [],
+    "evidence_refs": [
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "script_version",
+        "artifact_id": "project-06116be431fa-script-v3",
+        "version": 3
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_spec",
+        "artifact_id": "production-document-21acdc8b80a1",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document_version",
+        "artifact_id": "production-document-version-84d6097d7d31",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-21acdc8b80a1",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document_version",
+        "artifact_id": "production-document-version-d9c584bebfed",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 2
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 2
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 3
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 3
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 4
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 4
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 5
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 5
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 6
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 6
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard_draft",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 7
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "production_document",
+        "artifact_id": "production-document-645e2d0302ec",
+        "version": 7
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard",
+        "artifact_id": "production-document-321b29c0b269",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-01",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-02",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-03",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-04",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-05",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-06",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-07",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-08",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-09",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-10",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-11",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-12",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g01",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g02",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g03",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g04",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g05",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g06",
+        "version": 1
+      }
+    ],
+    "recommended_next_actions": [
+      "负责人继续逐镜构图与媒体绑定，复用已交付人物、场景和道具；重点落实对比页、方案夹归还及结尾两人任务交换的可读关系。",
+      "依据具体选用图片检查景别、身份、空间、道具状态和联合输入兼容性，仅局部修复实际问题。",
+      "图片及绑定就绪后，为全部镜头组准备2K、9:16输入和已保存提示词路线；严格保持不创建或执行任何视频任务的停止边界。",
+      "最终交付区分静态图片已观察的事实与仍待视频验证的表演时长、接触连续性、让位、口型及对白声音。"
+    ],
+    "next_owner": null,
+    "stale_handoff": false,
+    "stale_reason": null,
+    "created_at": "2026-09-12T06:58:28.129014Z"
+  },
+  "finalize_result": {
+    "tool_id": "shot.finalize_storyboard",
+    "status": "SUCCEEDED",
+    "output": {
+      "document": {
+        "id": "production-document-321b29c0b269",
+        "project_id": "project-06116be431fa",
+        "kind": "storyboard",
+        "title": "Storyboard",
+        "current_version_id": "production-document-version-84d6097d7d31",
+        "current_version": 1
+      },
+      "version": {
+        "id": "production-document-version-84d6097d7d31",
+        "version": 1,
+        "parent_version_id": null,
+        "source_artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "script_version",
+            "artifact_id": "project-06116be431fa-script-v3",
+            "version": 3
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "bible_version",
+            "artifact_id": "project-06116be431fa-bible-v1",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-21acdc8b80a1",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_document_version",
+            "artifact_id": "production-document-version-fed866ac5d79",
+            "version": 7
+          }
+        ],
+        "origin": "AGENT",
+        "created_at": "2026-09-12T06:57:19.376+00:00"
+      },
+      "output_slot": {
+        "id": "storyboard.current",
+        "revision": 1,
+        "current_artifact_ref": {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "storyboard",
+          "artifact_id": "production-document-321b29c0b269",
+          "version": 1
+        },
+        "invalidation_reason": null,
+        "producer_agent_run_id": null,
+        "producer_work_order_id": null,
+        "updated_at": "2026-09-12T06:57:19.376+00:00"
+      },
+      "storyboard": {
+        "project_id": "project-06116be431fa",
+        "title": "这回你讲｜第1场分镜",
+        "script_version_id": "project-06116be431fa-script-v3",
+        "bible_version_id": "project-06116be431fa-bible-v1",
+        "production_spec_document_id": "production-document-21acdc8b80a1",
+        "production_spec_version_id": "production-document-version-d9c584bebfed",
+        "computed_duration_seconds": 58.0,
+        "scene_nodes": [
+          "sb-scene-qiantai-01"
+        ],
+        "shots": [
+          "shot-qiantai-01",
+          "shot-qiantai-02",
+          "shot-qiantai-03",
+          "shot-qiantai-04",
+          "shot-qiantai-05",
+          "shot-qiantai-06",
+          "shot-qiantai-07",
+          "shot-qiantai-08",
+          "shot-qiantai-09",
+          "shot-qiantai-10",
+          "shot-qiantai-11",
+          "shot-qiantai-12"
+        ],
+        "clip_groups": [
+          "clip-qiantai-g01",
+          "clip-qiantai-g02",
+          "clip-qiantai-g03",
+          "clip-qiantai-g04",
+          "clip-qiantai-g05",
+          "clip-qiantai-g06"
+        ],
+        "script_line_ids": [
+          "line-qiantai-01",
+          "line-qiantai-02",
+          "line-qiantai-03",
+          "line-qiantai-04",
+          "line-qiantai-05",
+          "line-qiantai-06",
+          "line-qiantai-07",
+          "line-qiantai-08",
+          "line-qiantai-09",
+          "line-qiantai-10",
+          "line-qiantai-11",
+          "line-qiantai-12"
+        ]
+      },
+      "write_context": null
+    },
+    "artifact_refs": [
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "storyboard",
+        "artifact_id": "production-document-321b29c0b269",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-01",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-02",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-03",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-04",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-05",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-06",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-07",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-08",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-09",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-10",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-11",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qiantai-12",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g01",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g02",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g03",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g04",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g05",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "clip_group",
+        "artifact_id": "clip-qiantai-g06",
+        "version": 1
+      }
+    ],
+    "warnings": [],
+    "error": null,
+    "receipt": {
+      "operation_completed": true,
+      "artifact_refs": [
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "storyboard",
+          "artifact_id": "production-document-321b29c0b269",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-01",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-02",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-03",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-04",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-05",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-06",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-07",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-08",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-09",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-10",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-11",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "shot",
+          "artifact_id": "shot-qiantai-12",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g01",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g02",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g03",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g04",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g05",
+          "version": 1
+        },
+        {
+          "project_id": "project-06116be431fa",
+          "artifact_type": "clip_group",
+          "artifact_id": "clip-qiantai-g06",
+          "version": 1
+        }
+      ],
+      "current_state": {
+        "document.id": "production-document-321b29c0b269",
+        "document.project_id": "project-06116be431fa",
+        "document.current_version_id": "production-document-version-84d6097d7d31",
+        "document.current_version": 1,
+        "version.id": "production-document-version-84d6097d7d31",
+        "version.version": 1,
+        "output_slot.id": "storyboard.current",
+        "output_slot.revision": 1
+      },
+      "changed_ids": {}
+    }
+  },
+  "saved_shot_directory": [
+    {
+      "shot_id": "shot-qiantai-01",
+      "sequence": 1,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 4.5
+    },
+    {
+      "shot_id": "shot-qiantai-02",
+      "sequence": 2,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 4
+    },
+    {
+      "shot_id": "shot-qiantai-03",
+      "sequence": 3,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 5
+    },
+    {
+      "shot_id": "shot-qiantai-04",
+      "sequence": 4,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 4
+    },
+    {
+      "shot_id": "shot-qiantai-05",
+      "sequence": 5,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 5.5
+    },
+    {
+      "shot_id": "shot-qiantai-06",
+      "sequence": 6,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 2.5
+    },
+    {
+      "shot_id": "shot-qiantai-07",
+      "sequence": 7,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 6.5
+    },
+    {
+      "shot_id": "shot-qiantai-08",
+      "sequence": 8,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 4.5
+    },
+    {
+      "shot_id": "shot-qiantai-09",
+      "sequence": 9,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 5
+    },
+    {
+      "shot_id": "shot-qiantai-10",
+      "sequence": 10,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 6.5
+    },
+    {
+      "shot_id": "shot-qiantai-11",
+      "sequence": 11,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 6.5
+    },
+    {
+      "shot_id": "shot-qiantai-12",
+      "sequence": 12,
+      "scene_id": "scene-8f377e65cf6f",
+      "duration_seconds": 3.5
+    }
+  ],
+  "saved_group_directory": [
+    {
+      "clip_group_id": "clip-qiantai-g01",
+      "shot_ids": [
+        "shot-qiantai-01",
+        "shot-qiantai-02"
+      ],
+      "duration_seconds": 8.5
+    },
+    {
+      "clip_group_id": "clip-qiantai-g02",
+      "shot_ids": [
+        "shot-qiantai-03",
+        "shot-qiantai-04"
+      ],
+      "duration_seconds": 9
+    },
+    {
+      "clip_group_id": "clip-qiantai-g03",
+      "shot_ids": [
+        "shot-qiantai-05",
+        "shot-qiantai-06"
+      ],
+      "duration_seconds": 8
+    },
+    {
+      "clip_group_id": "clip-qiantai-g04",
+      "shot_ids": [
+        "shot-qiantai-07",
+        "shot-qiantai-08"
+      ],
+      "duration_seconds": 11
+    },
+    {
+      "clip_group_id": "clip-qiantai-g05",
+      "shot_ids": [
+        "shot-qiantai-09",
+        "shot-qiantai-10"
+      ],
+      "duration_seconds": 11.5
+    },
+    {
+      "clip_group_id": "clip-qiantai-g06",
+      "shot_ids": [
+        "shot-qiantai-11",
+        "shot-qiantai-12"
+      ],
+      "duration_seconds": 10
+    }
+  ]
+}

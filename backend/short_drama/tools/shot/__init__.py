@@ -656,9 +656,9 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
     registry.register(
         ToolSpec(
             id="shot.finalize_storyboard",
-            version=2,
+            version=3,
             category=ToolCategory.SHOT,
-            description='把当前镜头组装配为完整分镜，检查实际镜头、对白覆盖和引用一致性，不要求时长预算、账本、总纲或检查通过。不会生成媒体。成功返回分镜身份和结构摘要，视频由后续实际生成工具创建。',
+            description='把当前镜头组装配为完整分镜，检查实际镜头、对白覆盖和引用一致性，不要求时长预算、账本、总纲或检查通过。不会生成媒体。成功返回分镜身份、实际逐镜设计时长与组成员目录；不含分镜全文，不代表动态或声音验收。视频由后续实际生成工具创建。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftFinalizeInput,

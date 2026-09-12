@@ -556,6 +556,7 @@ def _agent_result_digest(result: AgentResult | None) -> AgentResultDigest | None
     if result is None:
         return None
     return AgentResultDigest(
+        result_id=result.id,
         status=result.status,
         concise_summary=result.concise_summary,
         deliverable=dict(result.deliverable),

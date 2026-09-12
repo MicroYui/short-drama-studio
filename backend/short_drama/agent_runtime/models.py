@@ -748,6 +748,7 @@ class AgentResultDigest(RuntimeModel):
     plan, without replaying the Worker's complete conversational context.
     """
 
+    result_id: str | None = None
     status: AgentResultStatus
     concise_summary: str = Field(min_length=1)
     deliverable: dict[str, JsonValue] = Field(
