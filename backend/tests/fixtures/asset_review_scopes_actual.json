@@ -1,0 +1,1431 @@
+{
+  "project_id": "project-5b8286dc63e6",
+  "work_order_id": "work-order-cde9c3be49f54ba7b2d9baf262f40952",
+  "run_id": "agent-run-11e17815d7904736820b0821054adb3a",
+  "turns": [
+    {
+      "id": "specialist-turn-cc643ad8843d486c8f7a524f7c0c3ec7",
+      "sequence": 52,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "version_id": "asset-version-6c3de1f63617",
+        "request": {
+          "shot_id": "shot-yqq-11",
+          "canonical_reference_version_ids": [
+            "asset-version-d42fba8ad6bb"
+          ],
+          "review_focus": "本次是为已确认缺陷补充可执行编辑几何，不重复验收身份、两脸同框或四手归属。已有检查确认赵右手独持、许双手离笔；持笔端向将使用已保存的手笔联合选区另修。本次请对照实际南侧空景母图，只观察候选北隔断：标出能恢复上磨砂玻璃、下浅灰实体及中间横框的背景编辑区域，包含实际错误旧框需恢复的位置，排除两人的脸、头发、躯干、手臂及桌面。请基于实际可見像素给出edit_guide_suggestion的背景多边形、横框目标位置及遮挡关系；不能从世界方位猜坐标。如果无法可靠避开人物或局部选区不足，明确说明，勿提供臆测小mask。两纸留白是待准确摄影纸面合成的中间状态，本轮不检查签名字形、不视为最终完成。"
+        }
+      },
+      "reason": "第10镜新构图及引用已保存。继续第11镜，只补充北侧隔断修复的实际选区，沿用已成立的人物身份、手别和独持关系。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.0,
+          "issues": [
+            {
+              "code": "SPATIAL_PARTITION_STRUCTURE_MISMATCH",
+              "severity": "major",
+              "message": "候选北隔断呈三格通高磨砂面，两条粗内竖框一直延伸至底框；南侧空景母图则清楚显示上磨砂玻璃、中间横框、下浅灰实体板，下段分格为细板缝。候选两人之间的下段充分可见，该差异不能由人物遮挡解释。",
+              "repair_layer": "ASSET_LOCAL_EDIT",
+              "category": "SPATIAL_CONTINUITY"
+            }
+          ],
+          "summary": "本轮仅补充北隔断的背景编辑几何，不重复验收人物身份、双脸构图和四手归属。可见背景足以提供避开人物的连通选区：覆盖拟新增横框的位置，以及两条错误粗竖框在下半段的可见部分和底部接点；上方已有磨砂玻璃可保留。横框落点依据母图可见下实体板的高宽比例，结合候选同一隔断的竖框与底框定位，不照搬参考图的归一化高度。人物遮住的框线和板面不可观察，不应补画到人物前方。建议尚未执行，当前仍不建议直接采用；既有手笔修复事项不因此消除。两纸留白符合本张中间底图用途，本轮不检查签名或给纸面合成建议。",
+          "review_focus": "本次是为已确认缺陷补充可执行编辑几何，不重复验收身份、两脸同框或四手归属。已有检查确认赵右手独持、许双手离笔；持笔端向将使用已保存的手笔联合选区另修。本次请对照实际南侧空景母图，只观察候选北隔断：标出能恢复上磨砂玻璃、下浅灰实体及中间横框的背景编辑区域，包含实际错误旧框需恢复的位置，排除两人的脸、头发、躯干、手臂及桌面。请基于实际可見像素给出edit_guide_suggestion的背景多边形、横框目标位置及遮挡关系；不能从世界方位猜坐标。如果无法可靠避开人物或局部选区不足，明确说明，勿提供臆测小mask。两纸留白是待准确摄影纸面合成的中间状态，本轮不检查签名字形、不视为最终完成。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": {
+            "regions": [
+              {
+                "polygon": [
+                  {
+                    "x": 0.306,
+                    "y": 0.298
+                  },
+                  {
+                    "x": 0.748,
+                    "y": 0.298
+                  },
+                  {
+                    "x": 0.746,
+                    "y": 0.351
+                  },
+                  {
+                    "x": 0.733,
+                    "y": 0.361
+                  },
+                  {
+                    "x": 0.72,
+                    "y": 0.368
+                  },
+                  {
+                    "x": 0.706,
+                    "y": 0.385
+                  },
+                  {
+                    "x": 0.689,
+                    "y": 0.416
+                  },
+                  {
+                    "x": 0.674,
+                    "y": 0.45
+                  },
+                  {
+                    "x": 0.668,
+                    "y": 0.463
+                  },
+                  {
+                    "x": 0.395,
+                    "y": 0.463
+                  },
+                  {
+                    "x": 0.387,
+                    "y": 0.45
+                  },
+                  {
+                    "x": 0.377,
+                    "y": 0.438
+                  },
+                  {
+                    "x": 0.366,
+                    "y": 0.426
+                  },
+                  {
+                    "x": 0.354,
+                    "y": 0.407
+                  },
+                  {
+                    "x": 0.343,
+                    "y": 0.391
+                  },
+                  {
+                    "x": 0.328,
+                    "y": 0.372
+                  },
+                  {
+                    "x": 0.291,
+                    "y": 0.353
+                  },
+                  {
+                    "x": 0.294,
+                    "y": 0.342
+                  },
+                  {
+                    "x": 0.299,
+                    "y": 0.328
+                  },
+                  {
+                    "x": 0.305,
+                    "y": 0.312
+                  }
+                ],
+                "label": "恢复北隔断中横框与下部浅灰实体板，清除横框以下可见的旧粗竖框并重接底框"
+              }
+            ],
+            "arrows": [
+              {
+                "start": {
+                  "x": 0.307,
+                  "y": 0.323
+                },
+                "end": {
+                  "x": 0.744,
+                  "y": 0.324
+                },
+                "label": "新增中横框可见主段的中心线位置；箭头仅为编辑指示，不画入成图"
+              }
+            ],
+            "descriptor": "坐标均针对完整Image 1。只编辑多边形内的可见北隔断，不改变机位、人物、门窗或桌面。母图隔断上沿出画，不能用两图上沿对齐推算；此处以母图可见下实体板的高宽比例及候选底框、三格分界定位，建议中横框中心线约从(0.307,0.323)延至(0.744,0.324)，厚度约为画高的0.005—0.006，颜色和截面承接现有深灰框。箭头标示主段，横框应在可见背景内接至现有外框或人物遮挡边。横框以上保留磨砂玻璃；以下恢复不透光浅灰哑光实体板，保留自然东侧光照渐变，不再表现通高透光玻璃。两条内粗竖框位于约x=0.36及x=0.59，其横框以下的可见段须完整清除，改为与上部分格对齐的细板缝；选区下缘包含其与底框的交点，重接原落地底框，不遗留粗框短桩或黑色残片。左右边界随可见人物轮廓收窄，两人的脸、头发、躯干和手臂均在编辑区外；下缘止于隔断底框附近，远离手笔与桌面。人物及其轮廓保持原像素，边缘羽化不得向人物扩张；遮挡后的横框和板缝不得画到人物前方。修后需检查中横框与上部竖框连接、下板旧框残留、底框接点及人物边缘接缝。",
+            "source_asset_version_id": "asset-version-6c3de1f63617"
+          },
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-3a8b4ea6267b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-6a56e078129b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d42fba8ad6bb"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-1156f46e26af"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d99209b73470"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-f4936a914dc3"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-yqq-11",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6c3de1f63617",
+            "version": 33
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset",
+              "artifact_id": "asset-4024e0462bfc",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-yqq-11",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6c3de1f63617",
+              "version": 33
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-3a8b4ea6267b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6a56e078129b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d42fba8ad6bb",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1156f46e26af",
+              "version": 6
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d99209b73470",
+              "version": 3
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f4936a914dc3",
+              "version": 3
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T01:03:39.975221Z",
+      "updated_at": "2026-09-12T01:08:22.820917Z"
+    },
+    {
+      "id": "specialist-turn-c5afd160ae564b2f88ea743c90b0969c",
+      "sequence": 53,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "version_id": "asset-version-6c3de1f63617",
+        "request": {
+          "shot_id": "shot-yqq-11",
+          "canonical_reference_version_ids": [
+            "asset-version-f4936a914dc3"
+          ],
+          "review_focus": "本轮只为当前第11镜中间底图的笔端向修正提供实际几何，不重复验收人物身份或北隔断。已知赵衡自身右手独持、许岚双手离笔成立；目标是笔尾朝画右许岚、露尖朝画左赵衡且稍向下，赵右手捏杆中段偏笔尖处，许右手尚未接触。本工作集未保留此前手笔建议的完整坐标，请根据真实候选给出edit_guide_suggestion：覆盖笔的原位与目标位、需要调整的手指及连接关节、必要掌面和背景恢复区，保持无关左手、许岚双手和脸不变。不要只圈指尖而锁住需调整的指根；若不能可靠限定请说明。箭头只标真实笔两端目标关系，勿让帽套尾。背景隔断已有独立实见选区，本轮不再提供；两纸留白供后续准确摄影内容合成，不当作最终单签状态。"
+        }
+      },
+      "reason": "第10镜新图与引用已完成。第11镜保留已确认的双人身份和独持关系，补取当前手笔区域的可执行修正坐标，再与已保存的隔断选区合并编辑。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.5,
+          "issues": [
+            {
+              "code": "PROP_ORIENTATION_MISMATCH",
+              "severity": "major",
+              "message": "赵衡右手所持黑笔的画右外露端呈收尖轮廓，指向许岚；要求该方向为圆裸尾和可抓握的后半段，露尖应朝画左赵衡并稍向下。当前端向相反，需连同握笔手指调整，不能仅把右端磨圆而不恢复左侧露尖。",
+              "repair_layer": "LOCAL_IMAGE_EDIT",
+              "category": "PROP_CONTINUITY"
+            }
+          ],
+          "summary": "本轮仅检查笔端向及局部修正几何。实见赵衡右手独持笔，许岚双手与笔之间有间隔，独立帽仍在桌面右下方；这些关系应保留。当前画右端为收尖形，原笔尾被握手遮挡，不能为其编造可见位置。下方提供覆盖现有手笔、必要掌指连接、目标位置及背景恢复空间的选区，不另提供人物或北隔断选区。两纸留白符合中间底图意图，不据此认定最终单签纸面已完成。建议尚未执行；修后仍须检查左右端向、露尖与圆尾可见性、手指连接、唯一持有关系及旧笔残影。",
+          "review_focus": "本轮只为当前第11镜中间底图的笔端向修正提供实际几何，不重复验收人物身份或北隔断。已知赵衡自身右手独持、许岚双手离笔成立；目标是笔尾朝画右许岚、露尖朝画左赵衡且稍向下，赵右手捏杆中段偏笔尖处，许右手尚未接触。本工作集未保留此前手笔建议的完整坐标，请根据真实候选给出edit_guide_suggestion：覆盖笔的原位与目标位、需要调整的手指及连接关节、必要掌面和背景恢复区，保持无关左手、许岚双手和脸不变。不要只圈指尖而锁住需调整的指根；若不能可靠限定请说明。箭头只标真实笔两端目标关系，勿让帽套尾。背景隔断已有独立实见选区，本轮不再提供；两纸留白供后续准确摄影内容合成，不当作最终单签状态。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": {
+            "regions": [
+              {
+                "polygon": [
+                  {
+                    "x": 0.288,
+                    "y": 0.481
+                  },
+                  {
+                    "x": 0.329,
+                    "y": 0.476
+                  },
+                  {
+                    "x": 0.365,
+                    "y": 0.469
+                  },
+                  {
+                    "x": 0.433,
+                    "y": 0.473
+                  },
+                  {
+                    "x": 0.463,
+                    "y": 0.481
+                  },
+                  {
+                    "x": 0.573,
+                    "y": 0.48
+                  },
+                  {
+                    "x": 0.58,
+                    "y": 0.506
+                  },
+                  {
+                    "x": 0.496,
+                    "y": 0.527
+                  },
+                  {
+                    "x": 0.431,
+                    "y": 0.53
+                  },
+                  {
+                    "x": 0.385,
+                    "y": 0.528
+                  },
+                  {
+                    "x": 0.373,
+                    "y": 0.525
+                  },
+                  {
+                    "x": 0.349,
+                    "y": 0.523
+                  },
+                  {
+                    "x": 0.326,
+                    "y": 0.52
+                  },
+                  {
+                    "x": 0.305,
+                    "y": 0.516
+                  },
+                  {
+                    "x": 0.288,
+                    "y": 0.515
+                  }
+                ],
+                "label": "右手重握并调转裸笔端向：包含需动手指、指根及相邻掌面、旧笔和目标区；下缘避开赵衡左手"
+              }
+            ],
+            "arrows": [
+              {
+                "start": {
+                  "x": 0.538,
+                  "y": 0.497
+                },
+                "end": {
+                  "x": 0.416,
+                  "y": 0.513
+                },
+                "label": "当前朝右的收尖端改到左下露尖位置；箭头终点是笔尖，不是笔尾"
+              }
+            ],
+            "descriptor": "坐标基于Image 1完整1440×2560候选。只修赵衡持笔右手及同一支裸笔，不改变递笔前的唯一持有状态。选区覆盖现有笔杆、手指完整活动范围、指根与掌指关节、必要掌面和少量腕袖衔接，以及新旧轮廓周围的恢复空间；不是沿指尖或指根切出的窄圈。\n建议新笔轴由左下露尖约(0.416,0.513)通向右上圆裸尾约(0.556,0.492)，保持近横向、尖稍向下。捏持点约(0.462,0.506)，位于笔杆中段偏笔尖处；右侧后半段及圆裸尾完整露出，仍与许岚右手隔开。原笔尾不可见，因此不画虚构的尾端起点箭头，唯一箭头只对应实见收尖端的调整。\n允许拇指、食指及承托手指连同指根和相邻掌面协同重握，使左下笔尖露在手指轮廓外，不能穿掌、被旧握姿吞没或形成双尖。腕位不整体平移，保留自然腕袖连接；下方赵衡左手、许岚双手、两人脸、纸张及桌面独立帽均保持不变，不能把帽套到笔尾。清除旧笔轮廓与旧指位残片，恢复相应背景、遮挡边缘和手指接触阴影。箭头与坐标仅为编辑指示，不进入成图。",
+            "source_asset_version_id": "asset-version-6c3de1f63617"
+          },
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-3a8b4ea6267b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-6a56e078129b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d42fba8ad6bb"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-1156f46e26af"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d99209b73470"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-f4936a914dc3"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-yqq-11",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6c3de1f63617",
+            "version": 33
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset",
+              "artifact_id": "asset-4024e0462bfc",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-yqq-11",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6c3de1f63617",
+              "version": 33
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-3a8b4ea6267b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6a56e078129b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d42fba8ad6bb",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1156f46e26af",
+              "version": 6
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d99209b73470",
+              "version": 3
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f4936a914dc3",
+              "version": 3
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T01:09:11.553951Z",
+      "updated_at": "2026-09-12T01:12:14.568066Z"
+    },
+    {
+      "id": "specialist-turn-940d9f635722467f9da5ac873fa96cb2",
+      "sequence": 54,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "version_id": "asset-version-6c3de1f63617",
+        "request": {
+          "shot_id": "shot-yqq-11",
+          "canonical_reference_version_ids": [
+            "asset-version-d42fba8ad6bb"
+          ],
+          "review_focus": "本轮仅补取北侧隔断修正的实际选区。当前为第11镜两纸留白中间底图；双人身份、赵衡自身右手独持、许岚双手未接触已经检查，不重复验收。手笔端向另有已保留的完整选区，本轮不要重给。请对照会议室母图判断当前可见北侧背景的实际缺陷，并提供edit_guide_suggestion，用实见多边形覆盖需改的背景、避开两人完整头发脸部肩袖和桌面；明确本机位应呈现上部磨砂玻璃、下部浅灰实体的哪些可见部分，不强塞画外门窗，不镜像房间。若此前缺陷只是无法核实而非实际矛盾，请如实说明而不强制返修。建议仅是几何，未执行。"
+        }
+      },
+      "reason": "第10镜已完成并绑定，继续修第11镜。手笔修正坐标已保留；当前工作集缺少北侧隔断的实际选区，只补取这部分几何，避免猜坐标或改动已确认的人物。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.5,
+          "issues": [
+            {
+              "code": "SCENE_PARTITION_STRUCTURE_MISMATCH",
+              "severity": "major",
+              "message": "候选北侧三块竖向磨砂样面板连续延至底框，两人之间无遮挡的背景中没有母图明确可见的横向分界，下段粗竖框也一直贯通到底。母图此处为上部磨砂玻璃、下部浅灰实体板及细接缝。这是可见结构矛盾，不是仅因人物遮挡而无法核实。",
+              "repair_layer": "ASSET_LOCAL_EDIT",
+              "category": "SPATIAL_CONTINUITY"
+            }
+          ],
+          "summary": "本轮仅检查北侧背景并补给编辑几何。图1左缘可见关闭的浅木门，右上可见高窗；北侧隔断位于两人后方，底框下露出灰色地面，浅橡木桌在前景。门窗左右关系与母图声明的南侧向北机位相符，无需镜像或补入更多门窗。\n实际缺陷是北隔断被做成通高连续磨砂样面板，母图的玻璃／实体横向分界消失。本机位应保留头顶上方的磨砂玻璃；两人头部之间的背景应能露出横向分界的一段，其下、肩袖之间直至隔断底框的可见区域应为浅灰不透光实体板。两侧被人物遮挡的部分不必强行展示。无法从图像测得分界的精确建筑标高，但不影响确认当前分层结构缺失。\n以下选区仅供北侧背景局部修正，未执行，不代表修后通过。人物身份、持笔归属及既有手笔选区不重复验收或重给；两纸留白符合本张中间底图职责，不作为本轮缺陷。",
+          "review_focus": "本轮仅补取北侧隔断修正的实际选区。当前为第11镜两纸留白中间底图；双人身份、赵衡自身右手独持、许岚双手未接触已经检查，不重复验收。手笔端向另有已保留的完整选区，本轮不要重给。请对照会议室母图判断当前可见北侧背景的实际缺陷，并提供edit_guide_suggestion，用实见多边形覆盖需改的背景、避开两人完整头发脸部肩袖和桌面；明确本机位应呈现上部磨砂玻璃、下部浅灰实体的哪些可见部分，不强塞画外门窗，不镜像房间。若此前缺陷只是无法核实而非实际矛盾，请如实说明而不强制返修。建议仅是几何，未执行。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": {
+            "regions": [
+              {
+                "polygon": [
+                  {
+                    "x": 0.305,
+                    "y": 0.252
+                  },
+                  {
+                    "x": 0.767,
+                    "y": 0.252
+                  },
+                  {
+                    "x": 0.764,
+                    "y": 0.278
+                  },
+                  {
+                    "x": 0.763,
+                    "y": 0.325
+                  },
+                  {
+                    "x": 0.756,
+                    "y": 0.356
+                  },
+                  {
+                    "x": 0.728,
+                    "y": 0.364
+                  },
+                  {
+                    "x": 0.708,
+                    "y": 0.396
+                  },
+                  {
+                    "x": 0.688,
+                    "y": 0.432
+                  },
+                  {
+                    "x": 0.666,
+                    "y": 0.464
+                  },
+                  {
+                    "x": 0.401,
+                    "y": 0.464
+                  },
+                  {
+                    "x": 0.386,
+                    "y": 0.447
+                  },
+                  {
+                    "x": 0.362,
+                    "y": 0.421
+                  },
+                  {
+                    "x": 0.342,
+                    "y": 0.391
+                  },
+                  {
+                    "x": 0.319,
+                    "y": 0.369
+                  },
+                  {
+                    "x": 0.294,
+                    "y": 0.35
+                  },
+                  {
+                    "x": 0.3,
+                    "y": 0.329
+                  },
+                  {
+                    "x": 0.306,
+                    "y": 0.307
+                  },
+                  {
+                    "x": 0.299,
+                    "y": 0.296
+                  },
+                  {
+                    "x": 0.295,
+                    "y": 0.276
+                  },
+                  {
+                    "x": 0.301,
+                    "y": 0.263
+                  }
+                ],
+                "label": "恢复北隔断横向分界及下部浅灰实体板，下段粗竖框改为母图式细接缝；保留人物轮廓"
+              }
+            ],
+            "arrows": [],
+            "descriptor": "坐标基于Image 1完整1440×2560候选的EXIF转正画面。多边形沿两人之间可见背景展开，避开头发、脸、肩袖、手笔及桌面，下缘止于现有隔断底框附近。按母图恢复上部磨砂玻璃、下部浅灰哑光不透光实体板：横向分界置于选区上段、两人头部之间的背景，约y=0.28可作定位起点，但须结合母图结构比例和当前透视确定，不是测得的建筑标高。分界以下直到原底框的可见背景改成实体板，将其中贯通的粗黑竖框改为母图下段的细板缝；横向框条在人物遮挡处自然隐去，不穿过人物。保留选区上方现有磨砂玻璃、隔断外边界和底框位置、灰地面、西侧关闭木门、东侧高窗及现有东窗光，不把整面背景改成实墙，不搬用母图的屏幕坐标，不增补画外布局。建议仅提供局部修正范围，执行后仍需检查人物边缘、框条连接和背景材质。",
+            "source_asset_version_id": "asset-version-6c3de1f63617"
+          },
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-3a8b4ea6267b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-6a56e078129b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d42fba8ad6bb"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-1156f46e26af"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d99209b73470"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-f4936a914dc3"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-yqq-11",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6c3de1f63617",
+            "version": 33
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset",
+              "artifact_id": "asset-4024e0462bfc",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-yqq-11",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6c3de1f63617",
+              "version": 33
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-3a8b4ea6267b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6a56e078129b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d42fba8ad6bb",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1156f46e26af",
+              "version": 6
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d99209b73470",
+              "version": 3
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f4936a914dc3",
+              "version": 3
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T01:12:46.800370Z",
+      "updated_at": "2026-09-12T01:16:10.776785Z"
+    },
+    {
+      "id": "specialist-turn-d1a2d95939d24fac9de46e2c5c215432",
+      "sequence": 55,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "version_id": "asset-version-6c3de1f63617",
+        "request": {
+          "shot_id": "shot-yqq-11",
+          "canonical_reference_version_ids": [
+            "asset-version-f4936a914dc3"
+          ],
+          "review_focus": "本轮仅补第11镜现有留白中间底图的手笔修正几何。已有检查确认两脸同框、赵衡自身右手独持、许岚尚未接触；问题是笔端需要调转。请基于实见图给出edit_guide_suggestion：完整覆盖旧笔、新笔方向、需要调整的持握手指及其连接区域、接触阴影和背景恢复区；目标为赵衡捏中部偏笔尖处，笔尾朝画右许岚，笔尖朝画左赵衡并稍向下。不要只圈笔尖导致手笔断接；无关手指、袖口、两脸、许岚双手和唯一独立帽尽量保留。北侧隔断另有已保存选区，本轮不重复提供。请说明当前可见的笔端与持握关系，以及此选区是否足以完成调转；若需更大连接区域如实给出。两纸本轮仍保持完全空白，准确单签摄影纸面随后本地合成。建议仅为待执行几何，不是修复完成。"
+        }
+      },
+      "reason": "第10镜取笔前构图已完成并绑定。继续第11镜；当前保留了北侧隔断的实见修正选区，但手笔选区未随恢复上下文保留下来，只补这部分几何，不重复检查人物身份或重做整张构图。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.4,
+          "issues": [
+            {
+              "code": "PROP_ORIENTATION_MISMATCH",
+              "severity": "major",
+              "message": "赵衡自身右手独持黑笔，但外露笔段的画右端呈锥形收尖，朝向许岚；画右没有完整可见、可供接握的圆裸笔尾，与要求的“尾朝右、尖朝左并稍向下”相反。当前握姿遮住左侧笔段，不能只替换画右笔尖而保留全部持握手指原像素。",
+              "repair_layer": "LOCAL_IMAGE_EDIT",
+              "category": "PROP_CONTINUITY"
+            }
+          ],
+          "summary": "本轮仅补手笔修正几何。实见赵衡画左、许岚画右，两脸同框并相互看脸；赵右手持笔，许右手与笔之间有明确间隔，尚未接触。笔从赵的指间向画右略向下伸出，右端明显收尖；左侧笔尾被握手遮挡，无法完整观察，细小金属针尖也未辨清。独立帽仍在桌面右下，两纸均为空白，符合当前中间底图职责，不因此另报文字缺失。\n建议选区覆盖整段旧笔、目标反向笔轴、拇食指与承托中指及相连掌面，并纳入旧轮廓恢复和手笔接触明暗。新露尖位置靠近原手指轮廓，必须允许局部重新捏持，不能只圈笔或指尖。该范围为原手位附近的小幅调整提供了连接余量，不需要整腕或前臂平移；袖口主体、赵左手、许双手、两脸、两纸和独立帽均留在圈外。北侧隔断沿用已有修正安排，本轮不重复给区。以下仅为待执行几何，修后仍须观察指关节连接、唯一笔轮廓、端向及背景恢复，当前不视为修复完成。",
+          "review_focus": "本轮仅补第11镜现有留白中间底图的手笔修正几何。已有检查确认两脸同框、赵衡自身右手独持、许岚尚未接触；问题是笔端需要调转。请基于实见图给出edit_guide_suggestion：完整覆盖旧笔、新笔方向、需要调整的持握手指及其连接区域、接触阴影和背景恢复区；目标为赵衡捏中部偏笔尖处，笔尾朝画右许岚，笔尖朝画左赵衡并稍向下。不要只圈笔尖导致手笔断接；无关手指、袖口、两脸、许岚双手和唯一独立帽尽量保留。北侧隔断另有已保存选区，本轮不重复提供。请说明当前可见的笔端与持握关系，以及此选区是否足以完成调转；若需更大连接区域如实给出。两纸本轮仍保持完全空白，准确单签摄影纸面随后本地合成。建议仅为待执行几何，不是修复完成。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": {
+            "regions": [
+              {
+                "polygon": [
+                  {
+                    "x": 0.322,
+                    "y": 0.487
+                  },
+                  {
+                    "x": 0.35,
+                    "y": 0.48
+                  },
+                  {
+                    "x": 0.376,
+                    "y": 0.472
+                  },
+                  {
+                    "x": 0.447,
+                    "y": 0.47
+                  },
+                  {
+                    "x": 0.489,
+                    "y": 0.471
+                  },
+                  {
+                    "x": 0.58,
+                    "y": 0.477
+                  },
+                  {
+                    "x": 0.588,
+                    "y": 0.492
+                  },
+                  {
+                    "x": 0.572,
+                    "y": 0.511
+                  },
+                  {
+                    "x": 0.473,
+                    "y": 0.526
+                  },
+                  {
+                    "x": 0.439,
+                    "y": 0.526
+                  },
+                  {
+                    "x": 0.414,
+                    "y": 0.52
+                  },
+                  {
+                    "x": 0.381,
+                    "y": 0.515
+                  },
+                  {
+                    "x": 0.343,
+                    "y": 0.516
+                  },
+                  {
+                    "x": 0.32,
+                    "y": 0.508
+                  }
+                ],
+                "label": "整笔调转，并重建拇食指、承托中指及相连掌面的自然捏持；恢复旧笔背景与接触明暗"
+              }
+            ],
+            "arrows": [
+              {
+                "start": {
+                  "x": 0.559,
+                  "y": 0.481
+                },
+                "end": {
+                  "x": 0.443,
+                  "y": 0.501
+                },
+                "label": "目标笔轴：画右上圆裸尾→画左下露尖；只指端向，不是整手移动箭头"
+              }
+            ],
+            "descriptor": "仅编辑Image 1所圈手笔区域。以原右手位置为基础，小幅松握重捏同一支黑色裸笔：笔尖在箭头左下端附近清楚露出，未套帽的圆笔尾在右上端附近，笔轴大致横向；捏持点位于从尖端向尾端约三分之一处，约(0.482,0.494)，右侧后半段保持完整可抓握。不得加第二支笔、第二个帽或生成许岚已接触的状态。\n左下新露尖区靠近原承托手指，故选区不是笔身窄条，而是扩至拇食指、承托中指的完整可见活动部分及相连掌面；左界进入相对稳定的掌面，避免沿这些指根切断连接。允许圈内相邻卷指作连接必需的最小调整，但尽量保留无关手指原有轮廓，不牵动腕和袖口。若坚持把持握指全部锁为原像素，此选区也无法仅靠换笔端解决遮挡。\n清除原画右收尖轮廓，恢复其后实见灰色背景，不补成木纹、不留双笔残片。重建指腹与笔杆的接触暗部及自然遮挡，笔保持悬空，不新增触桌阴影。保留圈内无需改变的衣料和背景；圈外人物、其他手、两张空白纸、独立帽及北隔断不改。箭头不画入成图。本范围适用于局部重新捏持，不支持整手或整腕大幅移位；执行后仍需验收。",
+            "source_asset_version_id": "asset-version-6c3de1f63617"
+          },
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-3a8b4ea6267b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-6a56e078129b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d42fba8ad6bb"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-1156f46e26af"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d99209b73470"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-f4936a914dc3"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-yqq-11",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6c3de1f63617",
+            "version": 33
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset",
+              "artifact_id": "asset-4024e0462bfc",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-yqq-11",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6c3de1f63617",
+              "version": 33
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-3a8b4ea6267b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6a56e078129b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d42fba8ad6bb",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1156f46e26af",
+              "version": 6
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d99209b73470",
+              "version": 3
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f4936a914dc3",
+              "version": 3
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T01:16:36.560385Z",
+      "updated_at": "2026-09-12T01:20:14.915914Z"
+    }
+  ],
+  "actual_inputs": [
+    {
+      "after_sequence": 52,
+      "call_id": "model-d2a0eef6cdb1",
+      "file": "20260912T010852371672-ab97397d-model.input.json"
+    },
+    {
+      "after_sequence": 53,
+      "call_id": "model-249105133923",
+      "file": "20260912T011227170795-4fe2e42d-model.input.json"
+    },
+    {
+      "after_sequence": 54,
+      "call_id": "model-35006289ded8",
+      "file": "20260912T011614172504-48b9c8e8-model.input.json"
+    }
+  ],
+  "note": "Read-only t44 and t52-t55 durable Tool turns of the same candidate; no input or result content rewritten. Production Trace is unchanged.",
+  "prior_turns": [
+    {
+      "id": "specialist-turn-d514b80fbbbd41458a4015c3ff105d03",
+      "sequence": 44,
+      "tool_name": "qa.inspect_asset_version",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "version_id": "asset-version-6c3de1f63617",
+        "request": {
+          "shot_id": "shot-yqq-11",
+          "canonical_reference_version_ids": [
+            "asset-version-3a8b4ea6267b",
+            "asset-version-6a56e078129b",
+            "asset-version-d42fba8ad6bb",
+            "asset-version-1156f46e26af",
+            "asset-version-d99209b73470",
+            "asset-version-f4936a914dc3"
+          ],
+          "review_focus": "此图是待合成准确纸面的中间底图，不因空白而判失败。实际检查两脸及手笔同框、赵左许右坐姿、身份服装、赵衡自身右手独持唯一裸笔、笔尾朝许岚画右/笔尖朝赵画左稍下、许岚尚未触笔、另一只手已松纸、唯一分离帽；近纸南中为说明、远纸北中为报价，预定两页标题朝画右东侧。若手笔和两张空纸可用，请给基于实际可见纸内区域的plane_composite_suggestion，近纸用1156单签摄影源（仅复核赵衡、经办空），远纸用d992报价摄影源，source_quad必须排除摄影背景，整版转向，不重排文字或姓名。注明真实前景保护区、比例/遮挡限制。若摄影灰纸会明显压暗，请观察源空白纸色并建议有依据的source_white_point整数及观察限制，不能自动套固定值。"
+        }
+      },
+      "reason": "检查第11镜已保存的交笔底图：先确认两人身份、右手持笔归属和许岚未接触，再判断空纸能否直接贴入既有摄影内容，不重生可用人物。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "qa.inspect_asset_version",
+        "status": "SUCCEEDED",
+        "output": {
+          "recommended": false,
+          "score": 3.0,
+          "issues": [
+            {
+              "code": "PROP_ORIENTATION_UNCLEAR",
+              "severity": "major",
+              "message": "赵衡自身右手独持黑笔，但画右外露端呈细尖轮廓，未清楚展示应朝许岚的圆裸笔尾及可接握后半段；朝赵衡画左的露出笔尖也未辨明。不能据此确认明确要求的“尾东、尖西略下”初态。需修正整支笔的端向、握点及必要指位，而非仅把右端削圆。",
+              "repair_layer": "ASSET_IMAGE_LOCAL_EDIT",
+              "category": "PROP_CONTINUITY"
+            },
+            {
+              "code": "SCENE_STRUCTURE_MISMATCH",
+              "severity": "major",
+              "message": "候选北侧隔断呈整高竖向分格，两人之间无遮挡区域未见横向分隔框。精确空间参考的同一南侧机位可见明确横框，上部磨砂玻璃、下部浅灰实体。该差异处于实际可见背景，不能用人物遮挡或竖屏取景解释；需恢复原隔断结构。",
+              "repair_layer": "ASSET_IMAGE_BACKGROUND",
+              "category": "SPATIAL_CONTINUITY"
+            }
+          ],
+          "summary": "本图不因两纸留白失败，但尚不能作为合格的递笔前中间底图采用。赵左许右、两人坐姿及相互看脸成立；赵的方圆脸、眉眼鼻口关系和短侧分发型，许的脸型、五官关系与齐肩侧分发型，与各自身份参考相符，服装及扣袖也一致。四只手可由前臂袖口辨认：赵右手持笔，左手空着且离纸；许双手空着，与笔有明确间隔，未提前进入共同握笔或接稳终态。桌东南可见一枚独立黑帽。双脸与手笔同框，未见第三人、水印或额外文字。\n空间中西侧关门、东侧窗及光向、南北向浅橡木桌基本对应，但北隔断存在可见结构变化。近、远两纸分离平放、长轴横向，纸内没有手笔遮挡，适合作为后续内容承载面；当前留白尚不能证明标题方向或签名状态。因持笔端向与背景仍须修复，本轮不提供平面合成建议，避免将贴字后的预期效果视为底图已合格。下列编辑指引仅处理持笔区，北隔断需另行修复后再验收。人物外侧已贴近画边，不建议再次裁切。",
+          "review_focus": "此图是待合成准确纸面的中间底图，不因空白而判失败。实际检查两脸及手笔同框、赵左许右坐姿、身份服装、赵衡自身右手独持唯一裸笔、笔尾朝许岚画右/笔尖朝赵画左稍下、许岚尚未触笔、另一只手已松纸、唯一分离帽；近纸南中为说明、远纸北中为报价，预定两页标题朝画右东侧。若手笔和两张空纸可用，请给基于实际可见纸内区域的plane_composite_suggestion，近纸用1156单签摄影源（仅复核赵衡、经办空），远纸用d992报价摄影源，source_quad必须排除摄影背景，整版转向，不重排文字或姓名。注明真实前景保护区、比例/遮挡限制。若摄影灰纸会明显压暗，请观察源空白纸色并建议有依据的source_white_point整数及观察限制，不能自动套固定值。",
+          "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+          "region_evidence": [],
+          "crop_suggestion": null,
+          "edit_guide_suggestion": {
+            "regions": [
+              {
+                "polygon": [
+                  {
+                    "x": 0.268,
+                    "y": 0.479
+                  },
+                  {
+                    "x": 0.31,
+                    "y": 0.475
+                  },
+                  {
+                    "x": 0.361,
+                    "y": 0.469
+                  },
+                  {
+                    "x": 0.411,
+                    "y": 0.469
+                  },
+                  {
+                    "x": 0.463,
+                    "y": 0.477
+                  },
+                  {
+                    "x": 0.552,
+                    "y": 0.476
+                  },
+                  {
+                    "x": 0.556,
+                    "y": 0.51
+                  },
+                  {
+                    "x": 0.462,
+                    "y": 0.515
+                  },
+                  {
+                    "x": 0.423,
+                    "y": 0.528
+                  },
+                  {
+                    "x": 0.376,
+                    "y": 0.528
+                  },
+                  {
+                    "x": 0.335,
+                    "y": 0.522
+                  },
+                  {
+                    "x": 0.309,
+                    "y": 0.528
+                  },
+                  {
+                    "x": 0.27,
+                    "y": 0.531
+                  }
+                ],
+                "label": "修正赵右手握笔端向，包含完整持笔手、必要腕袖连接、原笔位及两端目标空间"
+              }
+            ],
+            "arrows": [
+              {
+                "start": {
+                  "x": 0.46,
+                  "y": 0.49
+                },
+                "end": {
+                  "x": 0.54,
+                  "y": 0.484
+                },
+                "label": "圆裸笔尾朝画右许岚，后半段完整外露供接握"
+              },
+              {
+                "start": {
+                  "x": 0.43,
+                  "y": 0.491
+                },
+                "end": {
+                  "x": 0.374,
+                  "y": 0.508
+                },
+                "label": "笔尖朝画左赵衡并略向下，须露出而非完全藏在手中"
+              }
+            ],
+            "descriptor": "仅修赵衡右手持笔区。整体调整同一裸笔的端向及必要握持指位，使握点处于笔杆中段偏笔尖，画右为完整圆尾与可接握后半杆，画左为可辨露尖；不是仅改外露端的形状。选区包含完整持笔手、相邻腕部和部分袖口，以及原笔位、目标空间和背景恢复余量。保持唯一持有者为赵右手，不新增笔帽；赵左手不参与改姿，许岚双手继续与笔分离。修后同时检查指根、掌面、腕袖连续性、笔与手的真实接触及旧轮廓背景恢复。箭头仅为指示，不进入成图。此建议不处理北隔断结构，也不代表编辑后已通过验收。",
+            "source_asset_version_id": "asset-version-6c3de1f63617"
+          },
+          "plane_composite_suggestion": null,
+          "evidence_references": [
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-3a8b4ea6267b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-6a56e078129b"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d42fba8ad6bb"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-1156f46e26af"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-d99209b73470"
+            },
+            {
+              "source_project_id": "project-5b8286dc63e6",
+              "asset_version_id": "asset-version-f4936a914dc3"
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot_plan",
+            "artifact_id": "shot-yqq-11",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6c3de1f63617",
+            "version": 33
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset",
+              "artifact_id": "asset-4024e0462bfc",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot_plan",
+              "artifact_id": "shot-yqq-11",
+              "version": null
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6c3de1f63617",
+              "version": 33
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-3a8b4ea6267b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-6a56e078129b",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d42fba8ad6bb",
+              "version": 2
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1156f46e26af",
+              "version": 6
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-d99209b73470",
+              "version": 3
+            },
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-f4936a914dc3",
+              "version": 3
+            }
+          ],
+          "current_state": {},
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T00:53:04.933472Z",
+      "updated_at": "2026-09-12T00:56:24.078125Z"
+    }
+  ]
+}

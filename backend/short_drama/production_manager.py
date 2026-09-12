@@ -2127,8 +2127,8 @@ def _specialist_working_set(
     """Fold durable history into the current decision state.
 
     This is deliberately identity-based rather than a last-N or character
-    window. Repeated polling, retries and reviews of the same image task or asset
-    replace the prior snapshot, while genuinely distinct entities remain visible.
+    window. Repeated polling, retries and the same selected inspection scope
+    replace the prior snapshot; distinct objects and review scopes stay visible.
     """
 
     read_schemas = {} if read_schemas is None else read_schemas
@@ -2441,6 +2441,7 @@ def _specialist_working_set(
                 result=_specialist_read_observation_result(turn),
             )
         if compact_result is not None:
+            review_project_id = resolved_project_id or turn.arguments.get("project_id")
             _fold_specialist_entities(
                 entities,
                 tool_name=turn.tool_name,
@@ -2448,6 +2449,12 @@ def _specialist_working_set(
                 arguments=turn.arguments,
                 result=compact_result,
                 shot_write_revisions=shot_write_revisions,
+                attempt_ref=(
+                    _tool_attempt_ref_for_turn(review_project_id, work_order, turn)
+                    if turn.tool_name == "qa.inspect_asset_version"
+                    and isinstance(review_project_id, str) and review_project_id
+                    else None
+                ),
             )
 
     progress = _specialist_progress_checkpoint(work_order, progress_entries)
@@ -2967,6 +2974,7 @@ def _fold_specialist_entities(
     arguments: Mapping[str, JsonValue],
     result: Mapping[str, JsonValue],
     shot_write_revisions: Mapping[str, int | None] | None = None,
+    attempt_ref: ToolAttemptRef | None = None,
 ) -> None:
     output_value = result.get("output")
     if not isinstance(output_value, dict):
@@ -3240,23 +3248,48 @@ def _fold_specialist_entities(
                 value={"id": draft_id, **progress},
             )
 
-    if tool_name == "qa.inspect_asset_version":
+    if tool_name == "qa.inspect_asset_version" and result.get("status") == ToolCallStatus.SUCCEEDED.value:
         version_id = arguments.get("version_id")
         if isinstance(version_id, str) and version_id:
-            _put_specialist_entity(
-                entities,
+            request = arguments.get("request")
+            # Compare the actual selected inspection scope, not inferred topic
+            # names. Explicit defaults are equivalent; ordered references and
+            # detail regions remain significant. Future request fields survive.
+            scope: dict[str, JsonValue] = {
+                "shot_id": None, "canonical_reference_version_ids": [],
+                "review_focus": None, "regions": [],
+                **(request if isinstance(request, dict) else {}),
+            }
+            key = ("asset_review", json.dumps([
+                arguments.get("project_id"), arguments.get("asset_id"), version_id, scope,
+            ], ensure_ascii=False, sort_keys=True))
+            prior = entities.get(key)
+            # Keep short display identities, while the private dictionary key
+            # uses the full scope without hashes or model-visible duplicate text.
+            identity = prior.id if prior is not None else (
+                version_id if not any(item.kind == "asset_review" and item.id == version_id
+                                      for item in entities.values())
+                else f"{version_id}:review-{sequence}"
+            )
+            entities[key] = SpecialistEntitySnapshot(
                 kind="asset_review",
+                id=identity,
                 source_tool=tool_name,
-                sequence=sequence,
-                value={
+                source_sequence=sequence,
+                state={
                     "id": version_id,
                     "asset_id": arguments.get("asset_id"),
                     "version_id": version_id,
+                    "review_scope": scope,
+                    **({"attempt_ref": attempt_ref.model_dump(mode="json")}
+                       if attempt_ref is not None else {}),
                     "recommended": output.get("recommended"),
                     "score": output.get("score"),
                     "summary": output.get("summary"),
                     "issues": output.get("issues"),
                     "evidence_references": output.get("evidence_references"),
+                    **{field: output[field] for field in ("candidate_output_layout", "region_evidence")
+                       if field in output},
                     **({"crop_suggestion": output["crop_suggestion"]}
                        if output.get("crop_suggestion") is not None else {}),
                     **({"edit_guide_suggestion": output["edit_guide_suggestion"]}
@@ -3264,10 +3297,6 @@ def _fold_specialist_entities(
                     **({"plane_composite_suggestion": output["plane_composite_suggestion"]}
                        if output.get("plane_composite_suggestion") is not None else {}),
                 },
-                # Multiple views of one subject share an Asset. Their visual
-                # findings belong to distinct immutable versions; folding by
-                # Asset loses the preceding view and causes alternating reads.
-                identity_id=version_id,
             )
 
 
@@ -4773,6 +4802,11 @@ class LanguageSpecialistAgent:
             addressable_attempt_refs[observation.attempt_ref.identity()] = (
                 observation.attempt_ref
             )
+        for entity in working_set.entities:
+            ref_value = entity.state.get("attempt_ref")
+            if entity.kind == "asset_review" and isinstance(ref_value, dict):
+                ref = ToolAttemptRef.model_validate(ref_value)
+                addressable_attempt_refs[ref.identity()] = ref
         latest_attempt_ref: ToolAttemptRef | None = None
         if working_set.latest_handoff is not None:
             raw_latest_ref = working_set.latest_handoff.get("attempt_ref")
