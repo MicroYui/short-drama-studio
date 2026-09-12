@@ -14,6 +14,7 @@ from short_drama.reference_planner import (
     ReferencePlanPreviewRequest, ReferencePlanPreviewResponse, preview_reference_plan,
 )
 from short_drama.shot_write_receipts import SavedShotSummary, shot_write_receipt, summarize_saved_shot
+from short_drama.shot_media_registration import ShotMediaRegistration, ShotMediaRegistrationSummary, save_shot_with_media_registration
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
@@ -38,6 +39,7 @@ class ShotWriteInput(ToolModel):
     project_id: str
     shot_id: str
     request: StudioShotSave
+    media_registration: ShotMediaRegistration | None = None
 
 
 class TimelineWriteInput(ToolModel):
@@ -109,7 +111,9 @@ class CurrentWriteOutput(DomainModel):
 
 
 class ShotWriteOutput(CurrentWriteOutput):
+    asset_plan_identity: dict[str, JsonValue] | None = None
     saved_shot: SavedShotSummary | None = None
+    media_registration: ShotMediaRegistrationSummary | None = None
     reference_plan_preview_scope: Literal["GENERATION_ONLY"] = Field(default="GENERATION_ONLY", description=(
         "The preview selects video-generation references only. EDITORIAL bindings remain in saved_shot.shot_cues. "
         "Its complexity.action_beat_count counts reference-plan action_beats, not saved_shot.beats."
@@ -190,7 +194,13 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             artifact_refs=(ArtifactRef(project_id=request.project_id, artifact_type="script_version", artifact_id=script.id, version=script.version),))
 
     def save_shot(request: ShotWriteInput) -> ToolExecution[ShotWriteOutput]:
-        result = service.studio.save_shot(request.project_id, request.shot_id, request.request)
+        registration = None
+        plan_receipt = None
+        if request.media_registration is None:
+            result = service.studio.save_shot(request.project_id, request.shot_id, request.request)
+        else:
+            result, registration, plan_receipt = save_shot_with_media_registration(service, request.project_id, request.shot_id,
+                request.request, request.media_registration)
         document = result.project.document
         saved = next(shot for shot in document.shots if shot.id == request.shot_id)
         plan = next((item for item in document.reference_plan if item.shot_id == saved.id), None)
@@ -207,14 +217,31 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             preview_error = "当前镜头尚无参考计划；分镜已保存，引用待后续准备。"
         output = ShotWriteOutput(project_id=request.project_id,
             scene_ids=[], shot_ids=[saved.id], notices=result.notices,
-            shot_revisions={saved.id: saved.revision}, changed_shot_ids=[saved.id],
+            shot_revisions={saved.id: saved.revision}, changed_shot_ids=result.changed_shot_ids if registration is not None else [saved.id],
             saved_shot=summarize_saved_shot(saved),
+            media_registration=registration,
+            asset_plan_identity=cast(dict[str, JsonValue], plan_receipt.current_state["asset_plan_identity"]) if plan_receipt else None,
             reference_plan_preview=preview, reference_plan_preview_error=preview_error)
         refs = (ArtifactRef(project_id=request.project_id, artifact_type="shot",
             artifact_id=saved.id, version=saved.revision),)
+        if registration is not None:
+            refs += (ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=registration.asset_version_id),)
+            refs += tuple(ArtifactRef(project_id=request.project_id, artifact_type="reference_pack_entry", artifact_id=identifier)
+                for identifier in registration.reference_entry_ids)
+            if registration.asset_plan_document_id:
+                refs += (ArtifactRef(project_id=request.project_id, artifact_type="asset_plan",
+                    artifact_id=registration.asset_plan_document_id, version=registration.asset_plan_version),)
+        receipt = shot_write_receipt(output.model_dump(mode="json"), refs)
+        if plan_receipt is not None:
+            receipt.current_state.update(plan_receipt.current_state)
+            receipt.changed_ids.update(plan_receipt.changed_ids)
+        if registration is not None:
+            receipt.current_state["media_registration"] = registration.model_dump(mode="json")
+            receipt.changed_ids["created_reference_entry_ids"] = registration.created_reference_entry_ids
+            receipt.changed_ids["completed_work_item_ids"] = registration.completed_work_item_ids if registration.plan_changed else []
         return ToolExecution(output=output,
             warnings=tuple(preview.warnings) if preview is not None else (preview_error or "引用预览不可用",),
-            artifact_refs=refs, receipt=shot_write_receipt(output.model_dump(mode="json"), refs))
+            artifact_refs=refs, receipt=receipt)
 
     def save_timeline(request: TimelineWriteInput) -> ToolExecution[CurrentWriteOutput]:
         if request.shot_id:
@@ -405,7 +432,7 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         effect=ToolEffect.WRITE, idempotent=False, input_model=SceneWriteInput, output_model=CurrentWriteOutput, handler=save_scene,
         tags=frozenset({"studio", "script", "partial-edit"})))
     registry.register(ToolSpec(id="shot.save_current", version=2, category=ToolCategory.SHOT,
-        description="保存一个当前镜头和逐时段分镜，返回实际修订号及 saved_shot：实际保存的 GENERATION/EDITORIAL 引用、正文字符范围、作用时段和对白 IDs。receipt 同样保留这些事实，可直接核对，不因生成预览为空而重复读取。reference_plan_preview_scope=GENERATION_ONLY：reference_plan_preview 只解析视频生成参考，EDITORIAL 不进入 selected；其 action_beat_count 是参考计划的动作数量，不是已保存的分镜时段数量。references 使用对象 id、精确 asset_version_id、purpose、field 和 Unicode 字符 text_start/text_end，作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。保存引用不表示已剪入成片，预览不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
+        description="保存当前镜头及素材引用，可同时登记同一图片的制作项完成和参考包用途。返回实际修订号及 saved_shot：实际保存的 GENERATION/EDITORIAL 引用、正文字符范围、作用时段和对白 IDs。receipt 同样保留这些事实，可直接核对，不因生成预览为空而重复读取。reference_plan_preview_scope=GENERATION_ONLY：reference_plan_preview 只解析视频生成参考，EDITORIAL 不进入 selected；其 action_beat_count 是参考计划的动作数量，不是已保存的分镜时段数量。references 使用对象 id、精确 asset_version_id、purpose、field 和 Unicode 字符 text_start/text_end，作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。已明确选定的同一图片可用可选 media_registration 同时登记具体工作项完成与参考包用途；CURRENT DRAFT 可用，不切换素材 current/approved 指针，不自动审核、不推断全部服务镜头。全部验证成功才一起保存；相同内容重试复用，目标冲突不部分写。省略仍只保存镜头。保存引用不表示已剪入成片，预览不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=ShotWriteInput, output_model=ShotWriteOutput, handler=save_shot,
         tags=frozenset({"studio", "shot", "references"})))
     registry.register(ToolSpec(id="timeline.save_editorial", version=1, category=ToolCategory.TIMELINE,

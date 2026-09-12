@@ -18,11 +18,11 @@ if TYPE_CHECKING:
 ASSET_PLAN_WRITE_TOOLS = frozenset({
     "artifact.create_asset_plan", "artifact.replace_asset_plan", "artifact.patch_asset_plan",
     "artifact.patch_asset_plan_fields", "artifact.reconcile_asset_plan_execution_contract",
-    "artifact.retry_asset_plan_attempt",
+    "artifact.retry_asset_plan_attempt", "shot.save_current",
 })
 LOCAL_ASSET_PLAN_WRITE_TOOLS = frozenset({
     "artifact.patch_asset_plan", "artifact.patch_asset_plan_fields",
-    "artifact.reconcile_asset_plan_execution_contract",
+    "artifact.reconcile_asset_plan_execution_contract", "shot.save_current",
 })
 
 

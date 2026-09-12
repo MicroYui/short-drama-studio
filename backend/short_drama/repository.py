@@ -6,7 +6,7 @@ import re
 import json
 import sqlite3
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -745,50 +745,98 @@ class ShortDramaRepository:
     def save_project(self, document: ProjectDocument) -> None:
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            current = self._read_effective_project(connection, document.project.id)
-            payload = cast(dict[str, JsonValue], document.model_dump(mode="json"))
-            conflicts: list[str] = []
-            if current is not None and document.loaded_snapshot is not None:
-                payload = cast(dict[str, JsonValue], merge_current_content(
-                    document.loaded_snapshot, payload,
-                    cast(dict[str, JsonValue], current.model_dump(mode="json")), conflicts=conflicts,
-                ))
-            merged = ProjectDocument.model_validate(payload)
-            parent_id = merged.project.parent_project_id
-            stored = merged.model_copy(deep=True)
-            if parent_id is not None:
-                parent = self._read_effective_project(connection, parent_id)
-                if parent is None or parent.project.parent_project_id is not None:
-                    raise ValueError("An episode must belong to an existing root project")
-                parent.assets = merged.assets
-                parent.reference_packs = merged.reference_packs
-                for asset in parent.assets:
-                    asset.project_id = parent_id
-                for pack in parent.reference_packs:
-                    pack.project_id = parent_id
-                self._write_project(connection, parent)
-                stored.assets = []
-                stored.reference_packs = []
-            self._write_project(connection, stored)
-            connection.execute(
-                "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
-                (document.project.id, "content.updated", datetime.now(UTC).isoformat(),
-                 json.dumps({"kept_user_edits": conflicts}, ensure_ascii=False)),
-            )
-            if merged.project.parent_project_id:
-                connection.execute(
-                    "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
-                    (merged.project.parent_project_id, "assets.updated", datetime.now(UTC).isoformat(), "{}"),
-                )
-            # Callers receive the actually saved content, including kept edits.
-            # Keep existing nested objects when their value did not change.
-            # Workers often retain a reference to the scene they are writing.
+            self._save_project_on_connection(connection, document)
+
+    def save_shot_media_registration(
+        self, document: ProjectDocument, changed_shot_ids: Sequence[str], *,
+        validate_merged: Callable[[ProjectDocument], None], write_content: bool = True,
+    ) -> None:
+        """Commit the one content edit and its existing Take invalidation atomically."""
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._save_project_on_connection(connection, document, reject_conflicts=True,
+                validate_merged=validate_merged, write_content=write_content)
+            affected = set(changed_shot_ids)
+            if not affected:
+                return
+            rows = connection.execute("SELECT record_json FROM takes WHERE project_id=?", (document.project.id,)).fetchall()
+            for row in rows:
+                take = Take.model_validate_json(row["record_json"])
+                if take.freshness == Freshness.STALE or not affected.intersection(take.covered_shot_ids()):
+                    continue
+                take.freshness = Freshness.STALE
+                take.is_selected = False
+                take.selected_shot_ids = []
+                connection.execute("UPDATE takes SET is_selected=0, freshness=?, record_json=? WHERE id=?",
+                    (take.freshness.value, take.model_dump_json(), take.id))
+
+    def _save_project_on_connection(
+        self, connection: sqlite3.Connection, document: ProjectDocument, *,
+        reject_conflicts: bool = False, validate_merged: Callable[[ProjectDocument], None] | None = None,
+        write_content: bool = True,
+    ) -> None:
+        current = self._read_effective_project(connection, document.project.id)
+        payload = cast(dict[str, JsonValue], document.model_dump(mode="json"))
+        conflicts: list[str] = []
+        if current is not None and document.loaded_snapshot is not None:
+            payload = cast(dict[str, JsonValue], merge_current_content(
+                document.loaded_snapshot, payload,
+                cast(dict[str, JsonValue], current.model_dump(mode="json")), conflicts=conflicts,
+            ))
+        if reject_conflicts:
+            # These timestamps are generated by this save, not user content.
+            # They must not turn an unrelated edit into a registration conflict.
+            automatic_timestamps = {"/project/updated_at", *(
+                f"/reference_packs/{pack.id}/updated_at" for pack in document.reference_packs)}
+            conflicts = [path for path in conflicts if path not in automatic_timestamps]
+        if reject_conflicts and conflicts:
+            raise ValueError("Selected content changed during media registration: " + ", ".join(conflicts))
+        merged = ProjectDocument.model_validate(payload)
+        if validate_merged is not None:
+            validate_merged(merged)
+        if not write_content:
+            # A semantic retry still checks current read dependencies under the
+            # same transaction, without creating events or rewriting content.
             for field in ProjectDocument.model_fields:
                 if getattr(document, field) != getattr(merged, field):
                     setattr(document, field, getattr(merged, field))
             document.record_loaded_content(conflicts)
-            if conflicts:
-                log_event("project.saved_edits_preserved", project_id=document.project.id, fields=json.dumps(conflicts, ensure_ascii=False))
+            return
+        parent_id = merged.project.parent_project_id
+        stored = merged.model_copy(deep=True)
+        if parent_id is not None:
+            parent = self._read_effective_project(connection, parent_id)
+            if parent is None or parent.project.parent_project_id is not None:
+                raise ValueError("An episode must belong to an existing root project")
+            parent.assets = merged.assets
+            parent.reference_packs = merged.reference_packs
+            for asset in parent.assets:
+                asset.project_id = parent_id
+            for pack in parent.reference_packs:
+                pack.project_id = parent_id
+            self._write_project(connection, parent)
+            stored.assets = []
+            stored.reference_packs = []
+        self._write_project(connection, stored)
+        connection.execute(
+            "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
+            (document.project.id, "content.updated", datetime.now(UTC).isoformat(),
+             json.dumps({"kept_user_edits": conflicts}, ensure_ascii=False)),
+        )
+        if merged.project.parent_project_id:
+            connection.execute(
+                "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
+                (merged.project.parent_project_id, "assets.updated", datetime.now(UTC).isoformat(), "{}"),
+            )
+        # Callers receive the actually saved content, including kept edits.
+        # Keep existing nested objects when their value did not change.
+        # Workers often retain a reference to the scene they are writing.
+        for field in ProjectDocument.model_fields:
+            if getattr(document, field) != getattr(merged, field):
+                setattr(document, field, getattr(merged, field))
+        document.record_loaded_content(conflicts)
+        if conflicts:
+            log_event("project.saved_edits_preserved", project_id=document.project.id, fields=json.dumps(conflicts, ensure_ascii=False))
 
     @staticmethod
     def _write_project(connection: sqlite3.Connection, document: ProjectDocument) -> None:

@@ -5946,6 +5946,14 @@ class ShortDramaService:
 
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            return self._replace_storyboard_draft_group_document(document, request, persist=True)
+
+    def _replace_storyboard_draft_group_document(
+        self, document: ProjectDocument, request: StoryboardDraftGroupReplaceRequest, *, persist: bool = False,
+    ) -> StoryboardDraftMutationResponse:
+        """Apply validated content to one document; callers may commit the combined edit."""
+        with self._lock:
+            project_id = document.project.id
             draft_document = self._production_document(
                 document,
                 request.draft_document_id,
@@ -6024,7 +6032,8 @@ class ShortDramaService:
                 created_at=now,
             )
             document.project.updated_at = now
-            self.repository.save_project(document)
+            if persist:
+                self.repository.save_project(document)
             return StoryboardDraftMutationResponse(
                 progress=self._storyboard_draft_progress(
                     result.document,
@@ -6425,6 +6434,14 @@ class ShortDramaService:
         with self._lock:
             document = (self._require_project_document(project_id) if current_content_edit
                         else self._require_project_mutation_allowed(project_id))
+            return self._patch_storyboard_document(document, request, persist=True, current_content_edit=current_content_edit)
+
+    def _patch_storyboard_document(
+        self, document: ProjectDocument, request: StoryboardPatchRequest, *, persist: bool = False, current_content_edit: bool = False,
+    ) -> StoryboardMutationResponse:
+        """Apply validated content to one document; callers may commit the combined edit."""
+        with self._lock:
+            project_id = document.project.id
             production_document = self._managed_project_document(
                 document,
                 document.storyboard_document_id,
@@ -6478,9 +6495,11 @@ class ShortDramaService:
                 document,
                 changed_shot_ids,
                 updated_at=now,
+                mark_takes=persist,
             )
             document.project.updated_at = now
-            self.repository.save_project(document)
+            if persist:
+                self.repository.save_project(document)
             return StoryboardMutationResponse(
                 storyboard=storyboard,
                 document=result.document,
@@ -7346,6 +7365,13 @@ class ShortDramaService:
 
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            return self._patch_asset_plan_document(document, request, persist=True)
+
+    def _patch_asset_plan_document(
+        self, document: ProjectDocument, request: AssetPlanPatchRequest, *, persist: bool = False, skip_unchanged: bool = False,
+    ) -> AssetPlanMutationResponse:
+        """Apply validated content to one document; callers may commit the combined edit."""
+        with self._lock:
             production_document = self._managed_project_document(
                 document,
                 document.asset_plan_document_id,
@@ -7490,6 +7516,9 @@ class ShortDramaService:
                     merged = merged.model_copy(update={"notes": list(request.notes)}, deep=True)
                 persisted_base_id = latest_version.id
             self._validate_asset_plan(document, merged, require_current_sources=False)
+            latest_version = self._production_document_version(production_document)
+            if skip_unchanged and merged == self._parse_asset_plan(latest_version):
+                return AssetPlanMutationResponse(asset_plan=merged, document=production_document, version=latest_version)
             return self._persist_asset_plan_patch_locked(
                 document=document,
                 production_document=production_document,
@@ -7497,6 +7526,7 @@ class ShortDramaService:
                 merged=merged,
                 source_artifact_refs=request.source_artifact_refs,
                 origin=request.origin,
+                persist=persist,
             )
 
     def reconcile_asset_plan_execution_contract(
@@ -7570,6 +7600,7 @@ class ShortDramaService:
         merged: AssetPlanContent,
         source_artifact_refs: list[ProductionDocumentArtifactRef],
         origin: ProductionDocumentOrigin,
+        persist: bool = True,
     ) -> AssetPlanMutationResponse:
         """Persist an already merged and validated AssetPlan patch."""
 
@@ -7600,7 +7631,8 @@ class ShortDramaService:
             updated_at=now,
         )
         document.project.updated_at = now
-        self.repository.save_project(document)
+        if persist:
+            self.repository.save_project(document)
         return AssetPlanMutationResponse(
             asset_plan=merged,
             document=result.document,
@@ -10174,12 +10206,14 @@ class ShortDramaService:
         changed_shot_ids: list[str],
         *,
         updated_at: str,
+        mark_takes: bool = True,
     ) -> None:
         if changed_shot_ids:
-            self.repository.mark_takes_stale(
-                project_document.project.id,
-                changed_shot_ids,
-            )
+            if mark_takes:
+                self.repository.mark_takes_stale(
+                    project_document.project.id,
+                    changed_shot_ids,
+                )
             self._invalidate_current_manifests(project_document)
         self._invalidate_asset_plan_locked(
             project_document,
@@ -11091,6 +11125,14 @@ class ShortDramaService:
     ) -> ReferencePackEntryMutationResponse:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            return self._add_reference_pack_entry_document(document, request, persist=True)
+
+    def _add_reference_pack_entry_document(
+        self, document: ProjectDocument, request: ReferencePackEntryCreateRequest, *, persist: bool = False, preserve_existing: bool = False,
+    ) -> ReferencePackEntryMutationResponse:
+        """Apply validated content to one document; callers may commit the combined edit."""
+        with self._lock:
+            project_id = document.project.id
             subject = self._require_asset_in_document(document, request.subject_asset_id)
             if subject.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
                 raise WorkflowConflictError(
@@ -11198,6 +11240,13 @@ class ShortDramaService:
                 )
                 pack.entries.append(entry)
             else:
+                if preserve_existing:
+                    if (existing.lineage_root_version_id != lineage_root_version_id
+                            or existing.tags != normalized_tags
+                            or existing.description != request.description.strip()
+                            or existing.priority != request.priority):
+                        raise WorkflowConflictError("Reference entry already has different saved content: " + existing.id)
+                    return ReferencePackEntryMutationResponse(pack=pack, entry=existing, project=self._aggregate(document))
                 existing.lineage_root_version_id = lineage_root_version_id
                 existing.tags = normalized_tags
                 existing.description = request.description.strip()
@@ -11205,7 +11254,8 @@ class ShortDramaService:
                 entry = existing
             pack.updated_at = now
             document.project.updated_at = now
-            self.repository.save_project(document)
+            if persist:
+                self.repository.save_project(document)
             return ReferencePackEntryMutationResponse(
                 pack=pack,
                 entry=entry,
