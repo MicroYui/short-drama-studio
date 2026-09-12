@@ -6585,9 +6585,15 @@ export interface components {
             candidate_id?: string | null;
             /** Generation Unit Id */
             generation_unit_id?: string | null;
-            /** Media Inputs */
+            /**
+             * Media Inputs
+             * @description Ordered authored media for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.
+             */
             media_inputs?: components["schemas"]["H3MediaInput"][] | null;
-            /** Prompt Override */
+            /**
+             * Prompt Override
+             * @description Exact compiled prompt for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.
+             */
             prompt_override?: string | null;
             /** Reference Selection Candidate Ids */
             reference_selection_candidate_ids?: string[] | null;

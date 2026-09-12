@@ -10706,6 +10706,7 @@
                 "type": "null"
               }
             ],
+            "description": "Ordered authored media for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.",
             "title": "Media Inputs"
           },
           "prompt_override": {
@@ -10719,6 +10720,7 @@
                 "type": "null"
               }
             ],
+            "description": "Exact compiled prompt for an explicit generation_unit_id + candidate_id. Not supported by a shot_id-only directive.",
             "title": "Prompt Override"
           },
           "reference_selection_candidate_ids": {

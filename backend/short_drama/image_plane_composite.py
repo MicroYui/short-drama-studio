@@ -10,13 +10,26 @@ from typing import Literal
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 from pydantic import Field, model_validator
 
-from short_drama.image_regions import MAX_SOURCE_PIXELS
+from short_drama.image_models import ImageRegion
+from short_drama.image_regions import MAX_SOURCE_PIXELS, region_box
 from short_drama.models import DomainModel
 
 
 class ImagePlanePoint(DomainModel):
     x: float = Field(ge=0, le=1, description="Visible upright image coordinate: left=0, right=1.")
     y: float = Field(ge=0, le=1, description="Visible upright image coordinate: top=0, bottom=1.")
+
+
+class ImagePlanePaperInk(DomainModel):
+    blank_sample: ImageRegion = Field(description="Actually observed blank, opaque area of the same source paper, in upright SOURCE coordinates. Used to measure residual paper noise, not invent a white point; may be outside source_quad. Do not sample ink, watermarks, shadows crossing a paper edge, or background.")
+    background_window_px: int = Field(default=31, ge=3, le=255, strict=True,
+        description="Odd local background window in actual source pixels. Choose larger than ink strokes but smaller than lighting changes; 31 is a starting value, not scale independent. Normalization can remove faint pencil, watermarks and weak gray/color detail; inspect the result.")
+
+    @model_validator(mode="after")
+    def odd_window(self) -> ImagePlanePaperInk:
+        if self.background_window_px % 2 == 0:
+            raise ValueError("background_window_px must be odd")
+        return self
 
 
 class ImagePlaneLayer(DomainModel):
@@ -29,9 +42,13 @@ class ImagePlaneLayer(DomainModel):
         description="replace covers existing pixels with source pixels/alpha, including their lighting. multiply adds dark ink onto an already blank lit surface; it cannot erase old text. Neither mode infers shadows, removes old paper outside the plane, or repairs foreground hands.")
     source_white_point: int | None = Field(default=None, ge=1, le=255, strict=True,
         description="Optional photographic-paper white point from an observed blank source area (1–255). None preserves source RGB; otherwise RGB=min(255, round(channel*255/value)), alpha unchanged. Use only when source paper gray interferes, usually with multiply on a blank base. Keeps original ink geometry, but light ink/color can weaken or clip; inspect handwriting, red edits and fine lines. No automatic value.")
+    paper_ink: ImagePlanePaperInk | None = Field(default=None,
+        description="Optional photographic-paper illumination removal: estimate local source paper, divide RGB by that background and subtract measured blank-sample noise, then multiply the existing ink onto the target's lighting. Preserves alpha and ink positions, changes RGB; not suitable for general photographs or faint detail. Requires multiply and no source_white_point. Does not erase target ink.")
 
     @model_validator(mode="after")
     def coherent_corners(self) -> ImagePlaneLayer:
+        if self.paper_ink is not None and (self.blend_mode != "multiply" or self.source_white_point is not None):
+            raise ValueError("paper_ink requires blend_mode=multiply and source_white_point omitted/null")
         source = _points(self.source_quad or _full_quad())
         target = _points(self.target_quad)
         source_area = _convex_area(source, "source_quad")
@@ -52,12 +69,43 @@ class ImagePlaneProtectedRegion(DomainModel):
         return self
 
 
+class ImagePlanePaperCleanupRegion(DomainModel):
+    polygon: list[ImagePlanePoint] = Field(min_length=3, max_length=20,
+        description="Actually observed old printed ink/lines on a flat target paper to replace, in upright BASE coordinates. Only dark marks inside this polygon AND target planes, minus protected_regions, may change. Do not include fingers, contact shadows, paper edges, or required original content.")
+    label: str = Field(min_length=1, max_length=160)
+
+    @model_validator(mode="after")
+    def valid_polygon(self) -> ImagePlanePaperCleanupRegion:
+        _validate_polygon(_points(self.polygon), "paper cleanup region")
+        return self
+
+
+class ImagePlanePaperCleanup(DomainModel):
+    regions: list[ImagePlanePaperCleanupRegion] = Field(min_length=1, max_length=16)
+    background_window_px: int = Field(default=13, ge=3, le=255, strict=True,
+        description="Odd window in actual BASE pixels, larger than the old thin ink strokes. Finds dark marks by local closing (difference >5/255), adds a bounded 1px fringe and restores only those pixels from neighbors with Telea radius 3px. Not a whole-surface fill or a general object eraser.")
+
+    @model_validator(mode="after")
+    def odd_window(self) -> ImagePlanePaperCleanup:
+        if self.background_window_px % 2 == 0:
+            raise ValueError("background_window_px must be odd")
+        return self
+
+
 class AssetImagePlaneCompositeRequest(DomainModel):
     base_asset_version_id: str = Field(min_length=1, description="Exact existing base image whose visible pixels and foreground were inspected.")
     layers: list[ImagePlaneLayer] = Field(min_length=1, max_length=8,
         description="Apply in order, later layers above earlier ones. Flat content only; inspect source/base corners and lighting before choosing a mode.")
     protected_regions: list[ImagePlaneProtectedRegion] = Field(default_factory=list[ImagePlaneProtectedRegion], max_length=16)
+    target_paper_cleanup: ImagePlanePaperCleanup | None = Field(default=None,
+        description="Optional explicit replacement of observed old printed marks on target paper before all layers. Use only where surrounding paper is visible and recoverable; never automatic. Restrained to planes receiving paper_ink, requested regions and opaque base pixels, excluding protection. Omit for a blank target. Still inspect text, paper tone and foreground in the new candidate.")
     descriptor: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def cleanup_has_paper_layer(self) -> AssetImagePlaneCompositeRequest:
+        if self.target_paper_cleanup is not None and not any(layer.paper_ink is not None for layer in self.layers):
+            raise ValueError("target_paper_cleanup requires at least one paper_ink layer")
+        return self
 
 
 def _full_quad() -> list[ImagePlanePoint]:
@@ -118,10 +166,21 @@ def validate_plane_composite_geometry(
         if source_size is None:
             raise ValueError(f"Missing actual source image size for {layer.source_asset_version_id}")
         size_ok(source_size, layer.source_asset_version_id)
+        if layer.paper_ink is not None:
+            if layer.paper_ink.background_window_px > min(source_size):
+                raise ValueError("paper_ink background_window_px exceeds the actual source dimensions")
+            left, top, right, bottom = region_box(layer.paper_ink.blank_sample, *source_size)
+            if (right - left) * (bottom - top) < 16:
+                raise ValueError("paper_ink blank_sample must include at least 16 actual pixels")
         for label, quad, size in (("source_quad", layer.source_quad or _full_quad(), source_size), ("target_quad", layer.target_quad, base_size)):
             _convex_area([(float(x), float(y)) for x, y in _pixel_points(quad, size)], f"{label} at actual pixel resolution")
     for region in request.protected_regions:
         _validate_polygon([(float(x), float(y)) for x, y in _pixel_points(region.polygon, base_size)], "protected region at actual pixel resolution")
+    if request.target_paper_cleanup is not None:
+        if request.target_paper_cleanup.background_window_px > min(base_size):
+            raise ValueError("target_paper_cleanup background_window_px exceeds the actual base dimensions")
+        for region in request.target_paper_cleanup.regions:
+            _validate_polygon([(float(x), float(y)) for x, y in _pixel_points(region.polygon, base_size)], "paper cleanup region at actual pixel resolution")
 
 
 def _solve(matrix: list[list[float]], values: list[float]) -> list[float]:
@@ -232,9 +291,30 @@ def render_plane_composite(
         for region in request.protected_regions:
             ImageDraw.Draw(protected).polygon(_pixel_points(region.polygon, base.size), fill=255)
         result = images.enter_context(base.copy())
+        if request.target_paper_cleanup is not None:
+            from short_drama.image_paper import clean_target_paper
+
+            cleanup = request.target_paper_cleanup
+            planes = images.enter_context(Image.new("L", base.size))
+            for layer in request.layers:
+                if layer.paper_ink is not None:
+                    ImageDraw.Draw(planes).polygon(_pixel_points(layer.target_quad, base.size), fill=255)
+            selected = images.enter_context(Image.new("L", base.size))
+            for region in cleanup.regions:
+                ImageDraw.Draw(selected).polygon(_pixel_points(region.polygon, base.size), fill=255)
+            allowed_planes = images.enter_context(ImageChops.subtract(planes, protected))
+            allowed_cleanup = images.enter_context(ImageChops.multiply(selected, allowed_planes))
+            if allowed_cleanup.getbbox() is None:
+                raise ValueError("target_paper_cleanup has no pixels inside paper_ink target planes outside protected_regions")
+            result = images.enter_context(clean_target_paper(base, allowed_cleanup, cleanup.background_window_px))
         for layer in request.layers:
             with ExitStack() as temporary:
                 source = sources[layer.source_asset_version_id]
+                if layer.paper_ink is not None:
+                    from short_drama.image_paper import normalize_paper_ink
+
+                    source = temporary.enter_context(normalize_paper_ink(source,
+                        region_box(layer.paper_ink.blank_sample, *source.size), layer.paper_ink.background_window_px))
                 # Clip the source plane too: bicubic sampling must not pull photographic background into its boundary.
                 source_mask = temporary.enter_context(Image.new("L", source.size))
                 ImageDraw.Draw(source_mask).polygon(_pixel_points(layer.source_quad or _full_quad(), source.size), fill=255)
