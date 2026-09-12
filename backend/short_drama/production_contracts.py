@@ -3343,8 +3343,17 @@ class ProductionSpecReadResponse(DomainModel):
     output_slot: ProjectOutputSlot | None = None
 
 
+class SavedProjectProductionSettings(DomainModel):
+    """Project fields actually saved with a ProductionSpec, not request intent."""
+
+    id: str = Field(min_length=1)
+    language: str
+    aspect_ratio: str
+    target_duration_seconds: float
+
+
 class ProductionSpecMutationResponse(ProductionSpecReadResponse):
-    pass
+    project_settings: SavedProjectProductionSettings | None = None
 
 
 class StoryboardReadResponse(DomainModel):

@@ -1,0 +1,1559 @@
+{
+  "provenance": {
+    "source": "output/quality-e2e-2026-09-12/observations/fresh4-context-project-read-replay.json",
+    "project_id": "project-06116be431fa",
+    "selected_sequences": [
+      3,
+      4,
+      5
+    ],
+    "note": "Exact saved turns, including original old spec receipt; no Provider replay."
+  },
+  "work_order": {
+    "id": "work-order-481ef2ef2c2142d086f043c4a8012144",
+    "parent_run_id": "agent-run-1da35fafba184e80b3dd1990268e9d20",
+    "sender": "production-manager",
+    "recipient_role": "story_writer",
+    "objective": "在当前空项目中自主决定片名、两名成年主要人物、故事和台词，完成45–60秒的现实职场短剧。使用一个主要室内场景，让开头迅速显露具体矛盾，通过两人的行动与回应改变局势，转折有铺垫，结尾回收前面的信息。首稿按完整场次立即保存，不另建项目，不等待审批。同步人物、空间、必要叙事道具和真人摄影风格的文字设定，并保存下游需要的制作规格，使项目标题、语言、画幅和目标时长与本次要求一致。自查对白是否口语自然、因果是否成立，以及动作、停顿和回应是否有足够时间；发现问题直接在本次写作范围修正。本工单交付完整剧本和必要基础元数据，不开展图片或视频生成。",
+    "why_now": "当前没有可供分镜和原创图片制作使用的故事、角色或空间设定；完整短剧及其基础设定是下一步真实依赖。",
+    "task_inputs": {
+      "current_state": "当前Script与Bible为空；现有300秒为项目占位值，不是用户目标。",
+      "format": {
+        "duration_seconds_range": [
+          45,
+          60
+        ],
+        "aspect_ratio": "9:16",
+        "language": "zh-CN",
+        "visual_style": "真人摄影质感，面部与表演清楚",
+        "video_preparation_resolution": "2K"
+      },
+      "creative_scope": "现实职场；两名成年主要人物；一个主要室内场景。人物、片名、故事、对白和表现方案自主决定。",
+      "narrative_requirements": "不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。尽量让关键因果通过可拍的行动和对白成立，不将细小文字识读或复杂连续手势作为唯一理解途径。"
+    },
+    "scope": [
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "script_version",
+        "artifact_id": "project-06116be431fa-script-v1",
+        "version": 1
+      },
+      {
+        "project_id": "project-06116be431fa",
+        "artifact_type": "bible_version",
+        "artifact_id": "project-06116be431fa-bible-v1",
+        "version": 1
+      }
+    ],
+    "constraints": []
+  },
+  "turns": [
+    {
+      "id": "specialist-turn-179b86f17e5844cf927c24e84c6e99d9",
+      "sequence": 3,
+      "tool_name": "project.get",
+      "arguments": {
+        "project_id": "project-06116be431fa"
+      },
+      "reason": "完整场次和六项文字设定已保存。现在只核对项目标题、当前人物/空间身份和风格字段，以补齐台词身份绑定及制作规格；不重新创作已有正文。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "project.get",
+        "status": "SUCCEEDED",
+        "output": {
+          "document": {
+            "project": {
+              "id": "project-06116be431fa",
+              "name": "视频前完整验收 · 第四轮空项目",
+              "parent_project_id": null,
+              "episode_number": 1,
+              "episode_title": "第 1 集",
+              "source_mode": "IDEA_EXPANSION",
+              "run_mode": "AUTO_DRAFT",
+              "production_profile": "AI_SHORT_DRAMA",
+              "preferred_method_skill_ids": [],
+              "creative_direction": "",
+              "content_planning_output": "SCRIPT_AND_SHOTS",
+              "language": "zh-CN",
+              "aspect_ratio": "9:16",
+              "target_duration_seconds": 300.0,
+              "input_text": "请从这个空项目出发，创作并完成一部45–60秒、9:16竖屏、真人摄影质感短剧的视频生成前全部制作准备。现实职场题材，两名成年主要人物，一个主要室内场景；人物、故事、台词、片名和镜头由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前面的信息。对白像真人会说的话，不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面需要清楚的面部与表演，人物和空间统一，动作与对白留出自然可表演的时间。\n\n完成完整剧本、分镜、全部必要人物/场景/道具和剧情状态的原创图片、镜头所需的构图参考、正文与具体媒体的绑定，以及所有生成组可执行的视频输入和提示词路线准备。图片从零制作，不借用其他项目素材。按真实结果判断清晰度、身份、状态和输入是否满足用途；有实际问题就自主修订，保留可用结果。制作细节由你决定，无需逐步询问确认。\n\n如选定路线确实需要声音参考，也在本次资产内准备并核验，不把尚未听到的生成对白当作已验收。\n\n本次停止点是所有视频生成前准备完成。视频参数按2K、9:16准备，允许语言编译和保存生成路线，但不要创建、入队、提交或执行任何视频生成，也不要继续后期声音、剪辑或导出。准备完成后直接结束本次任务，说明已完成内容、实际图片及仍需之后视频验证的动态表现。",
+              "input_images": [],
+              "linked_asset_project_ids": [],
+              "voice_reference_revision": 0,
+              "stage": "INPUT",
+              "current_script_version_id": "project-06116be431fa-script-v2",
+              "current_bible_version_id": "project-06116be431fa-bible-v1",
+              "current_manifest_id": null,
+              "created_at": "2026-09-12T06:35:14.073+00:00",
+              "updated_at": "2026-09-12T06:40:20.645+00:00"
+            },
+            "planning": {
+              "run_id": null,
+              "status": "COMPLETE",
+              "planner": "deterministic-structure-scaffold-v3",
+              "warnings": [
+                "仅建立不补写创意的本地结构骨架；语言创作必须由 AgentRun 持有的 Content Planning Job 逐步完成。"
+              ],
+              "owner_agent_run_id": null,
+              "planning_job_kind": null
+            },
+            "script_versions": [
+              {
+                "id": "project-06116be431fa-script-v1",
+                "project_id": "project-06116be431fa",
+                "version": 1,
+                "source_mode": "IDEA_EXPANSION",
+                "original_text": "",
+                "screenplay_text": "",
+                "spoken_text": "",
+                "subtitle_text": "",
+                "lines": [],
+                "structured_scenes": [],
+                "structure_stale_scene_ids": [],
+                "review_report": null,
+                "review_disposition": null,
+                "final_cold_read_report": null,
+                "ending_contract": null,
+                "story_intent": null,
+                "source_contract": null,
+                "planning_run_id": null,
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "parent_version_id": null,
+                "change_reason": null,
+                "created_at": "2026-09-12T06:35:14.073+00:00"
+              },
+              {
+                "id": "project-06116be431fa-script-v2",
+                "project_id": "project-06116be431fa",
+                "version": 2,
+                "source_mode": "IDEA_EXPANSION",
+                "original_text": "第1场｜内景·设计公司小会议室·日\n第1场｜内景·设计公司小会议室·日\n\n小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+                "screenplay_text": "第1场｜内景·设计公司小会议室·日\n第1场｜内景·设计公司小会议室·日\n\n小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+                "spoken_text": "待会儿我讲。你坐后面，记问题。\n我做的方案，能不能让我讲？\n上回客户一压价，你就慌了。\n那你现在压。\n入口要改，预算一分不加。怎么办？\n旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n拿旧的糊弄客户？\n东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n上回我没讲好。这回，让我自己讲完。\n行，这回你讲。\n那问题……\n我记。",
+                "subtitle_text": "待会儿我讲。你坐后面，记问题。\n我做的方案，能不能让我讲？\n上回客户一压价，你就慌了。\n那你现在压。\n入口要改，预算一分不加。怎么办？\n旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n拿旧的糊弄客户？\n东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n上回我没讲好。这回，让我自己讲完。\n行，这回你讲。\n那问题……\n我记。",
+                "lines": [
+                  {
+                    "id": "line-qiantai-01",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "待会儿我讲。你坐后面，记问题。",
+                    "spoken_text": "待会儿我讲。你坐后面，记问题。",
+                    "subtitle_text": "待会儿我讲。你坐后面，记问题。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-02",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "我做的方案，能不能让我讲？",
+                    "spoken_text": "我做的方案，能不能让我讲？",
+                    "subtitle_text": "我做的方案，能不能让我讲？",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-03",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "上回客户一压价，你就慌了。",
+                    "spoken_text": "上回客户一压价，你就慌了。",
+                    "subtitle_text": "上回客户一压价，你就慌了。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-04",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "那你现在压。",
+                    "spoken_text": "那你现在压。",
+                    "subtitle_text": "那你现在压。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-05",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "入口要改，预算一分不加。怎么办？",
+                    "spoken_text": "入口要改，预算一分不加。怎么办？",
+                    "subtitle_text": "入口要改，预算一分不加。怎么办？",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-06",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                    "spoken_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                    "subtitle_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-07",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "拿旧的糊弄客户？",
+                    "spoken_text": "拿旧的糊弄客户？",
+                    "subtitle_text": "拿旧的糊弄客户？",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-08",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                    "spoken_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                    "subtitle_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-09",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "上回我没讲好。这回，让我自己讲完。",
+                    "spoken_text": "上回我没讲好。这回，让我自己讲完。",
+                    "subtitle_text": "上回我没讲好。这回，让我自己讲完。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-10",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "行，这回你讲。",
+                    "spoken_text": "行，这回你讲。",
+                    "subtitle_text": "行，这回你讲。",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-11",
+                    "speaker": "周宁",
+                    "speaker_character_id": null,
+                    "original_text": "那问题……",
+                    "spoken_text": "那问题……",
+                    "subtitle_text": "那问题……",
+                    "audio_kind": "DIALOGUE"
+                  },
+                  {
+                    "id": "line-qiantai-12",
+                    "speaker": "郑川",
+                    "speaker_character_id": null,
+                    "original_text": "我记。",
+                    "spoken_text": "我记。",
+                    "subtitle_text": "我记。",
+                    "audio_kind": "DIALOGUE"
+                  }
+                ],
+                "structured_scenes": [
+                  {
+                    "id": "scene-8f377e65cf6f",
+                    "heading": "第1场｜内景·设计公司小会议室·日",
+                    "summary": "设计师周宁被组长郑川安排退居后排记问题。她主动让郑川模拟客户刁难，以旧隔断再利用、节省材料费改造入口的具体方案作答，并承认上次汇报失误、争取亲自讲完。郑川归还方案夹并让出主讲位置，自己接过笔记本，完成主讲权与记录任务的交换。",
+                    "line_ids": [
+                      "line-qiantai-01",
+                      "line-qiantai-02",
+                      "line-qiantai-03",
+                      "line-qiantai-04",
+                      "line-qiantai-05",
+                      "line-qiantai-06",
+                      "line-qiantai-07",
+                      "line-qiantai-08",
+                      "line-qiantai-09",
+                      "line-qiantai-10",
+                      "line-qiantai-11",
+                      "line-qiantai-12"
+                    ],
+                    "screenplay_text": "第1场｜内景·设计公司小会议室·日\n\n小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+                    "narrative_purpose": "在一个室内场景内完成周宁凭准备与主动争取取回主讲机会的单篇回报；郑川由替她作主转为认可并配合，末尾“我记”回收开头“你坐后面，记问题”。",
+                    "target_duration_seconds": 55.0,
+                    "entry_state": {
+                      "setting": "日间，设计公司小会议室，正式客户汇报前；室内仅两人。",
+                      "character_states": [
+                        "周宁是方案作者，准备在桌头主讲，但上次面对客户压价曾慌乱。",
+                        "郑川是她的设计组长，打算替她主讲、让她记录。"
+                      ],
+                      "prop_states": [
+                        "深蓝色方案夹原在桌头周宁的主讲位置前，开场被郑川拿走。",
+                        "浅灰色笔记本合着，开场由郑川推给周宁；黑色笔在桌面。"
+                      ],
+                      "known_facts": [
+                        "客户要求改造入口且不增加预算。",
+                        "本场争取的是汇报机会，不是已经取得客户订单。"
+                      ],
+                      "open_threads": [
+                        "周宁能否让郑川允许她亲自讲方案。"
+                      ]
+                    },
+                    "exit_state": {
+                      "setting": "同一会议室、同一连续时段；正式客户汇报尚未开始。",
+                      "character_states": [
+                        "周宁通过当场回答质疑和明确提出请求，拿回方案，坐到桌头准备主讲。",
+                        "郑川听懂并认可周宁的准备，坐到桌头旁边，接受记录任务。"
+                      ],
+                      "prop_states": [
+                        "深蓝色方案夹回到周宁手中，最后在桌头重新打开。",
+                        "浅灰色笔记本由周宁推回中间，再由郑川拿到自己面前翻开；郑川持黑色笔。",
+                        "方案内的对比页显示隔断从入口附近移到侧边，使入口敞开。"
+                      ],
+                      "known_facts": [
+                        "保留可复用的旧隔断，节约新增材料费用并将资金用于入口改造，是周宁已经准备好的解法。",
+                        "“上次没讲好”不等于这次仍不会；本场以现场试问建立郑川改口的原因。",
+                        "主讲机会已经落实给周宁；客户是否采纳未被承诺或描写。"
+                      ],
+                      "open_threads": []
+                    }
+                  }
+                ],
+                "structure_stale_scene_ids": [],
+                "review_report": null,
+                "review_disposition": null,
+                "final_cold_read_report": null,
+                "ending_contract": null,
+                "story_intent": null,
+                "source_contract": null,
+                "planning_run_id": null,
+                "approval_status": "APPROVED",
+                "freshness": "CURRENT",
+                "parent_version_id": "project-06116be431fa-script-v1",
+                "change_reason": "当前场次编辑",
+                "created_at": "2026-09-12T06:39:13.702006+00:00"
+              }
+            ],
+            "bible_versions": [
+              {
+                "id": "project-06116be431fa-bible-v1",
+                "project_id": "project-06116be431fa",
+                "version": 1,
+                "characters": [],
+                "locations": [],
+                "props": [],
+                "style": {
+                  "medium": "未指定",
+                  "genre": "未指定",
+                  "cinematography": "未指定",
+                  "color": "未指定",
+                  "texture": "未指定",
+                  "forbidden": []
+                },
+                "approval_status": "APPROVED",
+                "freshness": "CURRENT",
+                "parent_version_id": null,
+                "created_at": "2026-09-12T06:35:14.073+00:00"
+              }
+            ],
+            "assets": [
+              {
+                "id": "asset-70a7fe56fe95",
+                "project_id": "project-06116be431fa",
+                "kind": "CHARACTER",
+                "name": "周宁",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "周宁，28岁成年中国女性，项目设计师；同一场连续时段内保持同一张脸、发型和服装。",
+                  "tone_or_temperament": "认真、克制，开场受到压制但不撒气；试问时回答具体，最后带一点仍在场的紧张感，不演成夸张胜利。",
+                  "visual_attributes": [
+                    "自然鹅蛋脸，深棕眼睛，直眉，清晰但不夸张的五官",
+                    "黑色直发扎低马尾，露出额头和双眼，鬓边少量自然碎发",
+                    "身形匀称，外观明确为成年职场女性；面部保留真实皮肤纹理"
+                  ],
+                  "wardrobe_or_materials": [
+                    "浅蓝色无标识棉质衬衫，袖口规整",
+                    "深灰色直筒长裤，黑色低跟便鞋",
+                    "不佩戴显眼首饰、工牌或额外手持物"
+                  ],
+                  "background_constraints": [
+                    "唯一剧情环境为设计公司小会议室",
+                    "人物身份图采用简单中性背景，不预置正在拿方案夹或已经坐到桌头的剧情状态"
+                  ],
+                  "texture_constraints": [
+                    "真人实拍摄影质感，真实皮肤与织物，不磨皮塑料化",
+                    "自然办公日光，脸部曝光清楚"
+                  ],
+                  "continuity_anchors": [
+                    "开场手搭桌头椅背，没有接浅灰笔记本",
+                    "中段坐在桌侧面对郑川，拿方案页回答",
+                    "结尾持回深蓝方案夹，在桌头落座准备主讲",
+                    "不将角色身份参考默认当作镜头首帧"
+                  ],
+                  "named_views_or_zones": [],
+                  "presentation_mode": null,
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-e648c2c1bf94",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-e648c2c1bf94",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "28岁女性，室内设计公司的项目设计师，本方案作者。她不是突然变强，而是带着准备主动接受试问，争取自己讲完。真人摄影质感，朴素利落的日常职场穿着。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              },
+              {
+                "id": "asset-0495ce41bf01",
+                "project_id": "project-06116be431fa",
+                "kind": "CHARACTER",
+                "name": "郑川",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "郑川，38岁成年中国男性，设计组长；与周宁外观清楚区分，整场保持同一身份、发型和服装。",
+                  "tone_or_temperament": "说话简短直接，习惯先替下属安排；质疑是检验方案而非歇斯底里的羞辱。听到有效回答后有看纸、停手、再看人的可见变化，认可克制。",
+                  "visual_attributes": [
+                    "略方的脸型，短黑发侧分，深棕眼睛",
+                    "鼻梁较直，下颌轮廓清楚，无胡须，眼角少量自然纹理",
+                    "中等身材，外观明确比周宁成熟，不做老年化处理"
+                  ],
+                  "wardrobe_or_materials": [
+                    "深灰色无标识薄针织开衫，内搭米白色圆领上衣",
+                    "黑色休闲西裤和深色皮鞋",
+                    "不戴眼镜，不佩戴抢眼首饰"
+                  ],
+                  "background_constraints": [
+                    "同一设计公司小会议室，不增加老板办公室或会外人物",
+                    "人物身份图使用简单中性背景，不预置持笔或持方案夹动作"
+                  ],
+                  "texture_constraints": [
+                    "真人实拍摄影质感，保留真实皮肤、发丝和针织纹理",
+                    "清楚呈现眼神与停手后的表情变化"
+                  ],
+                  "continuity_anchors": [
+                    "开场从桌头拿走深蓝方案夹，把合着的浅灰笔记本推给周宁",
+                    "中段翻看周宁的方案对比页，准备翻页的手停住",
+                    "结尾归还方案夹，椅子往桌头侧边挪，拉回笔记本并拿黑笔",
+                    "末句“我记”是配合与让步，不讽刺周宁"
+                  ],
+                  "named_views_or_zones": [],
+                  "presentation_mode": null,
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-1d40c088335f",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-1d40c088335f",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "38岁男性，设计组长。因周宁上次汇报慌乱，开场打算替她讲；试问后认可她的准备并让出机会，结尾亲自记问题。他不是隐藏权贵，也不靠第三人改变决定。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              },
+              {
+                "id": "asset-daa7a6dea5fb",
+                "project_id": "project-06116be431fa",
+                "kind": "LOCATION",
+                "name": "设计公司小会议室",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "普通室内设计公司小会议室，约四人使用，日间连续时段；一个主要空间完成全部剧情。",
+                  "tone_or_temperament": null,
+                  "visual_attributes": [
+                    "浅木色长方形会议桌居中靠窗，深灰布面会议椅",
+                    "以桌头朝房间内侧为方向基准：窗在桌子的左侧，入口门在桌头右后方的浅灰墙上",
+                    "桌头后方为简单浅灰墙，桌头及相邻右侧位有足够活动空间",
+                    "远端只留空椅及低矮封闭储物柜，不出现其他人"
+                  ],
+                  "wardrobe_or_materials": [
+                    "浅木桌面低反光，深灰布面椅，浅灰墙面",
+                    "左侧窗有白色半透卷帘，门为无标识普通办公室门"
+                  ],
+                  "background_constraints": [
+                    "只出现周宁和郑川，不增加客户、同事、走廊人影或可辨识照片人脸",
+                    "不设置投影屏幕、视频会议或大段墙上文字作为叙事依赖",
+                    "场景空景应清楚显示桌头、邻座与窗口方位；人物和剧情道具是否进入画面由后续镜头决定"
+                  ],
+                  "texture_constraints": [
+                    "真实中小型办公空间，非豪华董事会、非未来感布景",
+                    "自然窗光配柔和室内补光，不让逆光吞掉面孔"
+                  ],
+                  "continuity_anchors": [
+                    "周宁开场在桌头椅旁，随后坐在桌侧面对郑川，结尾回到桌头",
+                    "郑川开场在桌头邻侧位置，能够伸手拿到桌头的方案夹；结尾往邻侧挪开椅子而非离开房间",
+                    "方案夹和笔记本在同一桌面流转，左右方位不随镜头任意镜像",
+                    "剧中的客户入口改造只在纸上草图出现，不是本会议室发生空间改造"
+                  ],
+                  "named_views_or_zones": [
+                    "桌头主讲位",
+                    "桌头相邻侧位与两人之间的桌面",
+                    "左侧日光窗"
+                  ],
+                  "presentation_mode": null,
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-a0902dc00137",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-a0902dc00137",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "日间的小型室内会议室，唯一剧情场景。浅木色长会议桌靠窗，桌头和相邻侧位构成两人交锋及让位的主要表演区域；不需要客户、屏幕或会外空间出镜。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              },
+              {
+                "id": "asset-ead7cce81d77",
+                "project_id": "project-06116be431fa",
+                "kind": "PROP",
+                "name": "深蓝色方案夹",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "同一个A4尺寸深蓝色硬壳方案夹，内装白色设计草图纸，整场由周宁带来、郑川拿走并翻看、最后还给周宁。",
+                  "tone_or_temperament": null,
+                  "visual_attributes": [
+                    "纯深蓝色哑光封面，薄硬壳，可自然开合",
+                    "内有一张同页左右并排的两幅大块简洁空间草图",
+                    "草图左图为入口被隔断挤窄，右图为隔断移到侧边后入口敞开",
+                    "示意采用黑灰线条及少量淡蓝色隔断块面，不依赖细小标签、数字或精确文字"
+                  ],
+                  "wardrobe_or_materials": [
+                    "哑光硬质封皮，普通白纸，无金属高反光大装饰"
+                  ],
+                  "background_constraints": [
+                    "是人物手中真实实物，不是悬浮界面或画面字幕",
+                    "不增加合同、奖状、客户签字或订单结果"
+                  ],
+                  "texture_constraints": [
+                    "真实纸张与封皮质感，尺寸适合普通人单手递还、双手展开"
+                  ],
+                  "continuity_anchors": [
+                    "初始在桌头周宁的主讲位前；郑川拿到自己面前",
+                    "试问时摊在两人之间，周宁将对比页转给郑川看并只点一下新入口",
+                    "郑川合上后交还；周宁最后在桌头重新打开",
+                    "理解解法主要依靠完整对白与人物回应，草图为辅助，不能强迫观众识读细字"
+                  ],
+                  "named_views_or_zones": [],
+                  "presentation_mode": "PHYSICAL_MASTER",
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-51b9fec0cc1b",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-51b9fec0cc1b",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "周宁带来的A4深蓝色硬壳方案夹，无品牌无大字标题。内含一页入口改造前后空间草图，承担方案能力可见化与主讲权归还的动作。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              },
+              {
+                "id": "asset-b68e9deed733",
+                "project_id": "project-06116be431fa",
+                "kind": "PROP",
+                "name": "浅灰色笔记本",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "同一本A5浅灰色软质封面笔记本，外观与深蓝方案夹明显不同，不是电脑。",
+                  "tone_or_temperament": null,
+                  "visual_attributes": [
+                    "浅灰色纯色封面，无品牌和文字",
+                    "内页米白色，可有很淡的横线，没有必须读出的文字"
+                  ],
+                  "wardrobe_or_materials": [
+                    "普通纸本，柔和哑光封面"
+                  ],
+                  "background_constraints": [
+                    "不加入客户提问清单、复杂笔迹或必读字样"
+                  ],
+                  "texture_constraints": [
+                    "真实书脊和纸页，尺寸与手部自然匹配"
+                  ],
+                  "continuity_anchors": [
+                    "开场合着，被郑川推向周宁；周宁不接、不打开",
+                    "周宁再次争取时把仍合着的本子推回桌子中间",
+                    "结尾郑川将它拉到自己面前翻开，准备记录但不必实际写字"
+                  ],
+                  "named_views_or_zones": [],
+                  "presentation_mode": "PHYSICAL_MASTER",
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-09c268845a48",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-09c268845a48",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "一本无标识的A5浅灰色笔记本。开场被推给周宁，后被她推回桌子中间，结尾由郑川拉回打开，回收“记问题”的任务交换。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              },
+              {
+                "id": "asset-2a1b366e7ca1",
+                "project_id": "project-06116be431fa",
+                "kind": "PROP",
+                "name": "黑色签字笔",
+                "bible_entity_id": null,
+                "brief": {
+                  "identity_anchor": "同一支普通黑色按动签字笔，无拆卸笔帽动作，不增加复杂连续手势。",
+                  "tone_or_temperament": null,
+                  "visual_attributes": [
+                    "纯黑色细长笔杆，普通尺寸，小型笔夹，无可读品牌"
+                  ],
+                  "wardrobe_or_materials": [
+                    "低反光黑色塑料笔杆"
+                  ],
+                  "background_constraints": [
+                    "结尾只需清楚持笔准备，不要求可读书写或笔尖特写"
+                  ],
+                  "texture_constraints": [
+                    "真实办公用品质感，不变成钢笔、触屏笔或高亮金属道具"
+                  ],
+                  "continuity_anchors": [
+                    "开场在浅灰笔记本附近的桌面上",
+                    "中段保持在桌面，不由周宁携带",
+                    "结尾郑川翻开本子后拿起，最后由郑川持有"
+                  ],
+                  "named_views_or_zones": [],
+                  "presentation_mode": "PHYSICAL_MASTER",
+                  "required_visible_text": [],
+                  "reference_strategy": "LIGHTWEIGHT",
+                  "layout_profile": "LIGHTWEIGHT_SINGLE",
+                  "requested_views": [],
+                  "strategy_rationale": null
+                },
+                "current_version_id": "asset-version-76e26d2c485c",
+                "approved_version_id": null,
+                "versions": [
+                  {
+                    "id": "asset-version-76e26d2c485c",
+                    "version": 1,
+                    "origin_type": "MANUAL",
+                    "descriptor": "一支普通无标识黑色按动签字笔，开场放在桌面，结尾郑川拿起，为“我记”提供清楚的可见动作。",
+                    "media_type": "TEXT_REFERENCE",
+                    "local_path": null,
+                    "external_url": null,
+                    "mime_type": null,
+                    "width": null,
+                    "height": null,
+                    "duration_seconds": null,
+                    "file_size_bytes": null,
+                    "parent_version_id": null,
+                    "image_task_id": null,
+                    "derivation_references": [],
+                    "reference_sheet": null,
+                    "image_crop": null,
+                    "text_plate": null,
+                    "source": {
+                      "source_type": "MANUAL",
+                      "source_label": "用户创建的资产说明",
+                      "source_uri": null,
+                      "original_filename": null,
+                      "provider": null,
+                      "provider_asset_id": null,
+                      "creator": null,
+                      "creator_uri": null,
+                      "license_name": null,
+                      "license_uri": null,
+                      "attribution": null,
+                      "stock_import_mode": null,
+                      "model": null,
+                      "prompt": null,
+                      "created_at": "2026-09-12T06:40:20.645+00:00"
+                    },
+                    "approval_status": "DRAFT",
+                    "review_notes": null,
+                    "freshness": "CURRENT",
+                    "created_at": "2026-09-12T06:40:20.645+00:00"
+                  }
+                ]
+              }
+            ],
+            "shots": [],
+            "execution_plan": [],
+            "reference_plan": [],
+            "manifests": [],
+            "editorial_timeline": null,
+            "studio_exports": [],
+            "studio_changes": [],
+            "comfy_workflows": [],
+            "trace_sources": [],
+            "reference_packs": [],
+            "voice_references": [],
+            "repair_history": [],
+            "production_documents": [],
+            "master_audio_document_id": null,
+            "audio_structure_document_id": null,
+            "timed_text_document_id": null,
+            "production_spec_document_id": null,
+            "storyboard_document_id": null,
+            "asset_plan_document_id": null,
+            "generation_plan_document_id": null,
+            "output_slots": []
+          },
+          "tasks": [],
+          "takes": [],
+          "exports": [],
+          "route_evidence": [],
+          "video_inspections": [],
+          "take_comparisons": [],
+          "audio_inspections": [],
+          "episode_reviews": [],
+          "progress": {
+            "total_shots": 0,
+            "shots_with_selected_take": 0,
+            "total_tasks": 0,
+            "terminal_tasks": 0,
+            "failed_tasks": 0,
+            "unresolved_tasks": 0,
+            "passed_takes": 0,
+            "stale_takes": 0,
+            "manifest_ready": false,
+            "export_ready": false
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "project",
+            "artifact_id": "project-06116be431fa",
+            "version": null
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T06:40:37.070353Z",
+      "updated_at": "2026-09-12T06:40:37.203127Z"
+    },
+    {
+      "id": "specialist-turn-4e4ad8b374d94bb994592cb216684c4c",
+      "sequence": 4,
+      "tool_name": "script.save_scene",
+      "arguments": {
+        "project_id": "project-06116be431fa",
+        "request": {
+          "scene_id": "scene-8f377e65cf6f",
+          "heading": "第1场｜内景·设计公司小会议室·日",
+          "expected_text": "第1场｜内景·设计公司小会议室·日\n\n小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+          "screenplay_text": "小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+          "lines": [
+            {
+              "id": "line-qiantai-01",
+              "speaker": "郑川",
+              "original_text": "待会儿我讲。你坐后面，记问题。",
+              "spoken_text": "待会儿我讲。你坐后面，记问题。",
+              "subtitle_text": "待会儿我讲。你坐后面，记问题。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-02",
+              "speaker": "周宁",
+              "original_text": "我做的方案，能不能让我讲？",
+              "spoken_text": "我做的方案，能不能让我讲？",
+              "subtitle_text": "我做的方案，能不能让我讲？",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-03",
+              "speaker": "郑川",
+              "original_text": "上回客户一压价，你就慌了。",
+              "spoken_text": "上回客户一压价，你就慌了。",
+              "subtitle_text": "上回客户一压价，你就慌了。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-04",
+              "speaker": "周宁",
+              "original_text": "那你现在压。",
+              "spoken_text": "那你现在压。",
+              "subtitle_text": "那你现在压。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-05",
+              "speaker": "郑川",
+              "original_text": "入口要改，预算一分不加。怎么办？",
+              "spoken_text": "入口要改，预算一分不加。怎么办？",
+              "subtitle_text": "入口要改，预算一分不加。怎么办？",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-06",
+              "speaker": "周宁",
+              "original_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+              "spoken_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+              "subtitle_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-07",
+              "speaker": "郑川",
+              "original_text": "拿旧的糊弄客户？",
+              "spoken_text": "拿旧的糊弄客户？",
+              "subtitle_text": "拿旧的糊弄客户？",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-08",
+              "speaker": "周宁",
+              "original_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+              "spoken_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+              "subtitle_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-09",
+              "speaker": "周宁",
+              "original_text": "上回我没讲好。这回，让我自己讲完。",
+              "spoken_text": "上回我没讲好。这回，让我自己讲完。",
+              "subtitle_text": "上回我没讲好。这回，让我自己讲完。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-10",
+              "speaker": "郑川",
+              "original_text": "行，这回你讲。",
+              "spoken_text": "行，这回你讲。",
+              "subtitle_text": "行，这回你讲。",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-11",
+              "speaker": "周宁",
+              "original_text": "那问题……",
+              "spoken_text": "那问题……",
+              "subtitle_text": "那问题……",
+              "audio_kind": "DIALOGUE"
+            },
+            {
+              "id": "line-qiantai-12",
+              "speaker": "郑川",
+              "original_text": "我记。",
+              "spoken_text": "我记。",
+              "subtitle_text": "我记。",
+              "audio_kind": "DIALOGUE"
+            }
+          ],
+          "target_duration_seconds": 55,
+          "affected_shot_ids": []
+        }
+      },
+      "reason": "第1场与人物道具设定已经保存。整理当前正文中重复的场次标题，保留全部对白、动作和已建立的因果，随后保存55秒的制作规格。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "script.save_scene",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-06116be431fa",
+          "scene_ids": [
+            "scene-8f377e65cf6f"
+          ],
+          "shot_ids": [],
+          "notices": [
+            "剧本及本次明确关联的场次已保存；相关镜头保留。下一次制作前由 Agent 按当前正文同步台词与分镜。"
+          ],
+          "shot_revisions": {},
+          "editorial_revision": null,
+          "timeline_id": null,
+          "changed_shot_ids": [],
+          "changed_scene_ids": [
+            "scene-8f377e65cf6f"
+          ],
+          "script_ref": {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "script_version",
+            "artifact_id": "project-06116be431fa-script-v3",
+            "version": 3
+          },
+          "saved_scenes": [
+            {
+              "scene": {
+                "id": "scene-8f377e65cf6f",
+                "heading": "第1场｜内景·设计公司小会议室·日",
+                "summary": "设计师周宁被组长郑川安排退居后排记问题。她主动让郑川模拟客户刁难，以旧隔断再利用、节省材料费改造入口的具体方案作答，并承认上次汇报失误、争取亲自讲完。郑川归还方案夹并让出主讲位置，自己接过笔记本，完成主讲权与记录任务的交换。",
+                "line_ids": [
+                  "line-qiantai-01",
+                  "line-qiantai-02",
+                  "line-qiantai-03",
+                  "line-qiantai-04",
+                  "line-qiantai-05",
+                  "line-qiantai-06",
+                  "line-qiantai-07",
+                  "line-qiantai-08",
+                  "line-qiantai-09",
+                  "line-qiantai-10",
+                  "line-qiantai-11",
+                  "line-qiantai-12"
+                ],
+                "screenplay_text": "小会议室内，只有周宁（28岁，项目设计师）和郑川（38岁，设计组长）。浅木色会议桌靠窗。桌头的主讲位置前，摆着周宁带来的深蓝色方案夹；旁边是一本浅灰色笔记本和一支黑色笔。\n\n周宁刚拉开桌头的椅子，郑川便把方案夹拿到自己面前，将合着的笔记本推向她。\n\n郑川：待会儿我讲。你坐后面，记问题。\n\n周宁没有接笔记本，手仍搭在椅背上。\n\n周宁：我做的方案，能不能让我讲？\n\n郑川翻开方案夹。\n\n郑川：上回客户一压价，你就慌了。\n\n周宁松开椅背，在桌侧坐下，正对着他。\n\n周宁：那你现在压。\n\n郑川抬眼，把方案夹摊在两人之间。\n\n郑川：入口要改，预算一分不加。怎么办？\n\n周宁：旧隔断别扔，挪过去用。省下的材料钱，正好改入口。\n\n郑川：拿旧的糊弄客户？\n\n周宁翻开方案夹里的对比示意页，将纸面转向郑川。纸上是两幅简洁的空间草图：一幅入口被隔断挤窄，一幅隔断移到侧边，入口敞开。她只在新入口处点了一下。\n\n周宁：东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。\n\n郑川看着纸面，原本搭在页角、准备翻页的手停住。他再看周宁。\n\n周宁将一直没打开的笔记本推回桌子中间。\n\n周宁：上回我没讲好。这回，让我自己讲完。\n\n短暂停顿。郑川合上方案夹，交还给她，把自己的椅子往桌头旁边挪开，给主讲位置让出空间。\n\n郑川：行，这回你讲。\n\n周宁拿着方案夹起身，目光落在桌子中间的笔记本上。\n\n周宁：那问题……\n\n郑川把笔记本拉到自己面前，翻开，拿起黑色笔。\n\n郑川：我记。\n\n周宁在桌头坐下，重新打开自己的方案夹。她轻轻吸一口气，抬眼；郑川坐在旁边，笔已备好。\n\n结束。",
+                "narrative_purpose": "在一个室内场景内完成周宁凭准备与主动争取取回主讲机会的单篇回报；郑川由替她作主转为认可并配合，末尾“我记”回收开头“你坐后面，记问题”。",
+                "target_duration_seconds": 55.0,
+                "entry_state": {
+                  "setting": "日间，设计公司小会议室，正式客户汇报前；室内仅两人。",
+                  "character_states": [
+                    "周宁是方案作者，准备在桌头主讲，但上次面对客户压价曾慌乱。",
+                    "郑川是她的设计组长，打算替她主讲、让她记录。"
+                  ],
+                  "prop_states": [
+                    "深蓝色方案夹原在桌头周宁的主讲位置前，开场被郑川拿走。",
+                    "浅灰色笔记本合着，开场由郑川推给周宁；黑色笔在桌面。"
+                  ],
+                  "known_facts": [
+                    "客户要求改造入口且不增加预算。",
+                    "本场争取的是汇报机会，不是已经取得客户订单。"
+                  ],
+                  "open_threads": [
+                    "周宁能否让郑川允许她亲自讲方案。"
+                  ]
+                },
+                "exit_state": {
+                  "setting": "同一会议室、同一连续时段；正式客户汇报尚未开始。",
+                  "character_states": [
+                    "周宁通过当场回答质疑和明确提出请求，拿回方案，坐到桌头准备主讲。",
+                    "郑川听懂并认可周宁的准备，坐到桌头旁边，接受记录任务。"
+                  ],
+                  "prop_states": [
+                    "深蓝色方案夹回到周宁手中，最后在桌头重新打开。",
+                    "浅灰色笔记本由周宁推回中间，再由郑川拿到自己面前翻开；郑川持黑色笔。",
+                    "方案内的对比页显示隔断从入口附近移到侧边，使入口敞开。"
+                  ],
+                  "known_facts": [
+                    "保留可复用的旧隔断，节约新增材料费用并将资金用于入口改造，是周宁已经准备好的解法。",
+                    "“上次没讲好”不等于这次仍不会；本场以现场试问建立郑川改口的原因。",
+                    "主讲机会已经落实给周宁；客户是否采纳未被承诺或描写。"
+                  ],
+                  "open_threads": []
+                }
+              },
+              "lines": [
+                {
+                  "id": "line-qiantai-01",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "待会儿我讲。你坐后面，记问题。",
+                  "spoken_text": "待会儿我讲。你坐后面，记问题。",
+                  "subtitle_text": "待会儿我讲。你坐后面，记问题。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-02",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "我做的方案，能不能让我讲？",
+                  "spoken_text": "我做的方案，能不能让我讲？",
+                  "subtitle_text": "我做的方案，能不能让我讲？",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-03",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "上回客户一压价，你就慌了。",
+                  "spoken_text": "上回客户一压价，你就慌了。",
+                  "subtitle_text": "上回客户一压价，你就慌了。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-04",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "那你现在压。",
+                  "spoken_text": "那你现在压。",
+                  "subtitle_text": "那你现在压。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-05",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "入口要改，预算一分不加。怎么办？",
+                  "spoken_text": "入口要改，预算一分不加。怎么办？",
+                  "subtitle_text": "入口要改，预算一分不加。怎么办？",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-06",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                  "spoken_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                  "subtitle_text": "旧隔断别扔，挪过去用。省下的材料钱，正好改入口。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-07",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "拿旧的糊弄客户？",
+                  "spoken_text": "拿旧的糊弄客户？",
+                  "subtitle_text": "拿旧的糊弄客户？",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-08",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                  "spoken_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                  "subtitle_text": "东西没坏。把门口让宽，人就不用挤着进了。他们要的是好用。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-09",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "上回我没讲好。这回，让我自己讲完。",
+                  "spoken_text": "上回我没讲好。这回，让我自己讲完。",
+                  "subtitle_text": "上回我没讲好。这回，让我自己讲完。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-10",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "行，这回你讲。",
+                  "spoken_text": "行，这回你讲。",
+                  "subtitle_text": "行，这回你讲。",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-11",
+                  "speaker": "周宁",
+                  "speaker_character_id": null,
+                  "original_text": "那问题……",
+                  "spoken_text": "那问题……",
+                  "subtitle_text": "那问题……",
+                  "audio_kind": "DIALOGUE"
+                },
+                {
+                  "id": "line-qiantai-12",
+                  "speaker": "郑川",
+                  "speaker_character_id": null,
+                  "original_text": "我记。",
+                  "spoken_text": "我记。",
+                  "subtitle_text": "我记。",
+                  "audio_kind": "DIALOGUE"
+                }
+              ],
+              "structure_stale": false
+            }
+          ]
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "script_version",
+            "artifact_id": "project-06116be431fa-script-v3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "script_version",
+              "artifact_id": "project-06116be431fa-script-v3",
+              "version": 3
+            }
+          ],
+          "current_state": {
+            "project_id": "project-06116be431fa",
+            "shot_revisions": {},
+            "editorial_revision": null,
+            "timeline_id": null
+          },
+          "changed_ids": {
+            "changed_shot_ids": [],
+            "changed_scene_ids": [
+              "scene-8f377e65cf6f"
+            ]
+          }
+        }
+      },
+      "requested_at": "2026-09-12T06:41:27.907060Z",
+      "updated_at": "2026-09-12T06:41:28.048251Z"
+    },
+    {
+      "id": "specialist-turn-2755809db0fe47b6a91e85febebd1ef0",
+      "sequence": 5,
+      "tool_name": "artifact.create_production_spec",
+      "arguments": {
+        "project_id": "project-06116be431fa",
+        "request": {
+          "origin": "AGENT",
+          "spec": {
+            "project_id": "project-06116be431fa",
+            "script_version_id": "project-06116be431fa-script-v3",
+            "bible_version_id": "project-06116be431fa-bible-v1",
+            "title": "这回你讲",
+            "production_scope": "完成本集视频生成前的全部制作准备：完整剧本、分镜、必要人物/场景/道具及剧情状态的原创图片、镜头构图参考、正文与具体媒体绑定，以及覆盖所有生成组的可执行输入与已保存提示词路线。图片从本项目零起制作，不借用其他项目素材。允许编译和保存路线及明确enqueue=false的准备；禁止创建、入队、提交或执行视频任务或探针，不进行后期声音、剪辑、导出。本编剧工单仅完成剧本、文字设定和制作规格，媒体制作交由后续分工。",
+            "production_mode": "中文现实职场短剧，真人摄影质感，竖屏；两名成年主要人物，一个主要室内场景，连续时空内完成一次关系与主讲权的改变。",
+            "genre_and_setting": "《这回你讲》：日间，设计公司小会议室，正式客户汇报前。28岁项目设计师周宁想亲自讲自己的方案，38岁设计组长郑川因她上次应对压价失误而准备替她主讲。周宁主动要求模拟质疑，用已准备的旧隔断再利用方案回应，争取到主讲机会；郑川归还方案、让出位置并接下记录任务。客户不出场，不新增第三人解决冲突。",
+            "language": "zh-CN",
+            "aspect_ratio": "9:16",
+            "target_duration_seconds": 55,
+            "duration_intent": "用户要求45–60秒，按55秒准备。依据12句对白的自然表达、两人回应及递夹、推本、让位等简单动作，制作估算约52–58秒；动作可与相关对白自然重叠，但改口前的停顿及末尾“我记”的回应必须保留。这不是实际生成表演或声音的实测时长。",
+            "duration_contract": {
+              "target_seconds": 55,
+              "target_origin": "USER_DECLARED",
+              "authority": "TARGET_LED",
+              "acceptable_range_seconds": {
+                "minimum_seconds": 45,
+                "maximum_seconds": 60
+              },
+              "source_fidelity_policy": "PRESERVE_STORY_COMMITMENTS",
+              "mismatch_resolution": "REVISE_SCRIPT",
+              "decision_basis": "45–60秒来自本次用户明确要求；55秒是该区间内的制作目标。项目旧值300秒为占位值，不能作为时长依据。以当前正文中的完整对白、动作与听者回应估算，后续不能通过机械加速对白或取消关键反应强行达标。若实际准备显示明显超时，应定向精简重复动作，保留主动试问、具体作答、归还方案和记录任务交换的因果。",
+              "rhythm_shape": [],
+              "user_overridable": true
+            },
+            "visual": {
+              "medium_lock": "真人摄影质感；成年人物的真实肤质、清楚面部和可辨认表演优先，不采用动画、插画或夸张美颜风格。",
+              "style_brief": [
+                "克制、可信的现代设计公司职场日常，冲突来自主讲机会被接管，不靠夸张反派、身份反转或第三人宣布结果。",
+                "以清楚的面部、目光和对方的可见回应承载关系变化；构图应容纳当下必要的手与桌面动作，避免全程只拍道具。",
+                "人物外形与服装、会议室布局及物品材质以六项已保存资产的当前brief为依据，后续图片与镜头沿用同一套锚点。",
+                "浅木会议桌靠窗，桌头是主讲位置；深蓝方案夹与浅灰笔记本形成容易分辨的叙事物件。",
+                "对比示意页只辅助理解：旧布局入口拥挤，新布局隔断移到侧边、入口敞开。主要因果由周宁完整对白和郑川回应承担，不要求观众识读细小文字。"
+              ],
+              "color_palette": [
+                "柔和日光与自然肤色",
+                "浅木色、暖灰色的办公室环境",
+                "深蓝方案夹与浅灰笔记本保持区别"
+              ],
+              "lighting_intent": "会议室窗侧柔和日光为主，室内自然补光保证两人眼睛、嘴部及面部转向仍清楚；同一连续时段保持光向与色温，不做戏剧性忽明忽暗。",
+              "forbidden_elements": [
+                "未成年主要人物",
+                "突然出现的第三人、神秘身份、天降权威或不合理巧合",
+                "以细小文字识读、连续复杂手势作为唯一因果线索",
+                "动画或插画质感、塑料皮肤、强磨皮、遮挡主要表情",
+                "会议室中凭空出现客户、观众或额外同事",
+                "用客户签约、订单到账等未写出的结果替代本场主讲权回报"
+              ]
+            },
+            "audio": {
+              "dialogue_intent": "仅周宁与郑川的中文现场对白，共12句；无旁白，动作说明不得自动朗读。周宁由克制争取转为准备充分的直接回答；郑川先替她作主，再以模拟质疑测试，听懂后简短改口。对白要处理上一句和听者反应，不逐句报设定。“那问题……”接“我记。”保留轻微停顿和关系转变，不演成嘲讽。",
+              "ambience_intent": "轻微办公室室内底噪，纸页、方案夹、椅子和笔记本的自然声音可为动作提供支撑；不新增可辨识第三人对白。",
+              "bgm_intent": "不依赖配乐建立情绪或解释转折；如后续制作采用音乐，应克制且不压对白。本轮不开展后期声音制作。",
+              "subtitle_intent": "字幕文案仅使用当前ScriptLine的subtitle_text；正文中的动作段不作为字幕或旁白。保留真人表演和桌面动作的观看空间；本轮不制作后期字幕或导出。"
+            },
+            "provider_preference": {
+              "provider": "MiniMax",
+              "model": "MiniMax-H3",
+              "resolution": "2K"
+            },
+            "user_constraints": [
+              "45–60秒，9:16竖屏，中文，真人摄影质感，视频参数按2K准备。",
+              "两名成年主要人物，一个主要室内场景；面部、表演、人物身份和空间关系清楚统一。",
+              "开场迅速显露具体矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前文信息。",
+              "全部必要图片在当前项目原创制作，不借用其他项目素材；依据实际图像检查用途并定向修复，保留可用结果。",
+              "只有选定路线确实需要声音参考时才准备和核验实际音频；不能把尚未听到的对白当作已验收。",
+              "制作细节自主决定，无需逐步确认；本次总任务停止于全部视频生成前准备完成，严禁任何视频生成或探针执行及后期制作。"
+            ],
+            "agent_decisions": [
+              "片名确定为《这回你讲》，单篇完成本场核心任务，不强制留下系列悬念。",
+              "周宁是方案作者，她主动提出现场模拟压价、给出具体解法并承认上次失误；郑川的改口发生在听取解法与观察示意页之后，不是无缘由让步。",
+              "开头郑川拿走方案夹、推来笔记本，体现替她主讲；结尾归还方案夹、让出桌头并说“我记”，用同一组物件和任务完成回收。",
+              "本场解决的是谁来主讲，不承诺客户已经认可、项目成交或公司制度改变。",
+              "空间与衣着保持一个连续日间时段；只需两名角色、会议室、方案夹、笔记本、黑色签字笔这六项基础文字对象，示意页属于方案夹内容，不另增无关资产。"
+            ],
+            "notes": [
+              "剧本自查：开场第一句明确主讲权矛盾；“那你现在压”使周宁主动改变谈话方式，入口改造和预算限制的试问引出她已有准备，郑川停手看人后归还方案，让步有可见前因。末句“我记”精确回收开头“记问题”。两人对白逐轮回应，没有第三人救场或说明性旁白。",
+              "表演时长自查为文本层面的制作估算，并未生成、观看或听审任何视频。递方案、翻页、推本等简单动作宜与对应对白有机重叠；末尾让位、接本与周宁坐定应有完成时间，不能只用静态图像替代动态连续性验证。",
+              "当前ProjectBible仍为空，且ScriptLine.speaker_character_id为空；已有CHARACTER资产为下游人物身份主体，不将asset_id冒充Bible角色ID。明确绑定：speaker周宁对应asset-70a7fe56fe95，speaker郑川对应asset-0495ce41bf01。",
+              "空间和道具绑定：设计公司小会议室对应asset-daa7a6dea5fb；深蓝色方案夹对应asset-ead7cce81d77；浅灰色笔记本对应asset-b68e9deed733；黑色签字笔对应asset-2a1b366e7ca1。文字与后续媒体均应沿用这些主体，不能仅凭角色身份参考认定其为某镜头首帧。",
+              "方案夹连续性：开场在周宁准备使用的桌头，被郑川拿走；试问时摊在两人之间，周宁翻开并转向郑川展示；认可后郑川合上归还，结尾周宁在桌头重新打开。笔记本连续性：郑川推给周宁时合着，周宁不打开并推回中间，结尾郑川拉到自己面前翻开并持黑笔准备记录。",
+              "本工具同步项目语言、画幅和目标时长，但不能修改项目显示标题或ProjectBible；片名已在此制作规格中持久化，项目显示标题未同步的接口限制需准确交接，不阻塞已有剧本和资产设定的使用。",
+              "2K是后续视频输入准备要求，不是已生成媒体的实测规格。具体路线能力、单次时长和必要参考类型由后续路线编译依照实际Capability处理；本规格不授权执行视频生成。"
+            ]
+          },
+          "source_artifact_refs": [
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "script_version",
+              "artifact_id": "project-06116be431fa-script-v3",
+              "version": 3
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "bible_version",
+              "artifact_id": "project-06116be431fa-bible-v1",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-e648c2c1bf94",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-1d40c088335f",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-a0902dc00137",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-51b9fec0cc1b",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-09c268845a48",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-76e26d2c485c",
+              "version": 1
+            }
+          ]
+        }
+      },
+      "reason": "完整第1场和六项人物、空间、道具文字设定已保存。现在保存《这回你讲》的真人摄影方向、55秒目标、中文、9:16和2K准备规格，并记录对白与动作的时长估算及下游连续性要求。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.create_production_spec",
+        "status": "SUCCEEDED",
+        "output": {
+          "document": {
+            "id": "production-document-21acdc8b80a1",
+            "project_id": "project-06116be431fa",
+            "kind": "production.spec",
+            "title": "Production Spec",
+            "current_version_id": "production-document-version-d9c584bebfed",
+            "current_version": 1
+          },
+          "version": {
+            "id": "production-document-version-d9c584bebfed",
+            "version": 1,
+            "parent_version_id": null,
+            "source_artifact_refs": [
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "script_version",
+                "artifact_id": "project-06116be431fa-script-v3",
+                "version": 3
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "bible_version",
+                "artifact_id": "project-06116be431fa-bible-v1",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-e648c2c1bf94",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-1d40c088335f",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-a0902dc00137",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-51b9fec0cc1b",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-09c268845a48",
+                "version": 1
+              },
+              {
+                "project_id": "project-06116be431fa",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-76e26d2c485c",
+                "version": 1
+              }
+            ],
+            "origin": "AGENT",
+            "created_at": "2026-09-12T06:42:40.735+00:00"
+          },
+          "output_slot": {
+            "id": "production.spec.current",
+            "revision": 1,
+            "current_artifact_ref": {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-21acdc8b80a1",
+              "version": 1
+            },
+            "invalidation_reason": null,
+            "producer_agent_run_id": null,
+            "producer_work_order_id": null,
+            "updated_at": "2026-09-12T06:42:40.735+00:00"
+          }
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-21acdc8b80a1",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_document",
+            "artifact_id": "production-document-21acdc8b80a1",
+            "version": 1
+          },
+          {
+            "project_id": "project-06116be431fa",
+            "artifact_type": "production_document_version",
+            "artifact_id": "production-document-version-d9c584bebfed",
+            "version": 1
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "production_spec",
+              "artifact_id": "production-document-21acdc8b80a1",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "production_document",
+              "artifact_id": "production-document-21acdc8b80a1",
+              "version": 1
+            },
+            {
+              "project_id": "project-06116be431fa",
+              "artifact_type": "production_document_version",
+              "artifact_id": "production-document-version-d9c584bebfed",
+              "version": 1
+            }
+          ],
+          "current_state": {
+            "document.id": "production-document-21acdc8b80a1",
+            "document.project_id": "project-06116be431fa",
+            "document.current_version_id": "production-document-version-d9c584bebfed",
+            "document.current_version": 1,
+            "version.id": "production-document-version-d9c584bebfed",
+            "version.version": 1,
+            "output_slot.id": "production.spec.current",
+            "output_slot.revision": 1
+          },
+          "changed_ids": {}
+        }
+      },
+      "requested_at": "2026-09-12T06:42:40.599910Z",
+      "updated_at": "2026-09-12T06:42:40.755623Z"
+    }
+  ]
+}

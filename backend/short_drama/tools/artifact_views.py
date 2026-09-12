@@ -24,6 +24,7 @@ from short_drama.production_contracts import (
     AssetPlanReadResponse,
     ProductionSpecContent,
     ProductionSpecReadResponse,
+    SavedProjectProductionSettings,
     StoryboardContent,
     StoryboardReadResponse,
 )
@@ -77,6 +78,7 @@ class ProductionArtifactMutationSummaryResponse(DomainModel):
     document: CompactProductionDocument
     version: CompactProductionDocumentVersion
     output_slot: CompactOutputSlot | None = None
+    project_settings: SavedProjectProductionSettings | None = None
 
 
 class ProductionDocumentCompactReadResponse(DomainModel):
@@ -206,11 +208,13 @@ def mutation_summary(
     document: ProductionDocument,
     version: ProductionDocumentVersion,
     output_slot: ProjectOutputSlot | None = None,
+    project_settings: SavedProjectProductionSettings | None = None,
 ) -> ProductionArtifactMutationSummaryResponse:
     return ProductionArtifactMutationSummaryResponse(
         document=compact_document(document),
         version=compact_version(version),
         output_slot=compact_output_slot(output_slot),
+        project_settings=project_settings,
     )
 
 

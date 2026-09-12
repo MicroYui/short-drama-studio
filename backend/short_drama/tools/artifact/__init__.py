@@ -943,6 +943,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 document=result.document,
                 version=result.version,
                 output_slot=result.output_slot,
+                project_settings=result.project_settings,
             ),
             artifact_refs=_production_spec_refs(request.project_id, result),
         )
@@ -950,13 +951,13 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     registry.register(
         ToolSpec(
             id="artifact.create_production_spec",
-            version=2,
+            version=3,
             category=ToolCategory.ARTIFACT,
             description=(
                 "创建可选制作规格，记录片名与视听方向，并同步项目语言、画幅及明确目标时长；不生成媒体。"
                 "ProductionSpec 还记录 Provider 偏好；规格内的片名不更改项目标题，"
                 "不修改 ProjectBible、用户原始要求或已保存正文。"
-                "成功时只返回精确新版本身份和输出槽指针；"
+                "成功时返回精确新版本身份、输出槽指针及实际同步的项目语言、画幅、时长；"
                 "需要正文时显式读取 artifact.get_production_spec。"
             ),
             effect=ToolEffect.WRITE,
@@ -977,6 +978,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 document=result.document,
                 version=result.version,
                 output_slot=result.output_slot,
+                project_settings=result.project_settings,
             ),
             artifact_refs=_production_spec_refs(request.project_id, result),
         )
@@ -984,12 +986,12 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     registry.register(
         ToolSpec(
             id="artifact.replace_production_spec",
-            version=2,
+            version=3,
             category=ToolCategory.ARTIFACT,
             description=(
                 "当用户意图或 Agent 的制片判断发生整体变化时，基于当前版本替换"
                 " ProductionSpec 并保留历史版本；它不会静默改写既有分镜。"
-                "成功响应是新版本身份的轻量确认，不回传正文和历史。"
+                "成功响应包含新版本身份及实际同步的项目语言、画幅、时长，不回传正文和历史。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,

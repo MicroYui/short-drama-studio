@@ -57,6 +57,7 @@ from short_drama.agent_runtime.artifact_resolver import (
     project_summary as _project_summary,
 )
 from short_drama.agent_runtime.models import utc_now
+from short_drama.agent_runtime.project_read_context import SPEC_WRITES, SETTINGS_FIELDS, retire_project_read
 from short_drama.agent_runtime.completion import verify_completion_claims
 from short_drama.agent_runtime.completion_saved_results import (
     SAVED_RESULT_GUIDANCE, prepare_saved_completion_results, saved_tool_result_index,
@@ -2407,7 +2408,8 @@ def _specialist_working_set(
                         if ref.artifact_type == "shot" and ref.artifact_id == shot_id), None)
                 for key, observation in list(read_observations.items()):
                     retained = _retire_current_read_content(observation, project_id=turn.arguments.get("project_id"),
-                        scene_ids=scene_ids, shot_ids=shot_ids, all_scenes=all_scenes)
+                        scene_ids=scene_ids, shot_ids=shot_ids, all_scenes=all_scenes,
+                        spec_changed=turn.tool_name in SPEC_WRITES)
                     if retained is None:
                         read_observations.pop(key)
                     else:
@@ -2679,6 +2681,7 @@ def _specialist_working_set(
 def _retire_current_read_content(
     observation: SpecialistReadObservation, *, project_id: JsonValue,
     scene_ids: set[str], shot_ids: set[str], all_scenes: bool,
+    spec_changed: bool = False,
 ) -> SpecialistReadObservation | None:
     """Drop only changed selected bodies, including old receipts without refs.
 
@@ -2686,7 +2689,13 @@ def _retire_current_read_content(
     and its original provenance instead of losing an unrelated scope with it.
     Full results and any persisted context snapshots remain historical records.
     """
-    if observation.tool_name != "artifact.read_current" or observation.request_identifiers.get("project_id") != project_id:
+    if observation.request_identifiers.get("project_id") != project_id:
+        return observation
+    if observation.tool_name == "project.get":
+        retained = retire_project_read(observation.result,
+            script_changed=all_scenes or bool(scene_ids), spec_changed=spec_changed)
+        return observation.model_copy(update={"result": retained})
+    if observation.tool_name != "artifact.read_current":
         return observation
     output = observation.result.get("output")
     content = output.get("content") if isinstance(output, dict) else None
@@ -3154,6 +3163,22 @@ def _fold_specialist_entities(
 
     if result.get("status") == ToolCallStatus.SUCCEEDED.value:
         scene_values: list[JsonValue] = []
+        settings = output.get("project_settings") if tool_name in SPEC_WRITES else None
+        if isinstance(settings, dict) and settings.get("id") == arguments.get("project_id"):
+            _put_specialist_entity(entities, kind="project_settings", source_tool=tool_name,
+                sequence=sequence, value={key: value for key, value in settings.items()
+                    if key == "id" or key in SETTINGS_FIELDS})
+        elif tool_name in SPEC_WRITES and isinstance(arguments.get("project_id"), str):
+            # A legacy save disproves old settings but cannot provide the new
+            # values. Do not synthesize them from its proposed request.
+            entities.pop(("project_settings", cast(str, arguments["project_id"])), None)
+        elif tool_name == "project.get":
+            document = output.get("document")
+            project = document.get("project") if isinstance(document, dict) else None
+            if isinstance(project, dict) and isinstance(project.get("id"), str):
+                # The fresh aggregate already includes these fields once and
+                # supersedes our older saved settings, without losing its body.
+                entities.pop(("project_settings", cast(str, project["id"])), None)
         script_ref: JsonValue = output.get("script_ref")
         if tool_name == "script.save_scene" and isinstance(output.get("saved_scenes"), list):
             scene_values = cast(list[JsonValue], output["saved_scenes"])

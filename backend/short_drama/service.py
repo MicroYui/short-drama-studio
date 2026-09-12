@@ -367,6 +367,7 @@ from short_drama.production_contracts import (
     ProductionSpecContent,
     ProductionSpecCreateRequest,
     ProductionSpecMutationResponse,
+    SavedProjectProductionSettings,
     ProductionSpecReadResponse,
     ProductionSpecReplaceRequest,
     StoryboardContent,
@@ -5408,6 +5409,11 @@ class ShortDramaService:
                 document=result.document,
                 version=result.version,
                 output_slot=slot,
+                project_settings=SavedProjectProductionSettings(
+                    id=document.project.id, language=document.project.language,
+                    aspect_ratio=document.project.aspect_ratio,
+                    target_duration_seconds=document.project.target_duration_seconds,
+                ),
             )
 
     def replace_production_spec(
@@ -5481,6 +5487,11 @@ class ShortDramaService:
                 document=result.document,
                 version=result.version,
                 output_slot=slot,
+                project_settings=SavedProjectProductionSettings(
+                    id=document.project.id, language=document.project.language,
+                    aspect_ratio=document.project.aspect_ratio,
+                    target_duration_seconds=document.project.target_duration_seconds,
+                ),
             )
 
     def get_storyboard(
