@@ -105,14 +105,16 @@ def test_pure_response_survives_rejected_final_missing_base_pixels_and_restart(t
     assert version.approval_status == ApprovalStatus.DRAFT
     assert saved.current_version_id == target.current_version_id
     assert saved.approved_version_id == target.approved_version_id
-    assert saved.versions[:-1] == target.versions
+    assert saved.versions == target.versions
+    assert version.id == task.provider_output_version_id
     assert after.shots == document.shots
     assert after.reference_packs == document.reference_packs
     assert version.parent_version_id == task.output_version_id
     assert [ref.asset_version_id for ref in version.derivation_references] == [base.id, task.output_version_id]
     assert version.source is not None
     assert version.source.source_uri == task.provider_output_path
-    assert AssetImageEditResultRequest.model_validate_json(version.source.prompt or "") == request
+    provenance = AssetImageEditResultRequest.model_validate_json(version.source.prompt or "")
+    assert provenance.image_task_id == request.image_task_id and provenance.mode == request.mode
     assert reopened.repository.get_image_task(task.id) == task
     assert len(provider.calls) == 1
 

@@ -164,6 +164,12 @@ def _task_execution(result: ImageTaskResponse) -> ToolExecution[ImageTaskRespons
         ),
     ]
     if result.task.status == ImageTaskStatus.SUCCEEDED:
+        if result.task.provider_output_version_id is not None:
+            refs.append(ArtifactRef(
+                project_id=result.task.project_id, artifact_type="asset_version",
+                artifact_id=result.task.provider_output_version_id,
+                version=result.task.provider_output_version_number,
+            ))
         refs.append(
             ArtifactRef(
                 project_id=result.task.project_id,
@@ -278,14 +284,17 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                 "version.height": result.version.height,
                 "asset.current_version_id": result.asset.current_version_id,
                 "provider_called": False, "visual_acceptance": "NOT_ASSESSED",
-            }, changed_ids={"created_asset_version_ids": [result.version.id]}))
+            }, changed_ids=(
+                {"created_asset_version_ids": [result.version.id]}
+                if request.request.mode.value == "MASKED_COMPOSITE" else {}
+            )))
 
     registry.register(ToolSpec(
-        id="image.derive_edit_result", version=1, category=ToolCategory.IMAGE,
+        id="image.derive_edit_result", version=2, category=ToolCategory.IMAGE,
         description=(
-            "使用已有masked EDIT任务保留的供应商原始像素，取出供检查或调整遮罩后本地重新合成，保存新的本地DRAFT候选，不调用Provider；原结果保留其编码，遮罩重合成为PNG。"
+            "使用已有masked EDIT任务保留的供应商原始像素，取出供检查或调整遮罩后本地重新合成，不调用Provider；原结果保留其编码，遮罩重合成为PNG。"
             "先确认image_task_id对应已完成任务且provider_output_path实际可用；历史任务未留存原图时不能恢复，也不自动重新生成。"
-            "PROVIDER_OUTPUT保存遮罩合成前的整张供应商结果供实际看图，圈外也可能变化，不表示可直接采用；该模式不传mask或非零feather。"
+            "PROVIDER_OUTPUT复用同任务已登记的原图候选，保留既有说明和状态；没有时才登记DRAFT。可直接使用任务回执的provider_output_version_id检查，不必再次调用本工具。原图圈外也可能变化，不表示可直接采用；该模式不传mask或非零feather。"
             "MASKED_COMPOSITE使用原任务实际primary、原始供应商结果及明确的新mask_version_id；新mask尺寸与原图相同，透明区用新像素，圈外保留原图。"
             "可用image.create_edit_guide在原任务primary上重新定义实际边界；mask_feather_pixels只柔化圈内边缘，不扩大区域，不能补出原结果没有的内容。"
             "适用于已生成内容被局部边界截断、旧轮廓残留等情形。先根据原结果和实际遮罩判断，不能只重写说明而沿用已证明不合适的坐标。"
@@ -528,7 +537,9 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
     actions = (
         (
             "image.advance",
-            "对已入队图像任务只推进一次 Provider 状态转换；返回后由 Agent 根据新状态决定继续查询、恢复、检查输出或改路线。",
+            "对已入队图像任务只推进一次 Provider 状态转换；返回后由 Agent 根据新状态决定下一步。"
+            "masked EDIT 完成同时返回默认 output_version_id 和可选 provider_output_version_id 原图候选的精确引用；"
+            "原图未应用本地遮罩保护，可按需直接检查或比较，不需要先 derive，也不表示原图更好或已采用。",
             service.advance_image_task,
             ToolEffect.EXTERNAL,
         ),
@@ -555,7 +566,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         registry.register(
             ToolSpec(
                 id=tool_id,
-                version=1,
+                version=2 if tool_id in {"image.advance", "image.recover_output"} else 1,
                 category=ToolCategory.IMAGE,
                 description=description,
                 effect=effect,

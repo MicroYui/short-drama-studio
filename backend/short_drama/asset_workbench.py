@@ -670,6 +670,11 @@ class AssetWorkbench:
             document = self._require_project(project_id)
             target = self._require_asset(document, task.asset_id)
             self._require_asset_version(target, task.output_version_id)
+            if request.mode == ImageEditResultMode.PROVIDER_OUTPUT:
+                registered = self._registered_provider_output_version(target, task)
+                if registered is not None:
+                    self._validate_registered_provider_output(registered)
+                    return registered
             primary_id = task.request.primary_input_version_id or task.request.ordered_input_version_ids()[0]
             identifiers: list[str] = [primary_id, task.output_version_id]
             if request.mask_version_id is not None:
@@ -725,6 +730,14 @@ class AssetWorkbench:
                 document = self._require_project(project_id)
                 target = self._require_asset(document, task.asset_id)
                 self._require_asset_version(target, task.output_version_id)
+                if request.mode == ImageEditResultMode.PROVIDER_OUTPUT:
+                    # Another local caller may have registered this same response
+                    # while its bytes were copied outside the mutation lock.
+                    registered = self._registered_provider_output_version(target, task)
+                    if registered is not None:
+                        self._validate_registered_provider_output(registered)
+                        temporary.unlink(missing_ok=True)
+                        return registered
                 for identifier, (original, path, expected_stat) in sources.items():
                     _owner, current = self._find_version(document, identifier)
                     stat = path.stat() if path.is_file() else None
@@ -1488,12 +1501,16 @@ class AssetWorkbench:
             )
             self._validate_image_inputs(document, asset, provider_request, parent_id)
             now = utc_now()
+            first_number = self._next_version_number(asset)
+            masked_edit = request.operation == ImageOperation.EDIT and request.mask_version_id is not None
             task = ImageGenerationTask(
                 id=f"image-task-{uuid4().hex[:12]}",
                 project_id=project_id,
                 asset_id=asset_id,
                 output_version_id=f"asset-version-{uuid4().hex[:12]}",
-                output_version_number=self._next_version_number(asset),
+                # Keep both last-in-list and largest-number defaults on the final.
+                output_version_number=first_number + int(masked_edit),
+                provider_output_version_number=first_number if masked_edit else None,
                 descriptor=request.descriptor.strip(),
                 parent_version_id=parent_id,
                 operation=request.operation,
@@ -1522,6 +1539,8 @@ class AssetWorkbench:
         with task_lock:
             task = self._require_image_task(task_id)
             if task.status != initial.status:
+                return task
+            if task.status == ImageTaskStatus.SUCCEEDED:
                 return task
             if task.status == ImageTaskStatus.QUEUED:
                 task.status = ImageTaskStatus.SUBMITTING
@@ -1867,11 +1886,30 @@ class AssetWorkbench:
                 None,
             )
             now = utc_now()
+            registered_raw: AssetVersion | None = None
             if existing is None:
+                previous_number = task.output_version_number
+                if (task.operation == ImageOperation.EDIT and task.request.mask_version_id is not None
+                        and task.provider_output_path is not None):
+                    raw = self._registered_provider_output_version(asset, task)
+                    if raw is None:
+                        # Legacy in-flight tasks reserved only the final number.
+                        # Allocate two unused numbers without renumbering saved media.
+                        if (task.provider_output_version_number is None
+                                or any(v.version == task.provider_output_version_number for v in asset.versions)):
+                            task.provider_output_version_number = self._next_version_number(asset)
+                            task.output_version_number = task.provider_output_version_number + 1
+                        raw = self._provider_output_candidate(document, asset, task, width, height, now)
+                        asset.versions.append(raw)
+                    registered_raw = raw
+                    task.provider_output_version_number = raw.version
+                    if task.output_version_number <= raw.version:
+                        task.output_version_number = self._next_version_number(asset)
                 # New tasks reserve unique numbers at enqueue. Older persisted tasks
                 # may share a reservation; repair only this not-yet-registered output.
                 if any(item.version == task.output_version_number for item in asset.versions):
                     task.output_version_number = self._next_version_number(asset)
+                if task.output_version_number != previous_number:
                     destination = self._final_output_path(task, output_path.suffix)
                     output_path.replace(destination)
                     output_path = destination
@@ -1930,10 +1968,16 @@ class AssetWorkbench:
                 existing.width = width
                 existing.height = height
                 existing.file_size_bytes = output_path.stat().st_size
+                if task.provider_output_path is not None:
+                    registered_raw = self._registered_provider_output_version(asset, task)
+                    if registered_raw is not None:
+                        task.provider_output_version_number = registered_raw.version
             if not preserve_selection:
                 asset.current_version_id = task.output_version_id
             document.project.updated_at = now
             self.repository.save_project(document)
+            if registered_raw is not None:
+                task.provider_output_version_id = registered_raw.id
             task.status = ImageTaskStatus.SUCCEEDED
             task.error_code = None
             task.error_message = None
@@ -1942,6 +1986,75 @@ class AssetWorkbench:
             task.updated_at = now
             self.repository.save_image_task(task)
             return task
+
+    @staticmethod
+    def _registered_provider_output_version(asset: Asset, task: ImageGenerationTask) -> AssetVersion | None:
+        """Match the exact saved task/mode/source, including pre-existing manual derivatives."""
+        raw_path = Path(task.provider_output_path).expanduser().resolve() if task.provider_output_path else None
+        for version in asset.versions:
+            if task.provider_output_version_id is not None and version.id != task.provider_output_version_id:
+                continue
+            source = version.source
+            if (source is None or source.model != "saved-image-edit-result-v1"
+                    or not source.source_uri or not source.prompt
+                    or Path(source.source_uri).expanduser().resolve() != raw_path):
+                continue
+            try:
+                provenance = AssetImageEditResultRequest.model_validate_json(source.prompt)
+            except ValueError:
+                continue
+            if provenance.image_task_id == task.id and provenance.mode == ImageEditResultMode.PROVIDER_OUTPUT:
+                return version
+        if task.provider_output_version_id is not None:
+            raise AssetWorkbenchConflict(
+                f"Registered Provider candidate {task.provider_output_version_id} is missing or no longer "
+                "matches this exact task/source; no replacement candidate was created"
+            )
+        return None
+
+    @staticmethod
+    def _validate_registered_provider_output(version: AssetVersion) -> None:
+        if version.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or version.freshness != Freshness.CURRENT:
+            raise AssetWorkbenchConflict(
+                f"Registered Provider candidate {version.id} is {version.approval_status.value}/{version.freshness.value}; "
+                "no duplicate draft was created"
+            )
+        if not version.local_path or not Path(version.local_path).is_file() or Path(version.local_path).stat().st_size == 0:
+            raise AssetWorkbenchConflict(f"Registered Provider candidate file is missing or empty: {version.id}")
+
+    def _provider_output_candidate(
+        self, document: ProjectDocument, asset: Asset, task: ImageGenerationTask,
+        width: int, height: int, now: str,
+    ) -> AssetVersion:
+        """Register already-landed bytes before the final, without another file or selection."""
+        assert task.provider_output_path is not None and task.provider_output_version_number is not None
+        primary_id = task.request.primary_input_version_id or task.request.ordered_input_version_ids()[0]
+        primary_asset, _primary = self._find_version(document, primary_id)
+        descriptor = f"{task.descriptor[:3600]}｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。"
+        request = AssetImageEditResultRequest(
+            image_task_id=task.id, mode=ImageEditResultMode.PROVIDER_OUTPUT, descriptor=descriptor,
+        )
+        return AssetVersion(
+            id=f"asset-version-{uuid4().hex[:12]}", version=task.provider_output_version_number,
+            origin_type=OriginType.LOCAL_DERIVED, descriptor=descriptor, media_type=AssetMediaType.IMAGE,
+            local_path=task.provider_output_path, mime_type=task.output_mime_type,
+            width=width, height=height, file_size_bytes=Path(task.provider_output_path).stat().st_size,
+            parent_version_id=task.output_version_id,
+            derivation_references=[
+                AssetDerivationReference(asset_version_id=identifier, source_project_id=task.project_id,
+                    reference_role=ImageReferenceRole.COMPOSITION if identifier == primary_id else ImageReferenceRole.SUPPORTING_VISUAL,
+                    reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                    purpose=purpose, subject_alias=name)
+                for identifier, purpose, name in (
+                    (primary_id, "原图像任务的实际 primary 输入；本候选未应用本地遮罩保护。", primary_asset.name),
+                    (task.output_version_id, "同一任务的默认遮罩合成结果；不是本候选原像素，也不表示已通过检查。", asset.name),
+                )
+            ],
+            source=AssetSourceRecord(source_type=OriginType.LOCAL_DERIVED,
+                source_label="Provider 原始结果本地候选", source_uri=task.provider_output_path,
+                provider="local", model="saved-image-edit-result-v1", prompt=request.model_dump_json(), created_at=now),
+            approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now,
+        )
 
     def _resolve_provider_inputs(
         self,

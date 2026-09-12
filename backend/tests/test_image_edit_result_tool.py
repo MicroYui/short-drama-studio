@@ -194,7 +194,8 @@ def test_actual_tool_restores_provider_pixels_recomposes_and_survives_restart_wi
     after_asset = next(asset for asset in after.assets if asset.id == fixture.asset_id)
     assert after_asset.current_version_id == before_asset.current_version_id
     assert after_asset.approved_version_id == before_asset.approved_version_id
-    assert after_asset.versions[:-3] == before_asset.versions
+    assert exposed.version.id == task.provider_output_version_id
+    assert after_asset.versions[:-2] == before_asset.versions
     assert after.shots == before.shots
     assert after.reference_plan == before.reference_plan and after.reference_packs == before.reference_packs
     assert [asset for asset in after.assets if asset.id != fixture.asset_id] == [

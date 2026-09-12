@@ -33,7 +33,10 @@ class AssetImageEditResultRequest(DomainModel):
         "nonzero blends original pixels back near the mask edge and does not enlarge "
         "the editable region. PROVIDER_OUTPUT requires zero."
     ))
-    descriptor: str = Field(min_length=1, max_length=4000)
+    descriptor: str = Field(min_length=1, max_length=4000, description=(
+        "Description for a newly registered candidate. PROVIDER_OUTPUT reuses the exact "
+        "task's existing raw candidate without changing its description, review state or selection."
+    ))
 
     @model_validator(mode="after")
     def validate_mode(self) -> AssetImageEditResultRequest:

@@ -834,6 +834,14 @@ class ImageGenerationTask(DomainModel):
         "Original Provider response file retained before local masked composition. "
         "Available only for newly saved masked EDIT results; absent on legacy tasks."
     ))
+    provider_output_version_id: str | None = Field(default=None, description=(
+        "Exact registered candidate containing the preserved, unmasked Provider pixels. "
+        "Absent until registration; it is not the task's default output or an accepted image."
+    ))
+    provider_output_version_number: int | None = Field(default=None, description=(
+        "Reserved/registered number for provider_output_version_id. Use as an ArtifactRef "
+        "only when that ID is present on a completed task; output_version_id remains the masked final."
+    ))
     staged_path: str | None = None
     output_path: str | None = None
     output_mime_type: str | None = None
