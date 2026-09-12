@@ -3318,6 +3318,7 @@ def _compact_image_task_state(
             "attempt",
             "retry_of_task_id",
             "provider_request_id",
+            "provider_output_path",
             "output_path",
             "output_mime_type",
             "usage",

@@ -7261,6 +7261,11 @@ export interface components {
              * @default openai
              */
             provider: string;
+            /**
+             * Provider Output Path
+             * @description Original Provider response file retained before local masked composition. Available only for newly saved masked EDIT results; absent on legacy tasks.
+             */
+            provider_output_path?: string | null;
             /** Provider Request Id */
             provider_request_id?: string | null;
             request: components["schemas"]["ImageProviderRequest"];

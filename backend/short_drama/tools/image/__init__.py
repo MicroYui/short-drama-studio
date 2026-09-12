@@ -6,6 +6,7 @@ from typing import Protocol
 
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
+from short_drama.image_edit_results import AssetImageEditResultRequest
 from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest
 from short_drama.image_models import (
     AgentImageTaskCreateRequest,
@@ -44,6 +45,10 @@ class ImageToolService(Protocol):
 
     def composite_asset_plane(
         self, project_id: str, request: AssetImagePlaneCompositeRequest,
+    ) -> AssetMutationResponse: ...
+
+    def derive_asset_edit_result(
+        self, project_id: str, request: AssetImageEditResultRequest,
     ) -> AssetMutationResponse: ...
 
     def compose_asset_reference_sheet(
@@ -118,6 +123,11 @@ class ImageEditGuideInput(ToolModel):
 class ImagePlaneCompositeInput(ToolModel):
     project_id: str
     request: AssetImagePlaneCompositeRequest
+
+
+class ImageEditResultInput(ToolModel):
+    project_id: str
+    request: AssetImageEditResultRequest
 
 
 class ImageTextPlateComposeInput(ToolModel):
@@ -250,6 +260,42 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         tags=frozenset({"image", "asset", "edit", "mask", "local", "layout", "reference"}),
     ))
 
+    def derive_edit_result(request: ImageEditResultInput) -> ToolExecution[AssetMutationResponse]:
+        result = service.derive_asset_edit_result(request.project_id, request.request)
+        refs = (
+            ArtifactRef(project_id=request.project_id, artifact_type="asset", artifact_id=result.asset.id),
+            ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
+                version=result.version.version),
+        )
+        return ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
+            artifact_refs=list(refs), current_state={
+                "project_id": request.project_id, "asset_id": result.asset.id,
+                "image_task_id": request.request.image_task_id,
+                "mode": str(request.request.mode), "mask_version_id": request.request.mask_version_id,
+                "mask_feather_pixels": request.request.mask_feather_pixels,
+                "version.id": result.version.id, "version.version": result.version.version,
+                "version.local_path": result.version.local_path, "version.width": result.version.width,
+                "version.height": result.version.height,
+                "asset.current_version_id": result.asset.current_version_id,
+                "provider_called": False, "visual_acceptance": "NOT_ASSESSED",
+            }, changed_ids={"created_asset_version_ids": [result.version.id]}))
+
+    registry.register(ToolSpec(
+        id="image.derive_edit_result", version=1, category=ToolCategory.IMAGE,
+        description=(
+            "使用已有masked EDIT任务保留的供应商原始像素，取出供检查或调整遮罩后本地重新合成，保存新的本地DRAFT候选，不调用Provider；原结果保留其编码，遮罩重合成为PNG。"
+            "先确认image_task_id对应已完成任务且provider_output_path实际可用；历史任务未留存原图时不能恢复，也不自动重新生成。"
+            "PROVIDER_OUTPUT保存遮罩合成前的整张供应商结果供实际看图，圈外也可能变化，不表示可直接采用；该模式不传mask或非零feather。"
+            "MASKED_COMPOSITE使用原任务实际primary、原始供应商结果及明确的新mask_version_id；新mask尺寸与原图相同，透明区用新像素，圈外保留原图。"
+            "可用image.create_edit_guide在原任务primary上重新定义实际边界；mask_feather_pixels只柔化圈内边缘，不扩大区域，不能补出原结果没有的内容。"
+            "适用于已生成内容被局部边界截断、旧轮廓残留等情形。先根据原结果和实际遮罩判断，不能只重写说明而沿用已证明不合适的坐标。"
+            "原任务的使用量、最终输出及当前/批准媒体和镜头绑定不变；候选仍需检查完整结构、背景和接缝后明确选用。"
+        ),
+        effect=ToolEffect.WRITE, idempotent=False, input_model=ImageEditResultInput,
+        output_model=AssetMutationResponse, handler=derive_edit_result,
+        tags=frozenset({"image", "asset", "local", "edit", "mask", "composite", "reuse"}),
+    ))
+
     def composite_plane(request: ImagePlaneCompositeInput) -> ToolExecution[AssetMutationResponse]:
         result = service.composite_asset_plane(request.project_id, request.request)
         refs = (
@@ -274,12 +320,12 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         description=(
             "把已有准确图文或摄影纸面按四角透视映射到实际照片的平面上，保存本地PNG候选，不调用Provider。"
             "适用于可观察的纸面、屏幕、标牌等平面，整页字符与布局一起变换，不重新排字或生成姓名。"
-            "base和各source均用本项目精确本地图片版本；先观察真实四角，source_quad省略时取整张源图。"
+            "base和各source均用本项目精确本地图片版本；先观察所选可见共面区域的四角，source_quad省略时取整张源图。"
             "target_quad的每一点对应同序source角，旋转90度通过这种对应表达；不能把两组角分别按画面上下重新排序。"
             "摄影源仅圈纸面，不带桌面和灰背景。replace覆盖平面，multiply保留底面纹理但也保留旧墨，"
-            "仅在实际确认目标是空白或透明图形适用时使用multiply；它不能清除已有错字。"
+            "仅在实际确认目标是空白或透明图形适用时使用multiply；源白色不改变底图，灰色会压暗，不能清除已有错字。"
             "用protected_regions保留真实可见的手、笔等前景遮挡。目标平面外和保护区保持base像素。"
-            "若新纸范围外仍露出旧纸文字/边缘，应先修好底图；这个工具不擦除旧物体、移动手势、补阴影或改变机位。"
+            "若目标范围外仍有需移除的旧字、旧纸或错误纸边，应先修好底图；这个工具不擦除旧物体、移动手势、补阴影或改变机位。"
             "输出仍需观察朝向、文字、透视、光照、边缘和遮挡；未改变current/canonical、镜头绑定或宣告制作项完成。"
             "坐标对应EXIF转正后的可见像素；保持底图尺寸，局部合成不提高源内容的实际细节。"
         ),

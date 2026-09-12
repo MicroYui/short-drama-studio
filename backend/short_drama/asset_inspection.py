@@ -935,6 +935,22 @@ def inspect_asset_image(
         "operation": generation_task.operation if generation_task is not None else version.origin_type,
         "generation_prompt": generation_task.request.prompt if generation_task is not None
         else version.source.prompt if version.source is not None else None,
+        "masked_edit": {
+            "image_task_id": generation_task.id,
+            "primary_input_version_id": generation_task.request.primary_input_version_id
+            or generation_task.request.ordered_input_version_ids()[0],
+            "mask_version_id": generation_task.request.mask_version_id,
+            "local_mask_feather_pixels": generation_task.request.mask_feather_pixels,
+            "provider_output_available": bool(
+                generation_task.provider_output_path
+                and Path(generation_task.provider_output_path).is_file()
+            ),
+            "local_derivation_tool": "image.derive_edit_result",
+            "semantics": (
+                "本候选已经本地遮罩合成；透明区采用供应商像素，圈外保持原图，feather只在圈内柔化，不扩大范围。"
+                "原始供应商结果仅在available=true时可本地提取，不以最终合成图推断被遮去的像素。"
+            ),
+        } if generation_task is not None and generation_task.request.mask_version_id else None,
         "crop": version.image_crop.model_dump(mode="json") if version.image_crop is not None else None,
         "reference_sheet": version.reference_sheet.model_dump(mode="json") if version.reference_sheet is not None else None,
         "text_plate": version.text_plate.model_dump(mode="json") if version.text_plate is not None else None,

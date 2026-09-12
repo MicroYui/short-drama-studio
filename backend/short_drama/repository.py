@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from short_drama.observability import log_event
 
 from short_drama.h3_models import H3ProductionRoutePlan, H3ProviderRun, H3UploadedInput
-from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
+from short_drama.image_models import ImageGenerationTask, ImageRetryDisposition, ImageTaskStatus
 from short_drama.models import (
     AudioInspectionReport,
     EpisodeReviewReport,
@@ -1918,6 +1918,14 @@ class ShortDramaRepository:
                 ).fetchall()
             for row in rows:
                 task = ImageGenerationTask.model_validate_json(cast(str, row["record_json"]))
+                if task.provider_output_path is not None:
+                    task.status = ImageTaskStatus.OUTPUT_MISSING
+                    task.error_code = "IMAGE_OUTPUT_MISSING"
+                    task.error_message = "Provider response is already saved; recover local image output without resubmitting"
+                    task.retry_disposition = ImageRetryDisposition.RECOVER_OUTPUT
+                    self.save_image_task(task)
+                    recovered += 1
+                    continue
                 if task.submitted_at is None:
                     task.status = ImageTaskStatus.QUEUED
                     task.error_code = None

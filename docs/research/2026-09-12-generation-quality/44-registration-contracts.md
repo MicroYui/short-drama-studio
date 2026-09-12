@@ -82,7 +82,7 @@ Domain `AssetPlanPatchRequest.notes` 同步说明此合同。服务保留原冲�
 
 `tools/artifact/__init__.py` 的 Pyright 为 0 errors / 0 warnings，修改文件 `git diff --check` 通过。低影响描述修改未新增镜像文案测试；共享备注恢复采用上面的实际服务行为回归。产品源码修改紧凑 Tool 和 Domain 的 notes 说明、服务冲突反馈、参考包 Tool 描述及 Builder 既有候选段；原始记录不改。
 
-这些是本地回归与合同说明修复，当前待统一加载。没有新的真实请求证明调用次数、输入 tokens 或总耗时已下降；下一次运行应继续按实际用量和完成结果观察。
+以上为统一加载前的本地回归与合同说明修复。恢复后的实际输入核对见文末；尚无对照证明调用次数、输入 tokens 或总耗时已下降。
 
 ## 同轮视频准备的只读核对
 
@@ -118,4 +118,36 @@ g02 的 16 秒是当前唯一已证明的单次时长错误。`h3_group_operatio
 
 同一函数的空候选反馈改为“没有匹配本镜头与 ReferencePlan 的已选中或符合条件的当前视觉候选”，不再把全部可用图片称作已批准图片。顺查同模块、rerank Tool 和当前生成组候选路径，没有再发现需要一起修改的同类批准前置描述；其他真正针对自动批准母版的逻辑未替换。
 
-新增 `test_explicit_reference_rerank.py` 的 12 个节点：两种合法 DRAFT 条目通过实际 ToolRegistry → Service → Fake 视觉请求 → 建议保存及重启读取，按字节核对发给模型的是所选 PNG，保持原项目全文和批准母图；十种失效、拒绝、缺文件、错根、未知根、canonical 归属及角色反例在模型调用前失败。与既有视觉工具、多个参考版本、DRAFT 参考包和当前 H3 组候选等回归合计 **24 项通过（5.16 秒）**。源码和新测试 Pyright 为 **0 errors / 0 warnings**，所改文件 `git diff --check` 通过。验证未调用真实 Provider、未写运行项目或历史媒体；改动仍待统一加载，不宣称已减少真实返工或语言往返。
+新增 `test_explicit_reference_rerank.py` 的 12 个节点：两种合法 DRAFT 条目通过实际 ToolRegistry → Service → Fake 视觉请求 → 建议保存及重启读取，按字节核对发给模型的是所选 PNG，保持原项目全文和批准母图；十种失效、拒绝、缺文件、错根、未知根、canonical 归属及角色反例在模型调用前失败。与既有视觉工具、多个参考版本、DRAFT 参考包和当前 H3 组候选等回归合计 **24 项通过（5.16 秒）**。源码和新测试 Pyright 为 **0 errors / 0 warnings**，所改文件 `git diff --check` 通过。该本地验证未调用真实 Provider、未写运行项目或历史媒体；不宣称已减少真实返工或语言往返。
+
+## 07:56 恢复后的实际输入核对
+
+本批代码以 `bde1b8b` 加载至后台 PID 60231；同一 Job 于 2026-09-12 **07:56:38.498** 恢复，没有追加创作消息。这仍是经过开发暂停的原调试项目，不是新空项目无干预验收。本次只读核对恢复后最早三份 Worker `model.input.json` 及其对应 `provider.language_generation` 完成事件，未修改源码、运行数据库、历史 Trace 或任务状态，也未为验证额外请求 Tool 或 Provider。
+
+三份均为 `ASSET_BUILDER` / `ASSETS`，实际任务范围分别为四张文字证据图、s12–s14 收尾镜头、s01–s03 开场镜头。精确输入文件：
+
+- 准确文字证据图片准备，`work-order-a318e1e27639488fab20ba34fc3a80d8`：[20260911T235644332534-34fed496-model.input.json](../../../output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/studio-trace/studio-job-20f086971171/20260911T235644332534-34fed496-model.input.json)。
+- 收尾镜头素材制作，`work-order-9830d5cadfc34b9ebaa95946d8c03198`：[20260911T235644371694-b7aecab7-model.input.json](../../../output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/studio-trace/studio-job-20f086971171/20260911T235644371694-b7aecab7-model.input.json)。
+- 开场镜头素材制作，`work-order-4bc871f2fb124bfa889aab8f65014161`：[20260911T235644934905-501005ce-model.input.json](../../../output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/studio-trace/studio-job-20f086971171/20260911T235644934905-501005ce-model.input.json)。
+
+三份实际输入中均已载入以下内容：
+
+1. `goal.current_goal` 明确“全部视频生成前准备后结束”，要求 2K、9:16、中文普通话，并禁止创建、入队、提交或执行视频任务，不进行声音后期、剪辑或导出。历史完整成片要求仍保留在 `original_request`，没有取代新的当前目标。
+2. `tool_schemas["artifact.add_reference_entry"].description` 已是新说明：CURRENT DRAFT/APPROVED 均可，登记不改变审核和 current/approved 指针；CANONICAL_MASTER 使用主体自身图片，不要求已是批准母图，来源根按精确归属校验。这是实际加载的完整 Tool 描述，不是只看到工具目录名字。
+3. `tool_schemas["artifact.patch_asset_plan_fields"].input_schema.properties.notes.description` 明确省略或 null 保留、列表整表替换、空列表清空、个人进度使用 working_notes。Builder 实际 `instructions` 同时包含该规则，以及候选未变时只补本次改变的完成字段。
+4. Builder 的实际 `instructions` 包含姿态局部编辑的新说明：完整移动部位、必要连接关节、原位置、目标位置和背景恢复范围；不能只圈指尖锁死指根，也不固定扩大到整手或整腕。
+5. Builder 的实际 `instructions` 包含可见纸内共面区域的方法：保留源角身份逐点对应，区域须包含本次完整必要内容，只采样源 quad、修改目标 quad，不外推整页、不猜遮挡角，并按实际可见区域保护相交前景。
+
+**这三份均未加载 `image.composite_plane` 的完整 Tool schema。** 因而这里只证明共面子区域方法已进入相关 Builder 的实际指令，不能声称 `ImagePlaneLayer.source_quad/target_quad` 的新字段说明已随该 schema 发给模型。嵌套 QA 模型的新指令也不在本次三份 Worker 请求核对范围内，不能以 Builder 已加载替代其验证。三份 `response_protocol_feedback` 和 `tool_schema_feedback` 均为 null，本次输入未携带这两类修正反馈。
+
+实际请求与完成回执均记录 `gpt-6-astra`、`reasoning_effort=xhigh`，供应商响应的 `response_model` 也为 `gpt-6-astra`；不以配置页或源码标签代替实际请求。用量均由 Provider 报告，三个请求的 `image_count=0`：
+
+| Worker / call_id | 完成事件 | 请求时间（北京时间） | 完成回执时间 | 输入 tokens | 输出 tokens | 缓存输入 tokens | LM 耗时 |
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 文字证据 / `model-fadf343d7f76` | 7309 | 07:56:44.332534 | 07:56:59.194513 | 77,333 | 687 | 9,052 | 14.820312 秒 |
+| 收尾镜头 / `model-f928726514e1` | 7318 | 07:56:44.371694 | 07:57:04.981964 | 71,858 | 999 | 0 | 20.556100 秒 |
+| 开场镜头 / `model-2d21219359ee` | 7325 | 07:56:44.934905 | 07:57:07.354088 | 78,770 | 1,035 | 9,052 | 22.409006 秒 |
+
+三次均 `success=true`、`completion_type=sse_response_completed`。缓存输入的 0 是该次已报告的实际值，不作为缺失值，也不推测兼容代理为何没有命中。请求时间来自 `model.input`，完成时间来自 Studio 完成事件，LM 耗时采用 Provider adapter 已记录数值；不同 Worker 并发运行，不能将三次 LM 耗时相加称为墙钟。
+
+这次观察证明恢复后新合同和相关方法正文进入了真实请求，**不能证明它们已被正确执行、减少了多少轮次或产生净性能收益**。三个不同任务的首次恢复请求不构成同任务前后对照，原项目也包含多次开发暂停；质量、返工次数、总耗时与缓存收益仍须依据后续实际结果分别判断。

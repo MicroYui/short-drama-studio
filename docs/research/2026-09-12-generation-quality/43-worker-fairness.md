@@ -37,3 +37,24 @@ Microsoft 官方 [Asynchronous Request-Reply pattern](https://learn.microsoft.co
 最终本地检查：14 项专项与 25 项旧 Team 回归联合 **39 passed / 15.17s**；实际 Harness 暂停、复合 Tool、派发暂停及 carried 调度 **8 passed / 24.00s**；实际决策期间用户消息接管 **1 passed / 3.71s**。共 48 项通过，两个源/测试文件 Pyright 为 0 errors / 0 warnings，相关文件空白检查通过。使用已安装依赖，未运行真实 Provider。
 
 本次不宣称在慢 HTTP 中途释放槽，也没有提高同时进行的语言或媒体操作上限。若全部四槽都在慢调用中，第五项仍需等其中一次实际操作返回；若没有其他就绪工作，就不轮换。离线回归只证明所测边界正确，真实等待、端到端时长与内容质量的变化须由重新加载后的后续观察和新的空项目验收确认，不把 Fake 执行耗时当成真实收益。
+
+## 重新加载后的首段实际观察
+
+提交 `bde1b8b` 加载到后端 PID `60231` 后，原项目 `project-5b8286dc63e6` 的原 Job 于 **2026-09-12 07:56:38.498（北京时间）**恢复，没有新建创作任务。本次只读窗口为事件 **7280–7380**，截止 **07:57:39.529081**，约覆盖恢复后的 61 秒。证据来自现有 SQLite 的只读连接及原始 Trace；观察没有调用 Provider、重建 Service 或写入运行状态。
+
+此前等待的准确文字证据工单 `work-order-a318e1e27639488fab20ba34fc3a80d8` 在事件 7280、**07:56:38.883180** 进入 `IN_PROGRESS / WORKER_DECISION`，距恢复约 **0.385 秒**。随后确实完成一次语言判断，并执行 t11 `image.crop`：原 turn 为 `specialist-turn-cea18e371fc341cb8f0d492165958d8b`，事件 7326 的 `tool-477021aa4d18` 于 **07:57:08.011428** 开始，事件 7329 于 **07:57:09.297782** 成功，实际 Tool 耗时 **1.285505 秒**。这证明它获得了实际执行机会，并非只更新界面状态。
+
+签字复核交笔工单 `work-order-cde9c3be49f54ba7b2d9baf262f40952` 恢复原 t25 `image.composite_plane`。turn ID 仍为 `specialist-turn-d19fa140fb2843dab1732008aad4b670`，原 `requested_at` 为 **07:35:13.922336**。已逐值对照原模型 `model-b253c9214750` 的 [原始输出](../../../output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/studio-trace/studio-job-20f086971171/20260911T233513900586-282480c9-model.output.json)：其 `arguments` 与恢复后的持久 turn 参数完全相等。恢复窗口中只有一次该工单的平面合成启动：事件 7294、`tool-8f47c4f42417` 于 **07:56:44.605761** 开始，事件 7299 于 **07:56:46.694473** 成功，耗时 **2.075244 秒**；turn 于 **07:56:46.714027** 保存为 `COMPLETED`。实际产物为 `asset-version-542bc4d28240@22`，回执的 `visual_acceptance` 仍是 `NOT_ASSESSED`，不据此声称画面已经验收。
+
+该操作落盘后，事件 7301、**07:56:47.438493** 显示签字工单返回 `NEEDS_ATTENTION / WORKER_DECISION`，仍保留 25 个 turn，并未完成整个工单。事件 7302、**07:56:47.758058**，第五个对峙工单 `work-order-16f6217ce9a1450f9848777736359ba8` 已进入执行，距平面合成结束约 **1.064 秒**。它随后保存 t19 的 `REQUESTED / WORKER_TOOL`、轮换，并于 **07:57:11.312289** 再次获得执行槽；事件 7341、**07:57:13.093039** 启动 `qa.inspect_asset_version`（`tool-47bf79e9ff32`）。本窗口仅确认 QA 已开始，不推断其最终判断。
+
+两次已完成的首轮 Worker 请求如下；估计值取 `context.prepared`，实际值取 Provider usage，均为 `gpt-6-astra / xhigh`。
+
+| 工单 / 实际 call ID | 估计输入 tokens | Provider 输入 / 输出 tokens | Provider cached input | 实际模型耗时 |
+| --- | ---: | ---: | ---: | ---: |
+| 准确文字证据 / `model-fadf343d7f76` | 77,323 | 77,333 / 687 | 9,052 | 14.820312 秒 |
+| 对峙 / `model-45aa1c563590` | 89,536 | 89,546 / 729 | 9,052 | 16.175777 秒 |
+
+按窗口内 `worker.updated` 的进入与退出重放，活跃工单峰值为 **4**。窗口内共 **10 次 `model.started`**，均关联 Worker 或其 Tool 内的 QA，**0 次 Leader 模型启动、0 次 Tool 失败**；`agent.run_status` 中标记 Leader 的状态事件不计为模型请求，Tool 内 QA 也不另算一个 Worker 槽。
+
+这段真实记录确认了所观察边界上的公平轮换、原请求参数与 ID 恢复，以及没有由轮换新增 Leader 请求。它是同一任务的调试续跑，**不是新的完整 E2E，也不是净提速结论**。模型缓存和请求内容并未受控，不能将上述带缓存的耗时直接归因为调度收益；窗口外的并发峰值、整体等待与制作时长、最终内容质量仍需后续证据。

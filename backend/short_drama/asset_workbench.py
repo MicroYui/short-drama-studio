@@ -15,10 +15,8 @@ from uuid import uuid4
 import imageio_ffmpeg
 from PIL import (
     Image,
-    ImageChops,
     ImageColor,
     ImageDraw,
-    ImageFilter,
     ImageFont,
     ImageOps,
     UnidentifiedImageError,
@@ -52,6 +50,10 @@ from short_drama.image_models import (
 )
 from short_drama.image_edit_guides import (
     AssetImageEditGuideRequest, AssetImageEditGuideResponse, render_edit_guide,
+)
+from short_drama.image_edit_results import (
+    AssetImageEditResultRequest, ImageEditResultMode, copy_provider_output, render_masked_edit,
+    validate_local_edit_mask, validate_local_edit_orientation,
 )
 from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest, render_plane_composite
 from short_drama.models import (
@@ -635,6 +637,129 @@ class AssetWorkbench:
                         provider="local", model="pillow-plane-composite-v1", prompt=request.model_dump_json(), created_at=now),
                     approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now)
                 # A composite still needs visual inspection; preserve concurrent/user selections.
+                target.versions.append(version)
+                document.project.updated_at = now
+                self.repository.save_project(document)
+                return version
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
+            raise
+
+    def derive_edit_result(
+        self, project_id: str, request: AssetImageEditResultRequest,
+    ) -> AssetVersion:
+        """Save a local candidate from one real response without changing its task or selection."""
+        with self._lock:
+            task = self._require_image_task(request.image_task_id)
+            if task.project_id != project_id:
+                raise AssetWorkbenchConflict("Image edit task belongs to another project")
+            if (task.status != ImageTaskStatus.SUCCEEDED or task.operation != ImageOperation.EDIT
+                    or task.request.mask_version_id is None):
+                raise AssetWorkbenchConflict("Local edit results require a completed masked EDIT task")
+            if task.provider_output_path is None:
+                raise AssetWorkbenchConflict(
+                    "This image task has no preserved Provider output. Legacy final composites "
+                    "cannot be treated as the original response; no new Provider request was made"
+                )
+            raw_path = Path(task.provider_output_path).expanduser().resolve()
+            if not raw_path.is_file() or raw_path.stat().st_size == 0:
+                raise AssetWorkbenchConflict("Preserved Provider output is missing or empty")
+            raw_stat = raw_path.stat()
+            expected_raw_stat = (raw_stat.st_size, raw_stat.st_mtime_ns)
+            document = self._require_project(project_id)
+            target = self._require_asset(document, task.asset_id)
+            self._require_asset_version(target, task.output_version_id)
+            primary_id = task.request.primary_input_version_id or task.request.ordered_input_version_ids()[0]
+            identifiers: list[str] = [primary_id, task.output_version_id]
+            if request.mask_version_id is not None:
+                identifiers.append(request.mask_version_id)
+            identifiers = list(dict.fromkeys(identifiers))
+            # A rejected final composite does not reject its unseen Provider pixels.
+            # Only inputs actually used by local masking need usable image files.
+            names = {identifier: self._find_version(document, identifier)[0].name for identifier in identifiers}
+            sources: dict[str, tuple[AssetVersion, Path, tuple[int, int]]] = {}
+            if request.mode == ImageEditResultMode.MASKED_COMPOSITE:
+                for identifier in (primary_id, request.mask_version_id):
+                    assert identifier is not None
+                    _owner, version = self._find_version(document, identifier)
+                    if version.media_type != AssetMediaType.IMAGE or not version.local_path:
+                        raise AssetWorkbenchConflict(f"Local masked composition requires a local image: {identifier}")
+                    if version.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or version.freshness != Freshness.CURRENT:
+                        raise AssetWorkbenchConflict(f"Local masked composition source is not current usable media: {identifier}")
+                    path = Path(version.local_path).expanduser().resolve()
+                    if not path.is_file() or path.stat().st_size == 0:
+                        raise AssetWorkbenchConflict(f"Local masked composition source is missing or empty: {identifier}")
+                    if identifier == request.mask_version_id and (version.mime_type or mimetypes.guess_type(path.name)[0]) != "image/png":
+                        raise AssetWorkbenchConflict("Local edit mask must be a PNG image")
+                    stat = path.stat()
+                    sources[identifier] = (version, path, (stat.st_size, stat.st_mtime_ns))
+
+        directory = self._asset_directory(project_id, task.asset_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        output_id = f"asset-version-{uuid4().hex[:12]}"
+        suffix = raw_path.suffix if request.mode == ImageEditResultMode.PROVIDER_OUTPUT else ".png"
+        temporary = directory / f".{output_id}-edit-result{suffix}"
+        destination = temporary
+        try:
+            try:
+                if request.mode == ImageEditResultMode.PROVIDER_OUTPUT:
+                    width, height = copy_provider_output(raw_path, output_path=temporary)
+                else:
+                    assert request.mask_version_id is not None
+                    validate_local_edit_mask(sources[request.mask_version_id][1])
+                    validate_local_edit_orientation(sources[primary_id][1], source_name="Original primary image")
+                    validate_local_edit_orientation(raw_path, source_name="Preserved Provider output")
+                    width, height = render_masked_edit(raw_path, sources[primary_id][1],
+                        sources[request.mask_version_id][1], output_path=temporary,
+                        mask_feather_pixels=request.mask_feather_pixels)
+                self._validate_requested_output_dimensions(task, width, height)
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise AssetWorkbenchConflict(f"Cannot derive saved edit result: {exc}") from exc
+            with self._lock:
+                current_task = self._require_image_task(task.id)
+                stat = raw_path.stat() if raw_path.is_file() else None
+                if (current_task != task or stat is None
+                        or (stat.st_size, stat.st_mtime_ns) != expected_raw_stat):
+                    raise AssetWorkbenchConflict("Preserved image response changed during local processing; read that task again")
+                document = self._require_project(project_id)
+                target = self._require_asset(document, task.asset_id)
+                self._require_asset_version(target, task.output_version_id)
+                for identifier, (original, path, expected_stat) in sources.items():
+                    _owner, current = self._find_version(document, identifier)
+                    stat = path.stat() if path.is_file() else None
+                    if (current.local_path != original.local_path
+                            or current.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+                            or current.freshness != Freshness.CURRENT or stat is None
+                            or (stat.st_size, stat.st_mtime_ns) != expected_stat):
+                        raise AssetWorkbenchConflict(f"Local edit source changed during processing: {identifier}; read that exact source again")
+                number = self._next_version_number(target)
+                destination = directory / f"v{number}-{output_id}-edit-result{suffix}"
+                temporary.replace(destination)
+                now = utc_now()
+                purposes = {
+                    primary_id: "原图像任务的实际 primary 输入；MASKED_COMPOSITE 保留其遮罩外像素。",
+                    task.output_version_id: "同一图像任务已登记输出的追溯引用；不是 Provider 原始像素，也不代表该输出已通过检查。",
+                }
+                if request.mask_version_id is not None:
+                    purposes[request.mask_version_id] = "本次本地重合成明确使用的透明编辑/不透明保护遮罩。"
+                version = AssetVersion(id=output_id, version=number,
+                    origin_type=OriginType.LOCAL_DERIVED, media_type=AssetMediaType.IMAGE,
+                    descriptor=request.descriptor.strip(), local_path=str(destination),
+                    mime_type=task.output_mime_type if request.mode == ImageEditResultMode.PROVIDER_OUTPUT else "image/png",
+                    width=width, height=height, file_size_bytes=destination.stat().st_size,
+                    parent_version_id=task.output_version_id,
+                    derivation_references=[AssetDerivationReference(
+                        asset_version_id=identifier, source_project_id=project_id,
+                        reference_role=ImageReferenceRole.COMPOSITION if identifier == primary_id else ImageReferenceRole.SUPPORTING_VISUAL,
+                        reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                        purpose=purposes[identifier], subject_alias=names[identifier],
+                    ) for identifier in identifiers],
+                    source=AssetSourceRecord(source_type=OriginType.LOCAL_DERIVED,
+                        source_label="Provider 原始结果本地候选" if request.mode == ImageEditResultMode.PROVIDER_OUTPUT else "保存结果的本地遮罩重合成",
+                        source_uri=str(raw_path), provider="local", model="saved-image-edit-result-v1",
+                        prompt=request.model_dump_json(), created_at=now),
+                    approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now)
                 target.versions.append(version)
                 document.project.updated_at = now
                 self.repository.save_project(document)
@@ -1403,10 +1528,22 @@ class AssetWorkbench:
                 task.updated_at = utc_now()
                 self.repository.save_image_task(task)
                 return task
+            if task.status == ImageTaskStatus.OUTPUT_MISSING and task.provider_output_path is not None:
+                return self._recover_image_output(task.id)
             if task.status != ImageTaskStatus.SUBMITTING:
                 raise AssetWorkbenchConflict(
                     f"Image task {task.id} cannot advance from {task.status.value}"
                 )
+            if task.provider_output_path is not None:
+                # A restart after saving the response must finish local processing,
+                # not submit the already answered request a second time.
+                task.status = ImageTaskStatus.OUTPUT_MISSING
+                task.error_code = "IMAGE_OUTPUT_MISSING"
+                task.error_message = "Provider response is already saved; recovering local image output"
+                task.retry_disposition = ImageRetryDisposition.RECOVER_OUTPUT
+                task.updated_at = utc_now()
+                self.repository.save_image_task(task)
+                return self._recover_image_output(task.id)
             return self._submit_image_task(task)
 
     def cancel_image_task(self, task_id: str) -> ImageGenerationTask:
@@ -1499,16 +1636,46 @@ class AssetWorkbench:
         return task
 
     def recover_image_output(self, task_id: str) -> ImageGenerationTask:
+        with self._lock:
+            task_lock = self._image_advance_locks.setdefault(task_id, threading.Lock())
+        with task_lock:
+            return self._recover_image_output(task_id)
+
+    def _recover_image_output(self, task_id: str) -> ImageGenerationTask:
         task = self._require_image_task(task_id)
         if task.status != ImageTaskStatus.OUTPUT_MISSING:
             raise AssetWorkbenchConflict("Image task has no recoverable output")
         candidate = Path(task.output_path) if task.output_path else None
         if candidate is None or not candidate.is_file():
-            staged = Path(task.staged_path) if task.staged_path else None
-            if staged is None or not staged.is_file():
-                raise AssetWorkbenchConflict(
-                    "No staged image remains; create an explicit retry task"
-                )
+            if task.provider_output_path is not None:
+                raw = Path(task.provider_output_path)
+                if not raw.is_file():
+                    raise AssetWorkbenchConflict("Preserved Provider output is missing; the original response cannot be reconstructed")
+                staging_dir = self.workspace_root / task.project_id / "assets" / ".staging"
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                staged = staging_dir / f"{task.id}-recovered{raw.suffix}.part"
+                width, height = self._validate_output_image(raw)
+                try:
+                    self._validate_requested_output_dimensions(task, width, height)
+                except ImageOutputDimensionMismatch as exc:
+                    return self._mark_task_failed(task, "IMAGE_OUTPUT_DIMENSION_MISMATCH", str(exc))
+                shutil.copyfile(raw, staged)
+                task.staged_path = str(staged)
+                task.updated_at = utc_now()
+                self.repository.save_image_task(task)
+                if task.request.mask_version_id is not None:
+                    # Always start from the untouched response, never a previous blend.
+                    self._apply_masked_composite(task, staged, width, height)
+            else:
+                staged = Path(task.staged_path) if task.staged_path else None
+                if staged is None or not staged.is_file():
+                    raise AssetWorkbenchConflict("No staged image remains; create an explicit retry task")
+                if task.request.mask_version_id is not None:
+                    raise AssetWorkbenchConflict(
+                        "Legacy masked task has only an ambiguous staged file: it may be before "
+                        "or after local composition. No preserved Provider output is available; "
+                        "cannot safely recover or apply feathering again. No Provider request was made"
+                    )
             width, height = self._validate_output_image(staged)
             try:
                 self._validate_requested_output_dimensions(task, width, height)
@@ -1532,7 +1699,7 @@ class AssetWorkbench:
                     "IMAGE_OUTPUT_DIMENSION_MISMATCH",
                     str(exc),
                 )
-        return self._finalize_image_version(task, candidate, width, height)
+        return self._finalize_image_version(task, candidate, width, height, preserve_selection=True)
 
     def _submit_image_task(self, task: ImageGenerationTask) -> ImageGenerationTask:
         try:
@@ -1618,6 +1785,14 @@ class AssetWorkbench:
             raise ValueError(f"Unsupported image MIME type: {result.mime_type}")
         staging_dir = self.workspace_root / task.project_id / "assets" / ".staging"
         staging_dir.mkdir(parents=True, exist_ok=True)
+        if task.operation == ImageOperation.EDIT and task.request.mask_version_id is not None:
+            raw_dir = self.workspace_root / task.project_id / "assets" / ".provider-output"
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            raw_path = raw_dir / f"{task.id}{suffix}"
+            raw_staged = raw_path.with_suffix(f"{suffix}.part")
+            raw_staged.write_bytes(payload)
+            raw_staged.replace(raw_path)
+            task.provider_output_path = str(raw_path)
         staged = staging_dir / f"{task.id}{suffix}.part"
         staged.write_bytes(payload)
         task.staged_path = str(staged)
@@ -1669,29 +1844,11 @@ class AssetWorkbench:
         _mask_asset, mask = self._find_version(document, task.request.mask_version_id or "")
         if primary.local_path is None or mask.local_path is None:
             raise ValueError("Masked composite inputs are not locally available")
-        with Image.open(primary.local_path) as source_image:
-            source = source_image.convert("RGBA")
-        with Image.open(mask.local_path) as mask_image:
-            mask_alpha = mask_image.convert("RGBA").getchannel("A")
-        with Image.open(generated_path) as generated_image:
-            generated = generated_image.convert("RGBA")
-        if source.size != (width, height) or mask_alpha.size != (width, height):
+        actual_size = render_masked_edit(generated_path, Path(primary.local_path), Path(mask.local_path),
+            output_path=generated_path, mask_feather_pixels=task.request.mask_feather_pixels,
+            output_format=task.request.output_format.value)
+        if actual_size != (width, height):
             raise ValueError("Masked composite dimensions do not match provider output")
-
-        editable = Image.eval(mask_alpha, lambda value: 255 - value)
-        if task.request.mask_feather_pixels:
-            softened = editable.filter(
-                ImageFilter.GaussianBlur(radius=task.request.mask_feather_pixels)
-            )
-            editable = ImageChops.multiply(editable, softened)
-        composite = Image.composite(generated, source, editable)
-        output_format = task.request.output_format.value
-        if output_format == "jpeg":
-            composite.convert("RGB").save(generated_path, format="JPEG", quality=95)
-        elif output_format == "webp":
-            composite.save(generated_path, format="WEBP", quality=95)
-        else:
-            composite.save(generated_path, format="PNG")
 
     def _finalize_image_version(
         self,
@@ -1699,6 +1856,8 @@ class AssetWorkbench:
         output_path: Path,
         width: int,
         height: int,
+        *,
+        preserve_selection: bool = False,
     ) -> ImageGenerationTask:
         with self._lock:
             document = self._require_project(task.project_id)
@@ -1771,7 +1930,8 @@ class AssetWorkbench:
                 existing.width = width
                 existing.height = height
                 existing.file_size_bytes = output_path.stat().st_size
-            asset.current_version_id = task.output_version_id
+            if not preserve_selection:
+                asset.current_version_id = task.output_version_id
             document.project.updated_at = now
             self.repository.save_project(document)
             task.status = ImageTaskStatus.SUCCEEDED

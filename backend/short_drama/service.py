@@ -139,7 +139,9 @@ from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
 from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest
+from short_drama.image_edit_results import AssetImageEditResultRequest
 from short_drama.image_models import (
+    ImageTaskStatus,
     AssetBriefUpdateRequest,
     AssetCreateRequest,
     AssetBatchCreateRequest,
@@ -749,9 +751,16 @@ def _log_image_task_transition(
     if previous is None or (previous.status, previous.error_code) != (task.status, task.error_code):
         record_trace("provider.image_generation", {
             "task_id": task.id, "project_id": task.project_id, "asset_id": task.asset_id,
+            "action": action,
+            "local_recovery": action == "recover_output" or bool(
+                action == "advance" and previous is not None
+                and previous.status in {ImageTaskStatus.SUBMITTING, ImageTaskStatus.OUTPUT_MISSING}
+                and previous.provider_output_path
+            ),
             "provider": task.provider, "model": task.model, "operation": task.operation.value,
             "status": task.status.value, "provider_task_id": task.provider_request_id,
             "output_version_id": task.output_version_id, "output_path": task.output_path,
+            "provider_output_path": task.provider_output_path,
             "submitted_at": task.submitted_at, "finished_at": task.finished_at,
             "error_code": task.error_code, "error_message": task.error_message,
             "usage": task.usage.model_dump(mode="json") if task.usage is not None else None,
@@ -13017,6 +13026,18 @@ class ShortDramaService:
         self._require_project_mutation_allowed(project_id)
         try:
             return self.asset_workbench.create_edit_guide(project_id, request)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def derive_asset_edit_result(
+        self, project_id: str, request: AssetImageEditResultRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            version = self.asset_workbench.derive_edit_result(project_id, request)
+            return self._asset_mutation_response(project_id, version.id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except AssetWorkbenchConflict as exc:

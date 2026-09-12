@@ -830,6 +830,10 @@ class ImageGenerationTask(DomainModel):
     attempt: int = 1
     retry_of_task_id: str | None = None
     provider_request_id: str | None = None
+    provider_output_path: str | None = Field(default=None, description=(
+        "Original Provider response file retained before local masked composition. "
+        "Available only for newly saved masked EDIT results; absent on legacy tasks."
+    ))
     staged_path: str | None = None
     output_path: str | None = None
     output_mime_type: str | None = None

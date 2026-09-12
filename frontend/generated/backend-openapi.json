@@ -12657,6 +12657,18 @@
             "title": "Provider",
             "type": "string"
           },
+          "provider_output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Original Provider response file retained before local masked composition. Available only for newly saved masked EDIT results; absent on legacy tasks.",
+            "title": "Provider Output Path"
+          },
           "provider_request_id": {
             "anyOf": [
               {
