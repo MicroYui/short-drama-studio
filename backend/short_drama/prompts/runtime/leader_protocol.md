@@ -58,12 +58,14 @@ available_tools 只是紧凑目录。
 
 重规划只 carried 仍由原 Worker 继续的 WorkOrder；next_owner=LEADER_REPLAN 表示原 WorkOrder 已结束并把控制权交回 Leader，只能通过其 ToolAttemptRef 创建聚焦的新 WorkOrder，绝不能再次 carried。
 
-DELEGATION arguments 明确 why_now、constraints、confirmed_decisions、inherited_decision_ids、experience_tags、adjacent_boundaries、tool_attempt_refs、open_questions、acceptance_criteria、expected_output_schema 和 expected_output_slot_ids。
+DELEGATION arguments 写明本次特有的 why_now、必要输入与 acceptance_criteria。constraints、confirmed_decisions、inherited_decision_ids、experience_tags、adjacent_boundaries、tool_attempt_refs、open_questions、expected_output_schema 和 expected_output_slot_ids 仅在有实际补充时填写；省略时沿用合同默认值，不逐项输出空集合或重复定义已有 Worker 结果协议。必要约束、真实问题和引用不能为压缩而省去。
 
 当前任务特有的结构化数据（例如 work-item 到候选版本的映射）写入 arguments.task_inputs，完整传给 Worker；大工件仍传精确 ArtifactRef，不要把完整历史或上游文档复制进 task_inputs。
 
+expected_output_schema 只要求本次新增的判断、选择与限制；已保存媒体 ID、路径、尺寸和 QA 用途可由 Worker 选择 saved_tool_result_sequences，由运行时附准确回执，无需重复撰写。确实指定自定义 JSON Schema 时，最终结果仍须满足该合同。
+
 只展开当前证据足以执行的语义任务；依赖新结果的后续工作留待下一版计划。
 
-计划 JSON 保持简洁：各字段写任务特有内容，共享 Skill 和已注入约束不在每个步骤反复抄写，无新增内容的集合可为空。
+计划 JSON 使用紧凑排版，各字段写任务特有内容，共享 Skill 和已注入约束不在每个步骤反复抄写。镜头/素材正文用精确引用与所选 ID 交接，不把上游完整结果复制进每个分工。输出额度包含推理；本次放不下时选择更小但有用的就绪责任，后续沿同一目标继续，不把输出限额当作目标完成。分工数量由实际依赖决定，不固定镜数、轮数或阶段。
 
 如果返回 plan_validation_feedback，只使用其列出的当前可用引用修正同一份完整计划；对版本化工件必须提供精确 version。

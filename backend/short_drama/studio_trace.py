@@ -51,7 +51,7 @@ def production_trace(directory: Path, emit: TraceWriter) -> Iterator[None]:
         entry = {"kind": kind, "created_at": now.isoformat(), "data": payload}
         name = f"{now.strftime('%Y%m%dT%H%M%S%f')}-{uuid4().hex[:8]}-{kind}.json"
         (directory / name).write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
-        if kind not in {"model.input", "model.output", "context.offloaded"}:
+        if kind not in {"model.input", "model.output", "model.incomplete", "context.offloaded"}:
             emit(kind, payload)
 
     token = _writer.set(write)

@@ -55,9 +55,11 @@ class LanguageProviderIncompleteError(LanguageProviderError):
         *,
         reason: str,
         partial_output_characters: int,
+        partial_output_text: str | None = None,
     ) -> None:
         self.reason = reason
         self.partial_output_characters = partial_output_characters
+        self.partial_output_text = partial_output_text
         super().__init__(f"Language generation incomplete: {reason}")
 
 
@@ -271,6 +273,10 @@ class OpenAICompatibleLanguageClient:
                 except ValueError as exc:
                     completion_type = "json_error"
                     raise LanguageProviderError("Language generation returned invalid JSON") from exc
+                except LanguageProviderIncompleteError as exc:
+                    completion_type = f"json_incomplete_{exc.reason}"
+                    partial_output_characters = exc.partial_output_characters
+                    raise
                 except LanguageProviderError:
                     completion_type = "json_error"
                     raise
@@ -280,6 +286,13 @@ class OpenAICompatibleLanguageClient:
             return output_text
         except Exception as exc:
             error_kind = type(exc).__name__
+            if isinstance(exc, LanguageProviderIncompleteError):
+                record_trace("model.incomplete", {
+                    "call_id": call_id, "reason": exc.reason,
+                    "text": exc.partial_output_text,
+                    "partial_output_characters": exc.partial_output_characters,
+                    "saved": False,
+                })
             raise
         finally:
             draft.finish(success=success)
@@ -368,16 +381,25 @@ class OpenAICompatibleLanguageClient:
             raise LanguageProviderError("Language provider generation returned an invalid object")
         response_payload = cast(dict[str, object], payload)
         if response_payload.get("status") == "incomplete":
-            partial = response_payload.get("output_text")
+            partial = OpenAICompatibleLanguageClient._received_output_text(response_payload, preserve_whitespace=True)
             raise LanguageProviderIncompleteError(
                 reason=OpenAICompatibleLanguageClient._stream_incomplete_reason(response_payload) or "unknown",
-                partial_output_characters=len(partial) if isinstance(partial, str) else 0,
+                partial_output_characters=len(partial),
+                partial_output_text=partial,
             )
         if response_payload.get("status") == "failed":
             raise LanguageProviderError(OpenAICompatibleLanguageClient._stream_error_message(response_payload))
+        result = OpenAICompatibleLanguageClient._received_output_text(response_payload).strip()
+        if not result:
+            raise LanguageProviderError("Language provider generation returned no output text")
+        return result
+
+    @staticmethod
+    def _received_output_text(response_payload: dict[str, object], *, preserve_whitespace: bool = False) -> str:
+        """Extract received text only; callers still enforce terminal status."""
         direct_text = response_payload.get("output_text")
         if isinstance(direct_text, str) and direct_text.strip():
-            return direct_text.strip()
+            return direct_text
 
         text_parts: list[str] = []
         raw_output = response_payload.get("output")
@@ -395,10 +417,8 @@ class OpenAICompatibleLanguageClient:
                     text = part.get("text")
                     if part.get("type") == "output_text" and isinstance(text, str):
                         text_parts.append(text)
-        result = "\n".join(part.strip() for part in text_parts if part.strip()).strip()
-        if not result:
-            raise LanguageProviderError("Language provider generation returned no output text")
-        return result
+        return ("\n".join(text_parts) if preserve_whitespace
+                else "\n".join(part.strip() for part in text_parts if part.strip()))
 
     def _extract_stream_output_text(
         self,
@@ -491,12 +511,13 @@ class OpenAICompatibleLanguageClient:
                         )
                         or "unknown"
                     )
+                    terminal_text = (self._received_output_text(cast(dict[str, object], terminal_response), preserve_whitespace=True)
+                                     if isinstance(terminal_response, dict) else "")
+                    partial_text = max("".join(text_deltas), completed_text or "", terminal_text, key=len)
                     raise LanguageProviderIncompleteError(
                         reason=reason,
-                        partial_output_characters=max(
-                            len("".join(text_deltas)),
-                            len(completed_text or ""),
-                        ),
+                        partial_output_characters=len(partial_text),
+                        partial_output_text=partial_text,
                     )
         except requests.RequestException as exc:
             raise LanguageProviderTransportError(

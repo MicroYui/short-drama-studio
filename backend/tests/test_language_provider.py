@@ -768,6 +768,11 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
         "official MiniMax-H3 prompt field order preserved",
         "locked 9:16 ratio and 8-second duration preserved",
         "1 locked dialogue line(s) preserved verbatim",
+        "Single-shot prompt only: no generation-unit candidate was created. "
+        "route.plan_h3 authored prompt/media requires a generation-unit candidate. "
+        "For complete current-group preparation use route.prepare_h3_group with enqueue=false; "
+        "for a partial-group work order, hand this exact result to the group owner "
+        "without changing the group or creating video tasks.",
     ]
     assert len(fake.generations) == 1
     instructions, input_text = fake.generations[0]
@@ -1129,6 +1134,13 @@ def test_language_compiler_accepts_official_voiceover_form(
     )
 
     assert result.compiled_prompt == fake.output_text
-    assert result.validation_notes[-1] == "1 locked dialogue line(s) preserved verbatim"
+    assert result.validation_notes[-2:] == [
+        "1 locked dialogue line(s) preserved verbatim",
+        "Single-shot prompt only: no generation-unit candidate was created. "
+        "route.plan_h3 authored prompt/media requires a generation-unit candidate. "
+        "For complete current-group preparation use route.prepare_h3_group with enqueue=false; "
+        "for a partial-group work order, hand this exact result to the group owner "
+        "without changing the group or creating video tasks.",
+    ]
     assert "says in an off-screen voiceover" in result.compiled_prompt
     assert "lips remain completely closed" in result.compiled_prompt

@@ -122,8 +122,14 @@ from short_drama.production_profiles import (
 )
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
+    LanguageProviderIncompleteError,
     LanguageProviderTransportError,
     is_language_transport_error,
+)
+from short_drama.agent_runtime.planning_output import (
+    PLANNING_OUTPUT_TOKENS,
+    output_limit_feedback,
+    planning_response_guidance,
 )
 from short_drama.skills import SkillProvenanceKind
 from short_drama.tools import (
@@ -1587,11 +1593,13 @@ class LanguageProductionPlanner:
         schema_feedback: dict[str, JsonValue] | None = None
         rejected_schema_requests: set[tuple[str, ...]] = set()
         invalid_plan_signatures: set[str] = set()
+        output_feedback: dict[str, JsonValue] | None = None
         while True:
             execution_boundary()
             observed_artifact_refs: list[ArtifactRef] = []
             payload = {
                 "reason": reason,
+                "planning_response": planning_response_guidance(),
                 "context": context.model_context_dump(),
                 "available_tools": tool_catalog,
                 "tool_schemas": {
@@ -1625,6 +1633,8 @@ class LanguageProductionPlanner:
                 payload["tool_schema_feedback"] = schema_feedback
             if plan_validation_feedback is not None:
                 payload["plan_validation_feedback"] = plan_validation_feedback
+            if output_feedback is not None:
+                payload["planning_output_feedback"] = output_feedback
             if self.context_compiler.store is not None:
                 read_working_set = leader_read_working_set(
                     self.context_compiler.store, run_id=context.run_id,
@@ -1647,11 +1657,28 @@ class LanguageProductionPlanner:
                     run_id=context.run_id, project_id=context.project_id,
                     instructions=instructions,
                     payload=cast(dict[str, JsonValue], payload),
-                    # Several legitimate delegations can exceed 7k output tokens.
-                    # Leave JSON transport headroom without expanding the input
-                    # context or prescribing a creative batching policy.
-                    max_output_tokens=12000,
+                    max_output_tokens=PLANNING_OUTPUT_TOKENS,
                 )
+            except LanguageProviderIncompleteError as exc:
+                # One changed planning request, shared across schema/validation
+                # turns. No partial JSON is parsed or applied. The next loop's
+                # execution boundary gives pause/new input priority over retry.
+                if exc.reason != "max_output_tokens" or output_feedback is not None:
+                    raise ProductionManagerError(
+                        f"Production Manager planning failed: {exc}"
+                    ) from exc
+                output_feedback = output_limit_feedback(
+                    partial_output_characters=exc.partial_output_characters,
+                )
+                record_trace("agent.plan_output_recovery", {
+                    "run_id": context.run_id,
+                    "status": "PREPARED",
+                    "reason": exc.reason,
+                    "max_output_tokens": PLANNING_OUTPUT_TOKENS,
+                    "partial_output_characters": exc.partial_output_characters,
+                    "partial_plan_executed": False,
+                })
+                continue
             except Exception as exc:
                 raise ProductionManagerError(
                     f"Production Manager planning failed: {exc}"
