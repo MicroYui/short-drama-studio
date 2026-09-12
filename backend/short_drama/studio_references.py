@@ -52,6 +52,7 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
     used_versions: set[str] = set()
     used_ids: set[str] = set()
     aliases: dict[str, tuple[str, str | None]] = {}
+    errors: list[str] = []
     owners = [("shot", shot, shot.references), *(
         (f"beat-{index}", beat, beat.references) for index, beat in enumerate(shot.timeline_beats)
     )]
@@ -59,19 +60,23 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
         spans: dict[str, list[tuple[int, int]]] = {}
         for index, cue in enumerate(cues):
             cue.id = cue.id or f"{shot.id}-{scope}-ref-{index}"
+            path = ("/request/shot/references" if scope == "shot" else
+                    f"/request/shot/timeline_beats/{scope.removeprefix('beat-')}/references")
+            location = f"{path}/{index} cue={cue.id!r} alias={cue.alias!r} subject={cue.subject_asset_id}"
             if cue.id in used_ids:
-                raise ValueError("每个文案引用位置必须有独立 id")
+                errors.append(f"{location}: 每个文案引用位置必须有独立 id")
             used_ids.add(cue.id)
             subject = assets.get(cue.subject_asset_id)
             if subject is None:
-                raise ValueError("引用对象不在本项目资产中")
+                errors.append(f"{location}: 引用对象不在本项目资产中")
+                continue
             if cue.text_start is not None and cue.text_end is not None:
                 text: object = getattr(owner, cue.field or "visual", "")
                 if not isinstance(text, str) or cue.text_end > len(text):
-                    raise ValueError("图片引用的位置已与正文不同，请在当前文案中重新选定位置")
+                    errors.append(f"{location}: 图片引用的位置已与正文不同，请在当前文案中重新选定位置")
                 ranges = spans.setdefault(cue.field or "visual", [])
                 if any(cue.text_start < end and cue.text_end > start for start, end in ranges):
-                    raise ValueError("同一段文案不能叠加两个图片引用；请分别选定文字")
+                    errors.append(f"{location}: 同一段文案不能叠加两个图片引用；请分别选定文字")
                 ranges.append((cue.text_start, cue.text_end))
             allowed = {version.id for version in subject.versions}
             allowed.update(entry.asset_version_id for pack in document.reference_packs
@@ -87,10 +92,19 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
                 # A planned object can remain without media; generation will report the missing input.
                 continue
             if cue.asset_version_id not in allowed or cue.asset_version_id not in versions:
-                raise ValueError("选择的图片不属于该对象或其参考图集")
+                source = versions.get(cue.asset_version_id)
+                source_owner = source[0].id if source is not None else "MISSING"
+                errors.append(
+                    f"{location}: 选择的图片不属于该对象或其参考图集; "
+                    f"media={cue.asset_version_id}, source_owner={source_owner}. "
+                    "Each subject needs its own existing image or valid reference-pack entry; "
+                    "another subject's entry does not establish this relationship."
+                )
+                continue
             target = (subject.id, cue.asset_version_id)
             if cue.alias in aliases and aliases[cue.alias] != target:
-                raise ValueError("同一镜头中不同图片需要不同引用名称")
+                errors.append(f"{location}: 同一镜头中不同图片需要不同引用名称; "
+                              f"subject/media={target!r}, earlier={aliases[cue.alias]!r}")
             aliases[cue.alias] = target
             if cue.usage == "EDITORIAL":
                 continue
@@ -102,6 +116,8 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
                 binding = next(item for item in bindings if item.target_id == cue.asset_version_id)
                 if cue.purpose not in binding.purpose:
                     binding.purpose = f"{cue.purpose}；{binding.purpose}"[:500]
+    if errors:
+        raise ValueError("\n".join(errors))
     plan = next((item for item in document.reference_plan if item.shot_id == shot.id), None)
     if plan is None:
         plan = ReferencePlanEntry(shot_id=shot.id, bindings=[], capability_valid=True, validation_notes=[])

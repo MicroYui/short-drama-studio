@@ -15,7 +15,7 @@ from short_drama.production_contracts import (
     AssetPlanFieldPatch, AssetPlanMutationResponse, AssetPlanPatchRequest, StoryboardDraftGroupReplaceRequest,
     StoryboardPatchRequest, StoryboardShotReplacement, StoryboardWorkUnitContract,
 )
-from short_drama.reference_planner import ReferencePackEntryCreateRequest
+from short_drama.reference_planner import ReferencePackEntryCreateRequest, reference_entry_context
 from short_drama.studio_models import StudioMutationResult, StudioShotSave
 from short_drama.studio_references import shot_cues, sync_shot_references
 from short_drama.studio_storyboard import current_draft, project_draft_shots
@@ -43,7 +43,10 @@ class ShotMediaRegistration(DomainModel):
     asset_version_id: str = Field(min_length=1, description="One explicitly selected CURRENT usable DRAFT/APPROVED image used by a cue in the supplied Shot. No implicit approval or current-version selection.")
     plan_completion: ShotMediaPlanCompletion | None = None
     reference_entries: list[ReferencePackEntryCreateRequest] = Field(default_factory=list[ReferencePackEntryCreateRequest], max_length=16,
-        description="Optional explicit subject, role and source lineage. Existing identical entries are reused; different saved metadata conflicts instead of being overwritten.")
+        description=("Optional uses of this exact image in CHARACTER/LOCATION/PROP subject packs. "
+            "Each cross-subject Shot cue needs its own valid relationship, not just a room entry. "
+            "For a self-owned REFERENCE COMPOSITION cue, omit this registration unless completing a plan item. "
+            "Existing identical entries are reused; different saved metadata conflicts instead of being overwritten."))
 
     @model_validator(mode="after")
     def consistent_version(self) -> Self:
@@ -121,12 +124,26 @@ def save_shot_with_media_registration(
             raise ValueError("The selected media must occur in the supplied Shot's explicit cues")
         summary = ShotMediaRegistrationSummary(asset_id=owner.id, asset_version_id=version.id)
         existing_entry_ids = {entry.id for pack in document.reference_packs for entry in pack.entries}
-        for entry in registration.reference_entries:
-            added = service._add_reference_pack_entry_document(document, entry, preserve_existing=True)  # pyright: ignore[reportPrivateUsage]
+        relationship_errors: list[str] = []
+        for index, entry in enumerate(registration.reference_entries):
+            try:
+                added = service._add_reference_pack_entry_document(document, entry, preserve_existing=True)  # pyright: ignore[reportPrivateUsage]
+            except (ValueError, KeyError) as exc:
+                relation = reference_entry_context(document, entry)
+                relationship_errors.append(
+                    f"/media_registration/reference_entries/{index}: {exc}"
+                    + ("; " + relation if relation not in str(exc) else "")
+                )
+                continue
             summary.reference_entry_ids.append(added.entry.id)
             if added.entry.id not in existing_entry_ids:
                 summary.created_reference_entry_ids.append(added.entry.id)
-        sync_shot_references(document, replacement)
+        try:
+            sync_shot_references(document, replacement)
+        except ValueError as exc:
+            relationship_errors.append(str(exc))
+        if relationship_errors:
+            raise WorkflowConflictError("Shot media relationships are invalid; nothing was saved:\n" + "\n".join(relationship_errors))
         same_shot = replacement.model_dump(exclude={"revision", "freshness"}) == current.model_dump(exclude={"revision", "freshness"})
         if current.revision != request.expected_revision and not same_shot:
             raise StudioContentConflict("此镜头已更新；未保存任何素材登记，请合并当前镜头正文。")

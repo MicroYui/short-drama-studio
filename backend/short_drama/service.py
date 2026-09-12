@@ -487,6 +487,7 @@ from short_drama.reference_planner import (
     compile_keyframe_brief,
     parse_director_advice,
     preview_reference_plan,
+    reference_entry_context,
     role_is_compatible,
     usable_reference_pack_entries,
 )
@@ -11134,13 +11135,15 @@ class ShortDramaService:
         with self._lock:
             project_id = document.project.id
             subject = self._require_asset_in_document(document, request.subject_asset_id)
+            relation = reference_entry_context(document, request)
             if subject.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
                 raise WorkflowConflictError(
-                    "Reference packs must belong to a character, location, or prop asset"
+                    "Reference packs must belong to a character, location, or prop asset; " + relation
+                    + ". A self-owned REFERENCE composition can be used directly by its own Shot cue without a pack."
                 )
             if not role_is_compatible(subject.kind, request.role):
                 raise WorkflowConflictError(
-                    f"Reference role {request.role.value} is incompatible with {subject.kind.value}"
+                    f"Reference role {request.role.value} is incompatible with {subject.kind.value}; " + relation
                 )
             source_asset, source_version = self._find_asset_version(
                 document,
@@ -11154,23 +11157,23 @@ class ShortDramaService:
             ):
                 raise WorkflowConflictError(
                     "Only a current usable formal version or supplemental image "
-                    "can enter a reference pack"
+                    "can enter a reference pack; " + relation
                 )
             if source_version.media_type != AssetMediaType.IMAGE:
-                raise WorkflowConflictError("Reference pack entries currently require image media")
+                raise WorkflowConflictError("Reference pack entries currently require image media; " + relation)
             if source_version.local_path is None and source_version.external_url is None:
                 raise WorkflowConflictError(
-                    "Reference pack entries require usable image media"
+                    "Reference pack entries require usable image media; " + relation
                 )
             lineage_root_version_id = request.lineage_root_version_id
             if request.role == ReferenceRole.CANONICAL_MASTER:
                 if source_asset.id != subject.id:
                     raise WorkflowConflictError(
-                        "A CANONICAL_MASTER entry must use an image owned by the subject asset"
+                        "A CANONICAL_MASTER entry must use an image owned by the subject asset; " + relation
                     )
                 if lineage_root_version_id not in {None, source_version.id}:
                     raise WorkflowConflictError(
-                        "A CANONICAL_MASTER entry cannot declare another lineage root"
+                        "A CANONICAL_MASTER entry cannot declare another lineage root; " + relation
                     )
                 lineage_root_version_id = source_version.id
             if lineage_root_version_id is not None:
@@ -11192,7 +11195,7 @@ class ShortDramaService:
                 ):
                     raise WorkflowConflictError(
                         "Reference-pack lineage root must be a current usable image "
-                        "owned by the subject"
+                        "owned by the subject; " + relation
                     )
 
             now = utc_now()
@@ -11245,7 +11248,7 @@ class ShortDramaService:
                             or existing.tags != normalized_tags
                             or existing.description != request.description.strip()
                             or existing.priority != request.priority):
-                        raise WorkflowConflictError("Reference entry already has different saved content: " + existing.id)
+                        raise WorkflowConflictError("Reference entry already has different saved content: " + existing.id + "; " + relation)
                     return ReferencePackEntryMutationResponse(pack=pack, entry=existing, project=self._aggregate(document))
                 existing.lineage_root_version_id = lineage_root_version_id
                 existing.tags = normalized_tags

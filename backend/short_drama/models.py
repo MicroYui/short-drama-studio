@@ -1641,9 +1641,17 @@ class ContinuityState(DomainModel):
 class ShotReferenceCue(DomainModel):
     """Semantic reference requested by one time-bounded part of a shot."""
 
-    subject_asset_id: str = Field(min_length=1, max_length=200)
+    subject_asset_id: str = Field(min_length=1, max_length=200, description=(
+        "Actual referenced object. Its selected image must be owned by this asset or registered in "
+        "this subject's reference pack. A self-owned REFERENCE image may be used directly as a "
+        "COMPOSITION cue, without a pack or approval. A room's pack entry does not establish another prop's use."
+    ))
     id: str | None = None
-    asset_version_id: str | None = None
+    asset_version_id: str | None = Field(default=None, description=(
+        "Exact selected media UUID with the subject's own-image/reference-pack relationship. "
+        "The same image may serve multiple subjects only with each subject's valid relationship; "
+        "do not change ownership or invent a pack merely because the image contains an object."
+    ))
     field: Literal["visual", "action", "performance", "camera"] | None = None
     text_start: int | None = Field(default=None, ge=0, description=(
         "正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。"
@@ -1654,7 +1662,10 @@ class ShotReferenceCue(DomainModel):
         "正文 @ 引用的结束 Unicode 字符位置（不包含终点），与 text_start 成对。"
         "时段内引用放到对应 timeline_beat.references；它的偏移基于该时段的 field 文本。"
     ))
-    alias: str = Field(min_length=1, max_length=80)
+    alias: str = Field(min_length=1, max_length=80, description=(
+        "Readable name without @. Within one Shot, a name identifies one subject and exact media/state. "
+        "Use different aliases for a closed-folder composition and its open-page image, even for the same prop."
+    ))
     required_tags: list[str] = Field(default_factory=list[str], max_length=12)
     purpose: str = Field(min_length=1, max_length=500)
     image_reference_role: ImageReferenceRole | None = Field(default=None, description=(
@@ -1726,10 +1737,15 @@ class ShotTimelineBeat(DomainModel):
         if len(self.dialogue_line_ids) != len(set(self.dialogue_line_ids)):
             raise ValueError("Shot timeline beat dialogue line IDs must be unique")
         aliases: dict[str, tuple[str, str | None]] = {}
-        for cue in self.references:
+        for index, cue in enumerate(self.references):
             target = (cue.subject_asset_id, cue.asset_version_id)
             if cue.alias in aliases and (cue.id is None or aliases[cue.alias] != target):
-                raise ValueError("Shot timeline beat reference aliases must identify one subject and media")
+                raise ValueError(
+                    "Shot timeline beat reference aliases must identify one subject and media: "
+                    f"references[{index}] cue={cue.id!r} alias={cue.alias!r} "
+                    f"subject/media={target!r}; earlier={aliases[cue.alias]!r}. "
+                    "Use distinct aliases for different media or states."
+                )
             aliases[cue.alias] = target
         return self
 
@@ -1803,7 +1819,9 @@ class ShotPlan(DomainModel):
                 existing = alias_targets.setdefault(cue.alias, target)
                 if existing != target:
                     raise ValueError(
-                        "A shot reference alias cannot identify different subjects or views"
+                        "A shot reference alias cannot identify different subjects or views: "
+                        f"cue={cue.id!r} alias={cue.alias!r} subject/media/tags={target!r}; "
+                        f"earlier={existing!r}. Use distinct aliases for different media or states."
                     )
         return self
 

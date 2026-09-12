@@ -59,10 +59,25 @@ class KeyframePosition(StrEnum):
 
 
 class ReferencePackEntryCreateRequest(DomainModel):
-    subject_asset_id: str
-    asset_version_id: str
-    role: ReferenceRole
-    lineage_root_version_id: str | None = None
+    subject_asset_id: str = Field(description=(
+        "CHARACTER/LOCATION/PROP whose reference pack receives this use. This is the depicted subject, "
+        "not necessarily the asset containing the image. A REFERENCE container can be used directly "
+        "by its own COMPOSITION Shot cue without a pack; do not register a pack on that container."
+    ))
+    asset_version_id: str = Field(description=(
+        "Exact current usable DRAFT/APPROVED image, including one stored in another asset. "
+        "One composition image may have separate entries for several depicted subjects; "
+        "register only the actual uses needed by their cues. No file is moved or approved."
+    ))
+    role: ReferenceRole = Field(description=(
+        "Use within this subject's pack; must match its kind. CANONICAL_MASTER requires the subject's "
+        "own image. An interaction/state/composition reference does not replace that identity source."
+    ))
+    lineage_root_version_id: str | None = Field(default=None, description=(
+        "Optional exact current usable IMAGE owned by subject_asset_id that establishes this subject's "
+        "lineage. Not an arbitrary editing parent or the composition container's base image. "
+        "Omit when no such lineage is being asserted; CANONICAL_MASTER uses its own source image."
+    ))
     angle: ReferenceAngle = ReferenceAngle.NOT_APPLICABLE
     framing: ReferenceFraming = ReferenceFraming.NOT_APPLICABLE
     tags: list[str] = Field(default_factory=list[str], max_length=32)
@@ -74,6 +89,19 @@ class ReferencePackEntryMutationResponse(DomainModel):
     pack: ReferencePack
     entry: ReferencePackEntry
     project: ProjectAggregate
+
+
+def reference_entry_context(document: ProjectDocument, request: ReferencePackEntryCreateRequest) -> str:
+    """Small relationship facts for a failed request, not a saved entry."""
+    assets = {asset.id: asset for asset in document.assets}
+    owners = {version.id: asset.id for asset in document.assets for version in asset.versions}
+    subject = assets.get(request.subject_asset_id)
+    return (
+        f"subject={request.subject_asset_id} (kind={subject.kind.value if subject else 'MISSING'}), "
+        f"source={request.asset_version_id} (owner={owners.get(request.asset_version_id, 'MISSING')}), "
+        f"role={request.role.value}, root={request.lineage_root_version_id} "
+        f"(owner={owners.get(request.lineage_root_version_id or '', 'NONE_OR_MISSING')})"
+    )
 
 
 class ShotReferencePlanUpdateRequest(DomainModel):
