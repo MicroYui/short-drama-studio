@@ -12671,6 +12671,30 @@
             "description": "Original Provider response file retained before local masked composition. Available only for newly saved masked EDIT results; absent on legacy tasks.",
             "title": "Provider Output Path"
           },
+          "provider_output_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact registered candidate containing the preserved, unmasked Provider pixels. Absent until registration; it is not the task's default output or an accepted image.",
+            "title": "Provider Output Version Id"
+          },
+          "provider_output_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reserved/registered number for provider_output_version_id. Use as an ArtifactRef only when that ID is present on a completed task; output_version_id remains the masked final.",
+            "title": "Provider Output Version Number"
+          },
           "provider_request_id": {
             "anyOf": [
               {

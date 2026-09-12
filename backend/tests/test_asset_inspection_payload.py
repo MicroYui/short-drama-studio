@@ -3,10 +3,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from short_drama.asset_inspection import AssetVersionInspectionRequest, inspect_asset_image
+from short_drama.language_models import LanguageProviderConfigUpdate
+from short_drama.models import ApprovalStatus, Freshness
+from short_drama.service import ShortDramaService
 from short_drama.tools import ToolCallStatus
 from tests.test_asset_edit_guide_suggestion import _setup
+from tests.test_asset_inspection import CapturingLanguageClient
 from tests.test_asset_plane_composite_suggestion import _setup as plane_setup
+from tests.test_image_edit_results import _completed
 
 
 def test_single_image_qa_omits_unavailable_plane_schema_but_keeps_observed_guide(tmp_path: Path) -> None:
@@ -69,3 +76,40 @@ def test_observed_local_plane_still_exposes_complete_repair_constraints(tmp_path
     assert result.output["plane_composite_suggestion"]["base_asset_version_id"] == base.id
     assert result.output["plane_composite_suggestion"]["layers"][0]["source_asset_version_id"] == source.id
     assert language.calls == 1 and len(language.image_urls) == 2
+
+
+@pytest.mark.parametrize("raw_available", [True, False])
+def test_masked_review_identifies_registered_raw_without_claiming_to_observe_or_select_it(
+    tmp_path: Path, raw_available: bool,
+) -> None:
+    fixture, provider, asset, base, _mask, task = _completed(tmp_path)
+    document = fixture.get_project(asset.project_id).document
+    target = next(item for item in document.assets if item.id == asset.id)
+    raw = next(item for item in target.versions if item.id == task.provider_output_version_id)
+    if not raw_available:
+        raw.approval_status = ApprovalStatus.REJECTED
+        raw.freshness = Freshness.STALE
+        Path(raw.local_path or "").unlink()
+        fixture.repository.save_project(document)
+    language = CapturingLanguageClient()
+    service = ShortDramaService(database_path=fixture.repository.database_path,
+        workspace_root=fixture.workspace_root, language_provider_factory=lambda _key, _url: language)
+    service.update_language_provider_config(LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1"))
+    before = service.get_project(asset.project_id).document
+    result = service.tool_registry.invoke("qa.inspect_asset_version", {
+        "project_id": asset.project_id, "asset_id": asset.id,
+        "version_id": task.output_version_id, "request": {},
+    })
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    payload = json.loads(language.input_text)
+    candidate = payload["candidate_creation"]["masked_edit"]["provider_output_candidate"]
+    assert candidate["asset_id"] == asset.id
+    assert candidate["asset_version_id"] == raw.id
+    assert candidate["version"] == raw.version
+    assert candidate["approval_status"] == raw.approval_status.value
+    assert candidate["freshness"] == raw.freshness.value
+    assert candidate["local_file_available"] is raw_available
+    assert len(language.image_urls) == 2  # Current candidate and its existing base reference.
+    assert {item["version_id"] for item in payload["image_map"]} == {task.output_version_id, base.id}
+    assert service.get_project(asset.project_id).document == before
+    assert len(provider.calls) == 1

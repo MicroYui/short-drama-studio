@@ -7272,6 +7272,16 @@ export interface components {
              * @description Original Provider response file retained before local masked composition. Available only for newly saved masked EDIT results; absent on legacy tasks.
              */
             provider_output_path?: string | null;
+            /**
+             * Provider Output Version Id
+             * @description Exact registered candidate containing the preserved, unmasked Provider pixels. Absent until registration; it is not the task's default output or an accepted image.
+             */
+            provider_output_version_id?: string | null;
+            /**
+             * Provider Output Version Number
+             * @description Reserved/registered number for provider_output_version_id. Use as an ArtifactRef only when that ID is present on a completed task; output_version_id remains the masked final.
+             */
+            provider_output_version_number?: number | null;
             /** Provider Request Id */
             provider_request_id?: string | null;
             request: components["schemas"]["ImageProviderRequest"];

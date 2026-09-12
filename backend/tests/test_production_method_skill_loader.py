@@ -290,7 +290,8 @@ def test_drama_method_role_sources_include_storyboard_execution_and_verification
     verifier = drama.prompt_for(ProductionSkillRole.ASSET_VERIFIER, stage=ProductionPromptStage.ASSETS)
     assert planner is not None and builder is not None and verifier is not None
     assert "## 资产规划" in planner
-    assert "生命周期道具" in planner
+    assert "完整/破损、空/已装物、封闭/打开是剧情状态" in planner
+    assert "缺少必要可见证据才从可用版本派生" in planner
     assert "# 用户源图片的登记与人物锚定" in planner
     assert "单张脸照或单角度人像也可以足够" in planner
     assert "## 资产制作" in builder

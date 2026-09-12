@@ -120,5 +120,6 @@ def test_exact_saved_spatial_sources_and_current_shot_reach_real_qa_tool(
     assert "本机位预期可见的背景方位" in language.instructions
     assert "分别报告可见矛盾与无法判定" in language.instructions
     assert "不是当前候选已符合要求的结论" in language.instructions
-    assert "不因无关视图缺席要求返工" in language.instructions
+    assert "不把 Asset 总体四视图要求套到单张脸部/侧面图" in language.instructions
+    assert "若某空间关系必须可见却无法辨认，明确它不能作为该职责已满足的依据" in language.instructions
     assert service.get_project(pid).document.model_dump(mode="json") == before

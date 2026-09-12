@@ -978,6 +978,10 @@ def inspect_asset_image(
         "本次没有可用于本地平面合成的基图和已观察来源，plane_composite_suggestion返回null，"
         "不为取得建议追加发现、回读或视觉调用。"
     )
+    provider_candidate = next((
+        item for item in asset.versions
+        if generation_task is not None and item.id == generation_task.provider_output_version_id
+    ), None)
     creation = {
         "output_layout_profile": output_layout,
         "actual_size": {
@@ -1002,6 +1006,21 @@ def inspect_asset_image(
                 and Path(generation_task.provider_output_path).is_file()
             ),
             "local_derivation_tool": "image.derive_edit_result",
+            **({"provider_output_candidate": {
+                "asset_id": asset.id,
+                "asset_version_id": provider_candidate.id,
+                "version": provider_candidate.version,
+                "approval_status": provider_candidate.approval_status.value,
+                "freshness": provider_candidate.freshness.value,
+                "local_file_available": bool(
+                    provider_candidate.local_path and Path(provider_candidate.local_path).is_file()
+                ),
+                "inspection_tool": "qa.inspect_asset_version",
+                "semantics": (
+                    "原始供应商图片已登记，可按此精确引用检查或比较，无需先derive。"
+                    "此处只提供来源；未列入image_map的原图本次没有观察，不推断其质量或自动采用。"
+                ),
+            }} if provider_candidate is not None else {}),
             "semantics": (
                 "本候选已经本地遮罩合成；透明区采用供应商像素，圈外保持原图，feather只在圈内柔化，不扩大范围。"
                 "原始供应商结果仅在available=true时可本地提取，不以最终合成图推断被遮去的像素。"

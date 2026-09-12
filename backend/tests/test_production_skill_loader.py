@@ -447,7 +447,8 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert "artifact.review_version" in asset_verifier.text
     assert "不调用媒体 Provider" in asset_verifier.text
     assert "artifact.patch_asset_plan" in asset_verifier.text
-    assert "不要自己发起返工循环" in asset_verifier.text
+    assert "不自己发起返工循环" in asset_verifier.text
+    assert "独立工单超范围时用 PARTIAL / LEADER_REPLAN" in asset_verifier.text
     assert "完整移动部位、必要连接关节" in asset_verifier.text
 
     assert "兼容角色" in legacy_asset_reviewer.text
