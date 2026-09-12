@@ -6733,7 +6733,21 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
                 "arguments": {"project_id": project.id, "request": {}},
                 "reason": "Attempt a Mock generation from a REAL_H3 specialist.",
             }
-        )
+        ),
+        json.dumps(
+            {
+                "status": "COMPLETED",
+                "concise_summary": "The bounded review found the requested Tool incompatible; no generation ran.",
+                "created_artifacts": [],
+                "updated_artifacts": [],
+                "findings": ["video.enqueue requires MOCK; the parent remains REAL_H3."],
+                "decisions": ["Finish the review without changing the execution target."],
+                "assumptions": [],
+                "unresolved_questions": [],
+                "evidence_refs": [],
+                "recommended_next_actions": [],
+            }
+        ),
     ]
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
@@ -6769,11 +6783,10 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
     assert requested.result.status == AgentResultStatus.PARTIAL
     assert service.repository.list_tasks(project.id) == []
 
-    with pytest.raises(
-        ProductionManagerError,
-        match=r"video\.enqueue.*MOCK.*REAL_H3",
-    ):
-        service.execute_agent_work_order(work_order_id)
+    rejected = service.execute_agent_work_order(work_order_id)
+
+    assert rejected.result.status == AgentResultStatus.PARTIAL
+    assert rejected.result.next_owner == WorkOrderNextOwner.WORKER_DECISION
 
     tool_ids = {
         tool["id"]
@@ -6786,9 +6799,40 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
     work_order = service.agent_runtime_store.get_work_order(work_order_id)
     assert work_order is not None
     assert work_order.status == DelegationStatus.NEEDS_ATTENTION
+    assert work_order.next_owner == WorkOrderNextOwner.WORKER_DECISION
     assert len(work_order.specialist_turns) == 1
-    assert work_order.specialist_turns[0].result is not None
-    assert work_order.specialist_turns[0].result["status"] == "FAILED"
+    turn = work_order.specialist_turns[0]
+    assert turn.status == SpecialistTurnStatus.COMPLETED
+    assert turn.arguments == {"project_id": project.id, "request": {}}
+    assert turn.result is not None
+    assert turn.result["status"] == "INVALID_ARGUMENTS"
+    assert turn.result["receipt"] is None
+    error = turn.result["error"]
+    assert isinstance(error, dict)
+    assert error["kind"] == "AgentToolScopeError"
+    assert error["phase"] == "VALIDATION"
+    assert error["message"] == (
+        "Tool 'video.enqueue' requires execution target MOCK, not REAL_H3"
+    )
+    parent_run = service.agent_runtime_store.get_run(run.snapshot.run.id)
+    assert parent_run is not None
+    assert parent_run.status != AgentRunStatus.FAILED
+    assert parent_run.execution_target == ProductionExecutionTarget.REAL_H3
+
+    completed = service.execute_agent_work_order(work_order_id)
+
+    assert completed.result.status == AgentResultStatus.COMPLETED
+    assert len(client.inputs) == 2
+    correction = json.loads(client.inputs[1])["working_set"]["latest_handoff"]
+    assert correction["attempt_ref"]["attempt_id"] == turn.id
+    assert correction["result"]["status"] == "INVALID_ARGUMENTS"
+    assert correction["result"]["error"]["message"] == error["message"]
+    assert service.repository.list_tasks(project.id) == []
+    stored = service.agent_runtime_store.get_work_order(work_order_id)
+    assert stored is not None
+    assert stored.status == DelegationStatus.COMPLETED
+    assert len(stored.specialist_turns) == 1
+    assert stored.specialist_turns[0] == turn
 
 
 def test_completed_work_order_contract_errors_are_wrapped(
