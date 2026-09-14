@@ -1,7 +1,8 @@
 {
   "measured_at": "2026-09-11T08:35:26.307383+00:00",
   "project_id": "project-974ca837e45e",
-  "database": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/studio-launch-2026-r2/runtime/short-drama.sqlite3",
+  "database": null,
+  "source_removed_on": "2026-09-14",
   "method": {
     "database_mode": "SQLite mode=ro and PRAGMA query_only=ON",
     "model_unit": "unique call_id; provider.language_generation is a completion record including unsuccessful completed requests",

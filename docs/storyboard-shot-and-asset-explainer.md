@@ -63,6 +63,6 @@ Agent的运行边界由用户目标决定：要求完整剧本则完成剧本后
 - [首组真实H3准备](../output/agent-video-preparation/math-2min-pre-h3-20260908-001/route_plans/h3-route-plan-18ea3092929b4f00b09e0ec1dbff8c53.json)：时间窗口、13秒目标、六张有序参考图与实际生成Prompt。
 - [最终时间线](../output/agent-video-finishing/math-2min-complete-film-20260908-001/manifests/project-11b4f7a637c3-manifest-v5.json)：21个video_clips的镜号、源片窗口和成片起点。
 - [核心资产包](../output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/run/core-assets-complete/README.md)：29份媒体原始名称、尺寸和用途。
-- [完整案例记录](50-complete-film-agent-case-trace.md)：真实视频尺寸、成片、用户参与和修复边界；原始Trace继续保留供发布会PPT使用。
+- [完整案例记录](50-complete-film-agent-case-trace.md)：真实视频尺寸、成片、用户参与和修复边界；原始Trace继续保留。
 
 本轮交互演示可以压缩引用已有开场13秒及资产缩略图，不能将演示的局部修改、计时动画或任务完成状态写为新模型已执行或新成片已生成。

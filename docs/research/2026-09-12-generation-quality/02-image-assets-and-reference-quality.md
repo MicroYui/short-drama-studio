@@ -10,14 +10,14 @@
 
 ## 看过的实际图片
 
-以下为旧案例的真实文件，不是本轮新空项目生成结果。来源索引为 `output/mature-product-acceptance/h3-compile/source-project.json`，该文件有完整 AssetVersion 和来源记录。
+以下为旧案例的观察记录，不是本轮新空项目生成结果。来源索引为 `output/mature-product-acceptance/h3-compile/source-project.json`，该文件有完整 AssetVersion 和来源记录。表中前四项的原文件已于 2026-09-14 清理，仅保留文件名和此前的观察结论。
 
 | 实际文件 | 可见事实 | 对当前用途的影响 |
 | --- | --- | --- |
-| `output/studio-launch-2026-r2/runtime/outputs/short-drama-projects/project-974ca837e45e/assets/asset-c50d552d47f0/v3-asset-version-7f0663cb928f.png` | 2560×1440，主角蓝白校服、黑包、挂绳的四个全身视图；服装与体态信息清楚，单个脸部占比较小 | 适合服装/全身参考，不能直接证明它也足以固定近景面部。应查看脸部源像素；能裁出有效脸部才裁，细节不足时从同一身份来源补近景 |
-| `output/studio-launch-2026-r2/runtime/outputs/short-drama-projects/project-974ca837e45e/assets/asset-594c8868b8be/v8-asset-version-acc395643eeb.png` | 1672×941 的食堂四机位图，能看见餐桌、窗口、设备、门窗等环境 | 提供环境外观与部分空间依据，但没有真实演员、餐盘和窗口接触关系；不能当作交接初态已经成立 |
-| `output/studio-launch-2026-r2/runtime/outputs/short-drama-projects/project-974ca837e45e/assets/asset-2ed2fd0ec17a/v2-asset-version-cf1f67477963.png` | 1024×1024，三格空餐盘 | 能约束物体形制；不能证明本镜开场餐盘已有米饭和菜 |
-| `output/studio-launch-2026-r2/runtime/outputs/short-drama-projects/project-974ca837e45e/assets/asset-e66dc286da66/v2-asset-version-c8c10f31ae76.png` | 1024×1024，浅椭圆勺头和直柄 | 有明确可比较的部件形制；后续生成变成圆深勺不能归为“同样是一把勺子”而忽略 |
+| `v3-asset-version-7f0663cb928f.png`（已清理） | 2560×1440，主角蓝白校服、黑包、挂绳的四个全身视图；服装与体态信息清楚，单个脸部占比较小 | 适合服装/全身参考，不能直接证明它也足以固定近景面部。应查看脸部源像素；能裁出有效脸部才裁，细节不足时从同一身份来源补近景 |
+| `v8-asset-version-acc395643eeb.png`（已清理） | 1672×941 的食堂四机位图，能看见餐桌、窗口、设备、门窗等环境 | 提供环境外观与部分空间依据，但没有真实演员、餐盘和窗口接触关系；不能当作交接初态已经成立 |
+| `v2-asset-version-cf1f67477963.png`（已清理） | 1024×1024，三格空餐盘 | 能约束物体形制；不能证明本镜开场餐盘已有米饭和菜 |
+| `v2-asset-version-c8c10f31ae76.png`（已清理） | 1024×1024，浅椭圆勺头和直柄 | 有明确可比较的部件形制；后续生成变成圆深勺不能归为“同样是一把勺子”而忽略 |
 | `output/mature-product-acceptance/h3-compile/selected-reference-contact-sheet.jpg` | 本次旧 H3 请求的 8 张实际参考统览 | 主角小脸与其他较清楚人物参考的信息量不均衡；这是输入风险，不是已证明发生身份互换 |
 
 已有 H3 的 `video-inspection.json` / `inspection-summary.json` 保存了 18 帧观察，报告了餐盘/勺子差异、视线轴和动作连续性问题。该检查对主角身份明确存在参考辨识限制，因此不能说它已可靠证明主角换脸。静态观察也不构成听审。上述问题支持“候选尚不能采用”，不能单独归因于图片模型。
@@ -56,7 +56,7 @@
 
 ## 配置与本轮检查边界
 
-新 runtime 应使用 `short-drama-language-provider-settings.json`、`short-drama-image-provider-settings.json`、`short-drama-provider-settings.json` 三份现有配置。旧图片配置位于 `output/studio-launch-2026-r2/runtime/short-drama-image-provider-settings.json`，实际模型为 `gpt-image-2`，Azure host 为 `datasetannotator-openai.openai.azure.com`，已配置图像 generation/edit 路线；不在文档输出 key。语言配置使用当前 4141 代理和 gpt-6-astra/xhigh；视频保持现有真实 H3 主链。
+新 runtime 应从当前应用数据目录读取 `short-drama-language-provider-settings.json`、`short-drama-image-provider-settings.json`、`short-drama-provider-settings.json` 三份配置。当时核对的图片模型为 `gpt-image-2`，Azure host 为 `datasetannotator-openai.openai.azure.com`，已配置图像 generation/edit 路线；语言配置使用 4141 代理和 gpt-6-astra/xhigh，视频使用 H3。旧运行配置已于 2026-09-14 清理，重新运行时以实际使用的配置为准；不在文档输出 key。
 
 `image.capability.can_generate` 只代表配置中有 key，不证明账户当前可调用或额度可用。需要以本次产品任务真实请求/回执确认；透明背景与供应商能力限制仍由适配层处理，不承诺所有输出参数在 Azure 均可用。本子任务没有发起付费图片/视频请求。
 

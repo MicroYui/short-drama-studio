@@ -10,7 +10,7 @@
 
 ## 数据与计数口径
 
-主要项目：`project-974ca837e45e`。数据库：`output/studio-launch-2026-r2/runtime/short-drama.sqlite3`，本次以 SQLite `mode=ro` 打开。
+主要项目：`project-974ca837e45e`，当时以 SQLite `mode=ro` 读取数据库。原始运行目录及关联素材已于 2026-09-14 清理；本报告保留当时的统计与分析，原文件链接已移除。
 
 任务：
 
@@ -38,9 +38,9 @@
 | 用户文本消息 | 22 条 `chat.user`；含创作指令、恢复说明与工程提示。五次创作动作不能改写为全程只有五条消息 |
 | 作业状态事件 | paused 33 次、waiting_user 4 次、failed 2 次；33 次暂停多数对应修复与换包，4 次等待对应用户要求的逐项文本选择 |
 
-上述摘要与 [trace-summary.json](../../../output/studio-launch-2026-r2/snapshots/trace-summary.json) 一致；本报告额外核对了 call_id 唯一性及原始输出类型。统计 SQL 的核心为按 `project_id` 过滤 `studio_events`，再以 `kind`、JSON `call_id` 分组。失败分类另取 `tool.finished.status`，不把旧状态快照重复计数。
+上述摘要保存在 [统计快照](01-current-metrics.json)；本报告额外核对了 call_id 唯一性及原始输出类型。统计 SQL 的核心为按 `project_id` 过滤 `studio_events`，再以 `kind`、JSON `call_id` 分组。失败分类另取 `tool.finished.status`，不把旧状态快照重复计数。
 
-可复算命令：在仓库根目录运行 `python3 docs/research/2026-09-11-mature-video-production/01-measure-trace.py`。脚本仅查询指定项目 SQLite；schema 分类只直接读取两个指定 job 目录下的小型 `*-model.output.json` 文件，不递归扫描 output、模型输入、ZIP 或应用包。聚合 JSON 不含完整用户输入、Provider 响应 ID、提示词或大型 payload。
+统计脚本保留为 [01-measure-trace.py](01-measure-trace.py)，运行时需用 `--runtime` 指定仍存在的数据目录，并用 `--project-id` 指定项目。原数据已清理，当前快照无法从本地原目录复算。脚本仅查询指定项目 SQLite；schema 分类只直接读取两个指定 job 目录下的小型 `*-model.output.json` 文件，不递归扫描 output、模型输入、ZIP 或应用包。聚合 JSON 不含完整用户输入、Provider 响应 ID、提示词或大型 payload。
 
 ### 耗时能分到什么程度
 
@@ -72,7 +72,7 @@
 
 7 个成功视频从本地 `submitted_at` 到 `finished_at` 为 353.2–615.7 秒，中位 431.9 秒；区间并集 2,425.1 秒，约 40 分 25 秒。它包含远端生成、轮询及本地回收延迟，不是供应商纯渲染速度。未返回追加候选不在这组成功样本里。
 
-19:42:49 至 20:04:41 的已有 [runner-h3-wait.json](../../../output/studio-launch-2026-r2/snapshots/runner-h3-wait.json) 实际记录 44 次状态查询、零新语言决策。299 次 `task.advance` 因此不能等同于 299 次模型轮次。语言、视频与状态区间有交叠，**上述耗时不应直接相加或相减来构造净制作速度**。
+19:42:49 至 20:04:41 的当时记录包含 44 次状态查询、零新语言决策。299 次 `task.advance` 因此不能等同于 299 次模型轮次。语言、视频与状态区间有交叠，**上述耗时不应直接相加或相减来构造净制作速度**。
 
 ## 按影响排序的问题
 
@@ -130,7 +130,7 @@
 - 源码：[team_executor.py:140](../../../backend/short_drama/team_executor.py#L140)、[154](../../../backend/short_drama/team_executor.py#L154)、[229](../../../backend/short_drama/team_executor.py#L229)、[389](../../../backend/short_drama/team_executor.py#L389)；H3 使用 15 秒 `time.sleep`，然后继续持久化下一次确定性查询。
 - Studio 调用仍是 [studio_runtime.py:357](../../../backend/short_drama/studio_runtime.py#L357) 的同步整批 `advance_agent_team(...continue_until_handoff=True)`。
 - 已完成修复：所有 ready step 优先执行（350–354 行），外部工具不持有项目写锁、Worker 可以各自连续执行、H3等待不再需要模型决策。这些修复不应再列为当前缺失。
-- 真正发生过的独立后期被远端轮询挡住，见 [04-production-progress.md:166](../../presentation/studio-launch-2026/04-production-progress.md#L166)；新版 20:43 已让两个独立读取和 EDITORIAL_FINISH 启动，见 [independent-ready-work-native.json](../../../output/studio-launch-2026-r2/snapshots/independent-ready-work-native.json)。本报告不声称最新版本仍复现同一已修复路径。
+- 当时真实发生过独立后期被远端轮询挡住；新版 20:43 已让两个独立读取和 EDITORIAL_FINISH 启动。本报告不声称最新版本仍复现同一已修复路径。
 
 **候选改善：** 把 Provider 在途等待变成 `next_poll_at` 的可调度状态，让完成/交接结果逐个通知 Leader；长期等待释放 Worker 槽位。暂停/补充消息通过现有唤醒信号结束等待。保留已有确定性轮询与提交去重，不引入分布式队列。
 
@@ -142,7 +142,6 @@
 
 - 当前可变执行记录已统一为当前状态引用：[agent_runtime/context.py:47](../../../backend/short_drama/agent_runtime/context.py#L47)。Worker 最新要求也已接通：[production_manager.py:4703](../../../backend/short_drama/production_manager.py#L4703)。这些不是待实现项。
 - 活跃生成入口仍依次读取生成组、解析媒体、逐镜核对引用并进行 Provider 校验：[service.py:10884](../../../backend/short_drama/service.py#L10884)。真正内容变更必须检查；无关内容版本变化不能继续作为全局冻结。
-- 修复实际证据见 [parallel-material-saves-real-results.json](../../../output/studio-launch-2026-r2/snapshots/parallel-material-saves-real-results.json)、[parallel-video-unit-check.json](../../../output/studio-launch-2026-r2/snapshots/parallel-video-unit-check.json)、[live-route-replan-fixed.json](../../../output/studio-launch-2026-r2/snapshots/live-route-replan-fixed.json) 和 [04-production-progress.md:124](../../presentation/studio-launch-2026/04-production-progress.md#L124)。
 
 **候选改善：** 围绕“这次选中的生成组/镜头/制作项”统一依赖读取与变更回执；保存工具返回准确的已影响对象、当前引用与可继续动作。先用本轮真实失败请求组成有限的跨入口回放集，避免每个入口单独放宽校验后另一入口再次拒绝。保留真实内容冲突处理，不建立新版本管理产品。
 
@@ -171,9 +170,8 @@
 
 **事实与当前状态：当前质量缺口仍存在。** 食堂四视图补角有空间矛盾，最后采用用户既有确认参考；结尾加肉候选实际出现餐盘起态、校长站位和重复添菜偏差。最终用已返回候选配合剪辑完成，而非所有问题重新生成到完美。
 
-- [TRACE_README.md:27](../../../output/studio-launch-2026-r2/TRACE_README.md#L27)、[31](../../../output/studio-launch-2026-r2/TRACE_README.md#L31) 保留具体结果边界。
 - `_previous_shot_terminal_state` 从上一镜 `ShotPlan` 的 visual、action_out、prop_state_out、character_positions 读取设计事实，见 [h3_language_prompt.py:262](../../../backend/short_drama/providers/h3_language_prompt.py#L262)。这不是上一段实际采用视频的终态观察。
-- 实际视频参考在发现偏差后才额外加入，见 [04-production-progress.md:154](../../presentation/studio-launch-2026/04-production-progress.md#L154)。该改进候选后来一直未返回，不能声称其提高质量已经验证。
+- 实际视频参考在发现偏差后才额外加入。该改进候选后来一直未返回，不能声称其提高质量已经验证。
 
 **候选改善：** 对确实要求连续的相邻生成组，维护小型“已采用画面的当前状态”记录与实际参考；只包含人物位置、手中物、食物初终态、关键动作承接。明确设计状态和观察状态来源。先用已有影片验证裁切、插入反应镜头、声音桥等本地修复；必须重生成时再使用实际参考与局部目标。视频抽帧观察和音频听审继续分开。
 
@@ -183,7 +181,7 @@
 
 **事实与当前状态：部分已修复，局部审阅造成全任务等待的策略仍活跃。** 本轮 4 次 waiting_user 都来自真实要求的文字对照，应保留；但 Runner 当前只要同一 run 有任意 pending change，就整体返回 waiting_user，尚未按依赖隔离可继续的其他工作。[studio_runtime.py:318](../../../backend/short_drama/studio_runtime.py#L318)。
 
-- 用户后来要求第 16–18 镜 21 处文字集中成一批，否则按镜头分别等一轮，见 [04-production-progress.md:120](../../presentation/studio-launch-2026/04-production-progress.md#L120)。批次已实际处理，不应再次列为未完成。
+- 用户后来要求第 16–18 镜 21 处文字集中成一批，否则按镜头分别等一轮。批次已实际处理，不应再次列为未完成。
 - 目标完成时，最终一次消息明确已有文件可交付、建议性审校不要变成新门槛；此前透明黑尾的建议检查仍报旧 Take 来源错误。该转换现已修复：[studio_episode_review.py:30](../../../backend/short_drama/studio_episode_review.py#L30)。
 - Worker 新补充未入模型、保留 WorkOrder 的空计划校验问题均已修复，代码分别为 [production_manager.py:4703](../../../backend/short_drama/production_manager.py#L4703)、[5332](../../../backend/short_drama/production_manager.py#L5332)，并有本轮恢复证据。
 
@@ -196,7 +194,6 @@
 **事实与当前状态：本轮具体缺陷大多已修复；发布与回归缺口需保留。** 本轮因缺 OpenCC、图版透明与文字布局缺口、导出只取顶层、透明度旧限制、LTX 素材元数据必填、当前剪辑仍被旧 Manifest 检查等问题反复修复换包。它们发生在用户已经拥有可用素材之后，与 H3 创作质量无关。
 
 - 当前音频输入已经来自保存的 Studio 时间线并保留速度/音量：[studio_audio.py:51](../../../backend/short_drama/studio_audio.py#L51)。当前整集检查同样读 Studio 剪辑：[studio_episode_review.py:15](../../../backend/short_drama/studio_episode_review.py#L15)。不能继续把“读取旧 Manifest”称为当前活跃 bug。
-- 本轮真实修复与最终导出证据：[04-production-progress.md:108](../../presentation/studio-launch-2026/04-production-progress.md#L108)、[130](../../presentation/studio-launch-2026/04-production-progress.md#L130)、[174](../../presentation/studio-launch-2026/04-production-progress.md#L174)、[178](../../presentation/studio-launch-2026/04-production-progress.md#L178)、[184](../../presentation/studio-launch-2026/04-production-progress.md#L184)。
 
 **候选改善：** 用已有短案例做一次打包后有限验证：启动、读当前剪辑、局部裁切、PNG叠图、原声字幕、透明黑尾、导出并重开。工具能力声明与实际导出转换使用同一个适配事实来源；不支持的效果在创建参数时明确反馈。只做本产品需要的回归，不扩建独立 QA 平台或付费稳定性实验。
 

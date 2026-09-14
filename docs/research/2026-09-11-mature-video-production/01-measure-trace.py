@@ -207,9 +207,8 @@ def measure(runtime: Path, project_id: str) -> dict:
 
 
 def main() -> None:
-    repo = Path(__file__).resolve().parents[3]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runtime", type=Path, default=repo / "output/studio-launch-2026-r2/runtime")
+    parser.add_argument("--runtime", type=Path, required=True, help="Directory containing the source short-drama.sqlite3")
     parser.add_argument("--project-id", default="project-974ca837e45e")
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("01-current-metrics.json"))
     args = parser.parse_args()

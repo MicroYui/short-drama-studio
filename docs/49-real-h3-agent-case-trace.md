@@ -119,7 +119,7 @@ backend/.venv/bin/python output/agent-video-generation/math-2min-real-h3-2026090
 
 运行列表膨胀主要出现在 `00168–00170`。索引投影加载后，`00171–00238` 的 58 次 Worker 调用输入中位数为 22,278.5、最大值为 33,173 tokens；2 次 Leader 最大 26,389，8 次媒体观察最大 34,476。该区间主要执行覆盖核对和观察，与之前的生成提交工作不同，因此不把两段累计用量或时间作受控成本对照。
 
-可用于后续 PPT 的上下文曲线：[PNG](../output/agent-video-generation/math-2min-real-h3-20260908-002/context-input-tokens.png)、[可缩放 SVG](../output/agent-video-generation/math-2min-real-h3-20260908-002/context-input-tokens.svg)。数据来自 `model-call-metrics.json`，图上按角色连接真实输入 token 点，缺失 usage 不估算。`plot_context_usage.py` 使用已缓存的 ReportLab 导出 SVG，PNG 使用已缓存 Sharp 转换；没有安装或下载新的依赖。
+上下文曲线：[PNG](../output/agent-video-generation/math-2min-real-h3-20260908-002/context-input-tokens.png)、[可缩放 SVG](../output/agent-video-generation/math-2min-real-h3-20260908-002/context-input-tokens.svg)。数据来自 `model-call-metrics.json`，图上按角色连接真实输入 token 点，缺失 usage 不估算。`plot_context_usage.py` 使用已缓存的 ReportLab 导出 SVG，PNG 使用已缓存 Sharp 转换；没有安装或下载新的依赖。
 
 ## 案例展示边界
 

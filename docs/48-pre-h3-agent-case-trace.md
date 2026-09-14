@@ -123,4 +123,4 @@ backend/.venv/bin/python output/agent-video-preparation/math-2min-pre-h3-2026090
 
 [核心资产闭环记录](46-phase30-core-asset-plan-and-reference-pipeline.md)对应原资产 Run `agent-run-52da5fdb84fb4677bbeaf15d8d4cea5a`；详细文件仍在 `output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/run/`，包括 `trace.json`、`trace.md`、`CONTINUATION.md`、用户供图接入与最终资产检查。上一轮的[成熟实现参考](47-video-generation-reuse-and-execution.md)属于无 Provider 调用的调研和离线验证，本轮才是后续真实语言 Agent 实验。
 
-制作案例 PPT 时，建议沿“已确认的剧本和分镜 → 核心资产与用户供图 → 12 个视频生成单元 → Agent 动作和上下文 → 失败、修复与原 Run 恢复 → H3 前的准备产物”组织。本案例包含用户供图、确认和开发者修复参与，不能描述成从零一次无人干预成功。当前阶段也不能证明真实视频的画面、声音、连贯性或整集播放效果。
+本案例包含用户供图、确认和开发者修复参与，不能描述成从零一次无人干预成功。当前阶段也不能证明真实视频的画面、声音、连贯性或整集播放效果。

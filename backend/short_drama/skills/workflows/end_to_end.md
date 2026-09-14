@@ -443,7 +443,7 @@ MiniMax Design 中用 Canvas 展示的剧本、生产计划、资产、storyboar
 
 当前代码已实现 Story Orientation、`SCRIPT_LOCKED` 语义结构化与逐字/顺序保护、`StorySourceContract`/`StoryIntent`/`EndingContract` 持久化、紧凑 Tool Catalog 后按需加载 Schema、显式 `production_skill_role` 委派、`ContextManifest`、`specialist_turns` 单步持久化与中断恢复、append-only WorkOrder 进度、派生 ProductionBoard、轻量本地 TeamExecutor、计划 carry/stale handoff、Issue Ledger、定向逐场修订和 `planning.advance` 可恢复游标。活动 Method Catalog 已分为 3 个 MiniMax Design 项目 Workflow 与 8 个 MiniMax-H3 任务 Method；角色装载仍通过薄 adapter 映射到现有 ProjectDocument、ProductionDocument、WorkOrder 和 Tool。`AI_SHORT_DRAMA` 只保留本地 schema/profile adapter，通用短剧方法主骨架由 `drama-series` 提供。Leader 按当前目标安排必要角色，写作、导演、资产制作都可结合自查，不要求固定审校链。ProductionSpec、Storyboard 和 GenerationPlan 已使用受管的版本化 ProductionDocument，`ProjectOutputSlot` 与 `expected_output_slot_ids` 提供稳定逻辑交付；Agent 可创建、替换或局部修改完整 Storyboard，将 ClipGroup 编译为带 Shot source windows 的 GenerationUnit，并交给 H3 Route/Task/Take 与时间线消费。Master Audio/音乐结构/TimedText 工件、资产结构化 brief、`image.compose_reference_sheet`、`image.compose_text_plate`、分镜 timeline beats、H3 五类路线与精确媒体交接也有对应工件/Tool 边界。这些是工程能力，不是成片质量证明。
 
-已有校园案例完成真实语言、图片、H3 和成片制作；当前桌面入口、LTX 局部剪辑与项目回写、可选 ComfyUI 连接已有实现。主产品不采用语义画布。新的发布会案例正在验收逐场生成、逐项文本修改、四视图和连续桌面录制；以产品交付清单及实际 Trace 为准，不把旧案例结果当作所有题材的质量或稳定性证明。
+已有校园案例完成真实语言、图片、H3 和成片制作；当前桌面入口、LTX 局部剪辑与项目回写、可选 ComfyUI 连接已有实现。主产品不采用语义画布。验收状态以产品交付清单及实际 Trace 为准，不把旧案例结果当作所有题材的质量或稳定性证明。
 
 ## 何时重新规划
 

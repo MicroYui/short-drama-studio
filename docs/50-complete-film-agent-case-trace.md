@@ -7,7 +7,7 @@
 - [完整字幕版](../output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/_app_data/outputs/short-drama-projects/project-11b4f7a637c3/exports/project-11b4f7a637c3-manifest-v5/final-subtitled.mp4)：1080×1920、30 fps、131.000秒，保留H3原生对白、环境声和动作声，20条字幕按原生音轨时间对齐，并修正中文长句烧录换行。
 - [完整清洁版](../output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/_app_data/outputs/short-drama-projects/project-11b4f7a637c3/exports/project-11b4f7a637c3-manifest-v5/final-clean.mp4)、[SRT字幕](../output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/_app_data/outputs/short-drama-projects/project-11b4f7a637c3/exports/project-11b4f7a637c3-manifest-v5/subtitles.srt)、[ASS字幕](../output/agent-asset-validation/math-2min-asset-media-context-v17-20260907-034/_app_data/outputs/short-drama-projects/project-11b4f7a637c3/exports/project-11b4f7a637c3-manifest-v5/subtitles.ass)。
 - [21镜头成片总览](../output/agent-video-finishing/math-2min-complete-film-20260908-001/film-contact-sheet.jpg)、[文件与画面检查记录](../output/agent-video-finishing/math-2min-complete-film-20260908-001/delivery-verification.json)、[播放记录](../output/agent-video-finishing/math-2min-complete-film-20260908-001/browser-playback.json)。
-- [从剧本到成片的案例索引](../output/agent-video-finishing/math-2min-complete-film-20260908-001/CASE_INDEX.md)：适合后续PPT挑选原始需求、剧本、分镜、核心素材、Agent动作、失败修复和实际结果。
+- [从剧本到成片的案例索引](../output/agent-video-finishing/math-2min-complete-film-20260908-001/CASE_INDEX.md)：汇总原始需求、剧本、分镜、核心素材、Agent动作、失败修复和实际结果。
 
 原始12段H3素材均为768×1344、24 fps，总长135.68秒。成片按21个来源Shot的source windows装配为131秒，导出时缩放、补边并转为30 fps；1080×1920是输出规格，不是原生H3 1080P。最终清洁版与字幕版字节数以 `delivery-verification.json` 为准。没有制作额外TTS、音乐或Master Audio。
 
@@ -60,7 +60,7 @@
 | Worker | 85 | 85 | 52,098 | 72,629 |
 | 整集观察工具内的模型 | 13 | 11 | 50,335 | 67,458 |
 
-语言模型为gpt-5.6-sol、reasoning_effort=low；每次请求的输出上限、超时、图片数、角色、上下文字符数、原始输入和usage均见model_calls/NNNNN。汇总为[assessment.json](../output/agent-video-finishing/math-2min-complete-film-20260908-001/assessment.json)与[model-call-metrics.json](../output/agent-video-finishing/math-2min-complete-film-20260908-001/model-call-metrics.json)，[上下文曲线PNG](../output/agent-video-finishing/math-2min-complete-film-20260908-001/context-input-tokens.png)和[SVG](../output/agent-video-finishing/math-2min-complete-film-20260908-001/context-input-tokens.svg)可作PPT素材。
+语言模型为gpt-5.6-sol、reasoning_effort=low；每次请求的输出上限、超时、图片数、角色、上下文字符数、原始输入和usage均见model_calls/NNNNN。汇总为[assessment.json](../output/agent-video-finishing/math-2min-complete-film-20260908-001/assessment.json)与[model-call-metrics.json](../output/agent-video-finishing/math-2min-complete-film-20260908-001/model-call-metrics.json)，上下文曲线提供[PNG](../output/agent-video-finishing/math-2min-complete-film-20260908-001/context-input-tokens.png)和[SVG](../output/agent-video-finishing/math-2min-complete-film-20260908-001/context-input-tokens.svg)。
 
 这些数据包含开发、恢复、重复选择、重复审看和失败，不能当作一次稳定生产的费用/延迟基线。前后任务范围不同，也不能仅凭曲线下降宣称受控降本。完整历史留在trace，模型只获得当前工作集和按需工件；本例仍显示大范围选片/整集观察工作会带来较大的单次输入。
 

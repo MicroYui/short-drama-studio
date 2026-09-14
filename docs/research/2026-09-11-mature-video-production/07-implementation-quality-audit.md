@@ -9,7 +9,7 @@
 - **明确缺陷**：当前可达代码直接存在输入/输出不一致；不等于本案例一定触发过。
 - **设计弱点，需验证**：静态机制可解释风险，但尚不能从本次记录证明导致了多少耗时或质量损失。
 - **已修复/保留**：当前代码或本轮后期记录已证明旧问题不再成立，不重复列为待开发能力。
-- 真实记录只读 `output/studio-launch-2026-r2/runtime/short-drama.sqlite3`，按 WorkOrder ID + specialist_turn.sequence 定位；没有把重复状态快照计为语言调用。
+- 当时只读原始运行数据库，按 WorkOrder ID + specialist_turn.sequence 定位；没有把重复状态快照计为语言调用。原始运行目录与相关制作记录已于 2026-09-14 清理，以下保留当时的分析，原文件链接已移除。
 
 | 链路 | 当前结论 | 处理方向 | 优先级 |
 | --- | --- | --- | --- |
@@ -127,7 +127,7 @@
 
 Tool 说明却要求“使用返回 manifest，并以 rebuild_manifest=false 导出”，这是旧导出流程的指令，不能直接指导现在的 `timeline.export_editorial`。[对齐 Tool 说明](/Users/liyifan/Documents/ChatGPT/ai短剧调研/backend/short_drama/tools/audio/__init__.py:133)
 
-真实 `post_editor`（`work-order-8f66df67545547ff9cb26ea4e1d3656f`）turn 1 先读当前 editorial，turn 3 做音频检查，turn 4 对旧 `project-974ca837e45e-manifest-v1` 对齐成功，返回新 manifest/调整清单/报告引用；turn 5 又读视频观察，turn 6 开始读完整对齐文档，随后以 PARTIAL 交接。不能从这次 Tool 成功推断用户当前字幕已经对齐。最终三句结尾字幕是在后续当前时间线中另行保存的，制作记录也这样记载。[制作记录](/Users/liyifan/Documents/ChatGPT/ai短剧调研/docs/presentation/studio-launch-2026/04-production-progress.md:172)
+真实 `post_editor`（`work-order-8f66df67545547ff9cb26ea4e1d3656f`）turn 1 先读当前 editorial，turn 3 做音频检查，turn 4 对旧 `project-974ca837e45e-manifest-v1` 对齐成功，返回新 manifest/调整清单/报告引用；turn 5 又读视频观察，turn 6 开始读完整对齐文档，随后以 PARTIAL 交接。不能从这次 Tool 成功推断用户当前字幕已经对齐。最终三句结尾字幕是在后续当前时间线中另行保存的。
 
 **建议：保留本地 ASR 对齐算法，改写当前编辑输入适配和局部保存。** 请求 current editorial revision + cue IDs/片段范围；结果直接给同一时间线上的精确 cue 修改、实际音频源区间及未识别项。采用时只更新对应字幕，保护视频、音轨、文字与用户编辑。不要让 Worker 从旧报告逐条手抄时码，也不要新建另一份字幕真相。跨 Worker 交接只需报告引用和实际保存的 revision/变动 cue IDs。
 
