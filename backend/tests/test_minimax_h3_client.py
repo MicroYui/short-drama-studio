@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 import requests
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from short_drama.h3_models import H3ContentItem, H3VideoRequest
 from short_drama.providers.minimax_h3_client import (
@@ -117,6 +117,7 @@ def test_client_uses_acedata_endpoints_and_exact_payload(tmp_path: Path) -> None
         "ratio": "9:16",
         "async": True,
     }
+    assert submit_call[2]["timeout"] == 3
 
     assert client.query(task_id).status == "succeeded"
     assert client.list_tasks(page_size=500)[0].id == task_id
@@ -139,6 +140,25 @@ def test_client_uses_acedata_endpoints_and_exact_payload(tmp_path: Path) -> None
     client.download("https://signed.invalid/output.mp4", destination)
     assert destination.read_bytes() == b"downloaded-video"
     assert not destination.with_suffix(".mp4.part").exists()
+
+
+def test_task_listing_transmits_offset_and_rejects_invalid_offset_before_network() -> None:
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, {"items": [], "total": 51}))
+    client = _client(session)
+    assert client.list_tasks(page_size=50, offset=50) == []
+    assert session.calls[0][2]["json"] == {"action": "retrieve_batch", "offset": 50, "limit": 50}
+    with pytest.raises(ValueError, match="offset must be non-negative"):
+        client.list_tasks(offset=-1)
+    assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize("payload", [{}, {"error": "unavailable"}, {"items": "invalid"}])
+def test_task_listing_does_not_mistake_malformed_response_for_empty_history(payload: object) -> None:
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, payload))
+    with pytest.raises(H3TransientError, match="task-list response was not valid"):
+        _client(session).list_tasks(offset=50)
 
 
 @pytest.mark.parametrize("size,expected", [((344, 976), (391, 976)), ((1536, 512), (1536, 615))])
@@ -172,6 +192,46 @@ def test_local_image_decode_failure_is_reported_before_network(tmp_path: Path) -
         client.upload_file(source)
     assert exc_info.value.code == "LOCAL_IMAGE_INVALID"
     assert session.calls == []
+
+
+def test_large_opaque_reference_keeps_dimensions_with_smaller_transport(tmp_path: Path) -> None:
+    source = tmp_path / "large-reference.png"
+    original = Image.effect_noise((1536, 1024), 48).convert("RGB")
+    original.save(source, compress_level=0)
+    original_bytes = source.read_bytes()
+    session = FakeSession()
+    encoded = _client(session).upload_file(source)
+    assert encoded.startswith("data:image/jpeg;base64,")
+    transferred = base64.b64decode(encoded.split(",", 1)[1])
+    assert len(transferred) < len(original_bytes) * 0.7
+    with Image.open(BytesIO(transferred)) as decoded:
+        assert decoded.size == original.size
+        assert max(ImageStat.Stat(ImageChops.difference(decoded, original)).mean) < 3
+    assert source.read_bytes() == original_bytes
+    assert session.calls == []
+
+
+def test_large_transparent_reference_retains_alpha(tmp_path: Path) -> None:
+    source = tmp_path / "transparent-reference.png"
+    original = Image.new("RGBA", (1024, 1024), (30, 90, 120, 96))
+    original.save(source, compress_level=0)
+    encoded = _client(FakeSession()).upload_file(source)
+    assert encoded.startswith("data:image/png;base64,")
+    assert base64.b64decode(encoded.split(",", 1)[1]) == source.read_bytes()
+
+
+def test_server_submission_error_keeps_diagnostic_without_resubmitting() -> None:
+    session = FakeSession()
+    session.responses.append(FakeResponse(502, {
+        "error": {"type": "server_error", "message": "upstream failed for secret"},
+        "trace_id": "trace-submission-1",
+    }))
+    with pytest.raises(H3SubmissionUnknown) as unknown:
+        _client(session).submit(_request())
+    assert "upstream failed" in str(unknown.value)
+    assert "trace-submission-1" in str(unknown.value)
+    assert "secret" not in str(unknown.value)
+    assert len(session.calls) == 1
 
 
 def test_submit_unknown_and_definite_errors_are_distinct() -> None:

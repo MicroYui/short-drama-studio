@@ -14,6 +14,8 @@ export type IpcResult<T extends z.ZodRawShape> = z.infer<ReturnType<typeof ipcRe
 const emptyResult = ipcResult({})
 
 const exportClip = z.object({
+  sourceType: z.string().optional(),
+  audioDelegated: z.boolean().optional(),
   path: z.string(),
   type: z.string(),
   startTime: z.number(),
@@ -27,6 +29,10 @@ const exportClip = z.object({
   trackIndex: z.number(),
   muted: z.boolean(),
   volume: z.number(),
+  audioFadeInSeconds: z.number().nonnegative().optional(),
+  audioFadeOutSeconds: z.number().nonnegative().optional(),
+  audioEnvelopeOffsetSeconds: z.number().nonnegative().nullable().optional(),
+  audioEnvelopeDurationSeconds: z.number().positive().nullable().optional(),
 })
 
 const exportSubtitle = z.object({

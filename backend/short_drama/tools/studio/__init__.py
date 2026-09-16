@@ -76,6 +76,9 @@ class TimelineExportInput(ToolModel):
 class ExportReadInput(ToolModel):
     project_id: str
     export_id: str | None = None
+    frame_times_seconds: list[Annotated[float, Field(ge=0, allow_inf_nan=False)]] = Field(default_factory=list[float], max_length=4,
+        description="Optional up to four exact EXPORT_FILM times. Attaches actual rendered pixels to the next Worker decision for subtitle/title/layout or cut inspection; omit for metadata only. Times must be before the export duration.")
+    frame_variant: Literal["subtitled", "clean"] = "subtitled"
 
 
 class TimelineEditInput(ToolModel):
@@ -296,6 +299,7 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
 
     def read_timeline(request: TimelineReadInput) -> ToolExecution[CurrentReadOutput]:
         from short_drama.studio_editorial import read_editorial, EditorProject
+        from short_drama.studio_visual_edits import clip_visual_fields
         from short_drama.studio_shot_editorial import read_shot_editorial
         if request.subtitle_ids or request.clip_ids:
             from short_drama.studio_editorial_selection import read_editorial_selection
@@ -319,7 +323,8 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
                 "speed": clip.speed, "reversed": clip.reversed,
                 "source_window_start_seconds": (clip.model_extra or {}).get("sourceWindowStart"),
                 "source_window_end_seconds": (clip.model_extra or {}).get("sourceWindowEnd"),
-                "volume": clip.volume, "muted": clip.muted, "track_index": clip.trackIndex} for clip in timeline.clips],
+                "volume": clip.volume, "muted": clip.muted, "track_index": clip.trackIndex,
+                **clip_visual_fields(clip)} for clip in timeline.clips],
             "subtitles": [cast(dict[str, JsonValue], item.model_dump(mode="json")) for item in timeline.subtitles],
             "exports": [cast(JsonValue, item) for item in service.get_project(request.project_id).document.studio_exports]}
         if value.scope:
@@ -336,7 +341,10 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
 
     def read_export(request: ExportReadInput) -> ToolExecution[CurrentReadOutput]:
         from short_drama.studio_export import inspect_export
-        return ToolExecution(output=CurrentReadOutput(content=inspect_export(service, request.project_id, request.export_id)))
+        from short_drama.studio_export_frames import export_frame_attachments
+        content = inspect_export(service, request.project_id, request.export_id)
+        attachments = export_frame_attachments(service, content, times=request.frame_times_seconds, variant=request.frame_variant)
+        return ToolExecution(output=CurrentReadOutput(content=content), visual_attachments=attachments)
 
     def export_timeline(request: TimelineExportInput) -> ToolExecution[StudioExport]:
         from short_drama.studio_export import start_export
@@ -348,23 +356,24 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
 
     def edit_timeline(request: TimelineEditInput) -> ToolExecution[CurrentReadOutput]:
         from short_drama.studio_editorial import edit_editorial, EditorProject
-        value = edit_editorial(service, request.project_id, request.request)
+        from short_drama.studio_visual_edits import clip_visual_fields
+        clip_ids: set[str] = set()
+        value = edit_editorial(service, request.project_id, request.request, changed_clip_ids=clip_ids)
         refs = _editorial_refs(request.project_id, value.project, value.revision, timeline_id=request.request.timeline_id)
         editor = EditorProject.model_validate(value.project)
         target_id = request.request.timeline_id or editor.activeTimelineId
         timeline = next(item for item in editor.timelines if item.id == target_id)
         cue_ids = {item.id for item in (*request.request.subtitles, *request.request.add_subtitles)}
-        clip_ids = {item.id for item in request.request.clips}
-        if request.request.keep_linked_audio:
-            for item in timeline.clips:
-                if item.id in clip_ids:
-                    clip_ids.update(cast(list[str], (item.model_extra or {}).get("linkedClipIds", [])))
         return ToolExecution(output=CurrentReadOutput(content={"project_id": request.project_id,
             "editorial_revision": value.revision, "timeline_id": refs[0].artifact_id if refs else None,
-            "saved": True, "message": "指定片段与字幕的变化字段已保存，其余内容保留。",
-            "changed_clips": [{"id": clip.id, "start_seconds": clip.startTime, "duration_seconds": clip.duration,
-                "source_in_seconds": clip.trimStart, "volume": clip.volume, "muted": clip.muted, "speed": clip.speed}
+            "saved": True, "message": "指定片段、标题与字幕的变化字段已保存；相邻溶解的另一端同步处理，其余内容保留。",
+            "changed_clips": [{"id": clip.id, "type": clip.type, "track_index": clip.trackIndex,
+                "start_seconds": clip.startTime, "duration_seconds": clip.duration,
+                "source_in_seconds": clip.trimStart, "volume": clip.volume, "muted": clip.muted, "speed": clip.speed,
+                **clip_visual_fields(clip)}
                 for clip in timeline.clips if clip.id in clip_ids],
+            "created_title_ids": [item.id for item in request.request.add_titles],
+            "removed_clip_ids": cast(JsonValue, sorted(clip_ids.difference(clip.id for clip in timeline.clips))),
             "changed_subtitles": [cast(JsonValue, item.model_dump(mode="json")) for item in timeline.subtitles if item.id in cue_ids],
             "created_subtitle_ids": [item.id for item in request.request.add_subtitles],
             "removed_subtitle_ids": [item.id for item in request.request.subtitles if item.remove],
@@ -434,16 +443,16 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="读取当前剪辑。已有 editor_selection 时直接传 timeline_id 与 subtitle_ids/clip_ids：只返回这些对象的真实 FILM 起止、revision及实际镜头采用位置的 SHOT_LOCAL 相交映射；跨镜字幕保持完整本集边界，未知ID报具体错误，不需要先按shot_id猜测或读取全片。精确选择不能同时include_project。无具体ID时兼容：shot_id/anchor_clip_id读取镜头局部剪辑，不传shot_id读取本集摘要；整体结构才需include_project=true。后续timeline.edit_clips必须传相同timeline_id及当前expected_revision；按FILM字段修改不传shot_id，按局部映射修改传shot_id和anchor。实际文件用read_export。",
         effect=ToolEffect.READ, idempotent=True, input_model=TimelineReadInput, output_model=CurrentReadOutput, handler=read_timeline,
         tags=frozenset({"studio", "editorial", "current-content"})))
-    registry.register(ToolSpec(id="timeline.read_export", version=1, category=ToolCategory.TIMELINE,
-        description="读取并检查本集已存在的剪辑导出；export_id 可精确指定，省略取最新完成记录。实际解码两个 MP4 并返回尺寸、时长、帧率、音轨、保存修订与技术检查。不重导出、不修改内容，不依赖旧 TimelineManifest；普通成片导出验收优先用此工具。",
+    registry.register(ToolSpec(id="timeline.read_export", version=2, category=ToolCategory.TIMELINE,
+        description="读取并检查本集已存在的剪辑导出；export_id 可精确指定，省略取最新完成记录。实际解码两个 MP4 并返回尺寸、时长、帧率、音轨、保存修订与技术检查。需要看合成字幕、标题、画幅或接缝时，传frame_times_seconds（最多四个EXPORT_FILM时间）及frame_variant=subtitled或clean，实际导出帧按请求顺序附到下一次Worker决策，返回真实PTS及导出修订；时间不得等于或超过导出长度。不会用源Take画面冒充合成结果，旧导出不代表当前剪辑，静帧不证明听审或两帧间运动。不重导出、不修改内容、不调用额外语言或媒体Provider，不依赖旧TimelineManifest；按本次剩余问题选择时点，不强制重复检查。",
         effect=ToolEffect.READ, idempotent=True, input_model=ExportReadInput, output_model=CurrentReadOutput, handler=read_export,
         tags=frozenset({"studio", "editorial", "export", "inspection"})))
-    registry.register(ToolSpec(id="timeline.export_editorial", version=2, category=ToolCategory.TIMELINE,
-        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。默认省略width和height，由实际采用的视频尺寸与项目画幅确定画布，保留原素材细节；只有明确需要指定尺寸时同时传宽高，不能把2K素材默认为720p。无采用视频才使用画幅对应默认尺寸。支持硬切、多轨、透明度、PNG图层、裁切、变速、翻转、声音与字幕；text/adjustment片段和非none的transitionIn/transitionOut尚未接通导出，不能把编辑器可显示当作可导出能力，准确文字可用字幕或PNG图版。等待本地 FFmpeg 完成后返回实际尺寸和媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
+    registry.register(ToolSpec(id="timeline.export_editorial", version=3, category=ToolCategory.TIMELINE,
+        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。默认省略width和height，由实际采用的视频尺寸与项目画幅确定画布，保留原素材细节；只有明确需要指定尺寸时同时传宽高，不能把2K素材默认为720p。无采用视频才使用画幅对应默认尺寸。支持硬切、多轨、透明度、PNG图层、裁切、变速、翻转、声音、字幕及基本中文标题。标题支持多行正文、字号、粗体、六位十六进制颜色、百分比位置和透明度；复杂字体/阴影/描边样式、adjustment片段、擦除等转场尚未接通。基本转场支持fade-to-black黑场淡入/淡出，以及同轨相邻片段dissolve；溶解两端时长相同，不改变原切点与总时长，区间不能覆盖第三画面。通过edit_clips精确添加/修改标题和转场；不把未支持的编辑效果当作可导出能力。等待本地 FFmpeg 完成后返回实际尺寸和媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineExportInput, output_model=StudioExport, handler=export_timeline,
         tags=frozenset({"studio", "editorial", "export"})))
-    registry.register(ToolSpec(id="timeline.edit_clips", version=4, category=ToolCategory.TIMELINE,
-        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声；subtitles按已有id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove。首次字幕用add_subtitles:[{id,text,start_seconds,end_seconds,style?,track_index?}]，id必须在所选时间线中不存在，默认复用可用字幕轨或新增字幕轨；可与修改、删除及clips一次保存，保留其他内容。对白字幕来自audio.transcribe_native的实际声音及有依据的识别校正，不把未听见的剧本台词写成转录；后续audio.align_subtitles仅修已有字幕时码。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id，新增字幕不得超过编辑后本次采用时长；跨镜字幕用FILM时间且不传shot_id。返回实际创建/变化字幕与新revision。设计时长用shot.save_current。",
+    registry.register(ToolSpec(id="timeline.edit_clips", version=5, category=ToolCategory.TIMELINE,
+        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声。标题用add_titles:[{id,text,start_seconds,duration_seconds,style?,track_index?}]新增，默认使用基本中文样式与不占用其他片段的可见画面轨；clips按标题id修改text/title_style或remove，title_style只合并font_size(1080高度单位)/font_weight(normal|bold)/color(#RRGGBB)/position_x/position_y/opacity(0–100)。视频/图片用transition_in/transition_out:{type:none|fade-to-black|dissolve,duration_seconds}；none/0清除转场，其他时长必须为正且不超过涉及片段。dissolve自动同步同轨相邻片段另一端，替换/清除或删除时同步清旧搭档；跨镜切点必须用FILM范围，区间不能覆盖第三画面，不改变原切点与总时长。标题与转场不应用到关联声音；subtitles按已有id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove。首次字幕用add_subtitles:[{id,text,start_seconds,end_seconds,style?,track_index?}]，id必须在所选时间线中不存在，默认复用可用字幕轨或新增字幕轨；可与修改、删除及clips一次保存，保留其他内容。对白字幕来自audio.transcribe_native的实际声音及有依据的识别校正，不把未听见的剧本台词写成转录；后续audio.align_subtitles仅修已有字幕时码。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id，新增字幕或标题不得超过编辑后本次采用时长；跨镜字幕用FILM时间且不传shot_id。返回实际创建/变化/删除的标题、片段、字幕与新revision，包括自动同步的转场另一端。设计时长用shot.save_current。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineEditInput, output_model=CurrentReadOutput, handler=edit_timeline,
         tags=frozenset({"studio", "editorial", "partial-edit"})))
     registry.register(ToolSpec(id="task.read_workflow", version=1, category=ToolCategory.TASK,

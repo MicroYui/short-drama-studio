@@ -8,10 +8,9 @@ import { ShotSecondsInput } from './ShotSecondsInput'
 import { StudioEditorialPreview } from './StudioEditorialPreview'
 import { studioAspectRatio } from './studio-aspect-ratio'
 import { mergeCurrentChanges } from './studio-editor-merge'
+import { acknowledgeShotSave, type ShotDraft, type ShotDraftUpdate } from './studio-shot-drafts'
 
-export interface ShotDraft { shot: ShotPlan; base: ShotPlan; revision: number }
-
-interface Props { drafts: Record<string, ShotDraft>; onDraft: (id: string, draft: ShotDraft | null) => void; onScript: (sceneId: string | null) => void; project: ProjectAggregate; selectedShotId: string | null; selectShot: (id: string) => void; onProject: (project: ProjectAggregate) => void; onAsk: (text: string, scope: StudioScope) => void; onScope: (scope: StudioScope) => void; onEdit: (shotId: string) => void; onAssets: () => void; onError: (error: unknown) => void }
+interface Props { drafts: Record<string, ShotDraft>; onDraft: (id: string, draft: ShotDraftUpdate) => void; onScript: (sceneId: string | null) => void; project: ProjectAggregate; selectedShotId: string | null; selectShot: (id: string) => void; onProject: (project: ProjectAggregate) => void; onAsk: (text: string, scope: StudioScope) => void; onScope: (scope: StudioScope) => void; onEdit: (shotId: string) => void; onAssets: () => void; onError: (error: unknown) => void }
 
 export function ShotPlayer({ project, shot }: { project: ProjectAggregate; shot: ShotPlan }) {
   const source = shotMedia(project, shot)
@@ -37,9 +36,12 @@ export function StudioShots({ drafts, onDraft, onScript, project, selectedShotId
   const selected = shots.find(shot => shot.id === selectedShotId) ?? shots[0]
   const draft = selected ? drafts[selected.id] ?? null : null
   const setDraft = (next: ShotDraft | null | ((value: ShotDraft | null) => ShotDraft | null)) => {
-    if (selected) onDraft(selected.id, typeof next === 'function' ? next(draft) : next)
+    if (selected) onDraft(selected.id, next)
   }
   const [saving, setSaving] = useState(false)
+  const currentEditor = useRef<{ episodeId: string; shotId?: string; draft: ShotDraft | null } | null>(null)
+  currentEditor.current = { episodeId: project.document.project.id, shotId: selected?.id, draft }
+  useEffect(() => () => { currentEditor.current = null }, [])
   const [picker, setPicker] = useState<ReferenceCue | 'new' | null>(null)
   const [purpose, setPurpose] = useState('整镜参考')
   const [usage, setUsage] = useState<NonNullable<ReferenceCue['usage']>>('GENERATION')
@@ -61,7 +63,7 @@ export function StudioShots({ drafts, onDraft, onScript, project, selectedShotId
   const scene = script?.structured_scenes.find(item => item.id === shot.scene_id)
   const editing = Boolean(draft)
   const update = (change: (shot: ShotPlan) => ShotPlan) => {
-    if (draft) setDraft({ ...draft, shot: change(structuredClone(draft.shot)) })
+    setDraft(current => current ? { ...current, shot: change(structuredClone(current.shot)) } : null)
   }
   const field = (key: 'narrative_purpose' | 'framing' | 'audio_intent' | 'transition_out', value: string) => update(current => ({ ...current, [key]: value }))
   const updateDialogue = (current: ShotPlan) => {
@@ -90,7 +92,17 @@ export function StudioShots({ drafts, onDraft, onScript, project, selectedShotId
     if (!draft || invalidTimes.size) return false
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     setSaving(true)
-    try { const result = await StudioApi.saveShot(project.document.project.id, draft.shot, draft.revision); onProject(result.project); setDraft(null); return true } catch (error) { onError(error); return false } finally { setSaving(false) }
+    try {
+      const submitted = draft
+      const result = await StudioApi.saveShot(project.document.project.id, submitted.shot, submitted.revision)
+      const latest = currentEditor.current
+      const readyForAgent = latest?.episodeId === project.document.project.id && latest.shotId === submitted.shot.id
+        && latest.draft?.editId === submitted.editId && JSON.stringify(latest.draft.shot) === JSON.stringify(submitted.shot)
+      onProject(result.project)
+      const saved = result.project.document.shots.find(item => item.id === submitted.shot.id)
+      if (saved) onDraft(submitted.shot.id, current => acknowledgeShotSave(current, submitted, saved))
+      return Boolean(saved && readyForAgent)
+    } catch (error) { onError(error); return false } finally { setSaving(false) }
   }
   const changeText = (index: number | null, field: NonNullable<ReferenceCue['field']>, text: string, cues: ReferenceCue[]) => update(current => {
     if (index === null) {
@@ -117,7 +129,7 @@ export function StudioShots({ drafts, onDraft, onScript, project, selectedShotId
       <div className="sd-shot-heading">
         <div><span className="sd-eyebrow">{scene?.heading || '当前集'}</span><h2>镜头 {String(shot.sequence).padStart(2, '0')}</h2></div>
         <div className="sd-shot-heading-actions">
-          {draft ? <><button className="sd-button" disabled={saving} onClick={() => setDraft(null)}>取消</button><button className="sd-button sd-primary" disabled={cannotSave} onClick={() => void save()}><Save size={14} />{saving ? '保存中…' : '保存分镜'}</button></> : <button className="sd-button sd-primary" onClick={() => setDraft({ shot: structuredClone(selected), base: structuredClone(selected), revision: selected.revision })}><Pencil size={14} />编辑分镜</button>}
+          {draft ? <><button className="sd-button" disabled={saving} onClick={() => setDraft(null)}>取消</button><button className="sd-button sd-primary" disabled={cannotSave} onClick={() => void save()}><Save size={14} />{saving ? '保存中…' : '保存分镜'}</button></> : <button className="sd-button sd-primary" onClick={() => setDraft({ editId: crypto.randomUUID(), shot: structuredClone(selected), base: structuredClone(selected), revision: selected.revision })}><Pencil size={14} />编辑分镜</button>}
           <button className="sd-button" disabled={!!draft && cannotSave} onClick={() => askSaved('')}><Sparkles size={14} />{draft ? '保存并交给 Agent' : '让 Agent 修改'}</button>
         </div>
       </div>
@@ -127,7 +139,7 @@ export function StudioShots({ drafts, onDraft, onScript, project, selectedShotId
         <p>{editing ? '修改设计时长会按比例调整分段边界，不改变已有视频。' : '分镜中的时间表示拍摄设计；视频裁切在“剪辑镜头”中调整。'}</p>
       </div>
       <div className="sd-shot-duration-facts"><span>本镜素材<strong>{source.materialDuration == null ? '尚未生成' : `${Number(source.materialDuration.toFixed(3))} 秒`}</strong></span><span>成片采用<strong>{source.adoptedDuration == null ? '尚未采用' : `${Number(source.adoptedDuration.toFixed(3))} 秒`}</strong></span>{source.occurrenceCount > 1 && <span>成片中有 {source.occurrenceCount} 处使用；当前预览第一处，剪辑时可选择。</span>}</div>
-      {conflict && <p className="sd-inline-notice">镜头刚有更新，你的编辑仍保留。<button onClick={() => setDraft(null)}>载入最新镜头</button><button onClick={() => { if (draft) setDraft({ shot: mergeCurrentChanges(draft.base, draft.shot, selected), base: structuredClone(selected), revision: selected.revision }) }}>合并最新内容，保留我的改动</button></p>}
+      {conflict && <p className="sd-inline-notice">镜头刚有更新，你的编辑仍保留。<button onClick={() => setDraft(null)}>载入最新镜头</button><button onClick={() => { if (draft) setDraft({ ...draft, shot: mergeCurrentChanges(draft.base, draft.shot, selected), base: structuredClone(selected), revision: selected.revision }) }}>合并最新内容，保留我的改动</button></p>}
 <div className={`sd-shot-player ${source.path ? '' : 'sd-shot-waiting'}`}><ShotPlayer project={project} shot={shot} /><div className="sd-video-actions"><span>{source.path ? source.take?.freshness === 'STALE' ? '已有视频 · 可按新设计更新' : '本镜视频' : '待生成'}{source.take?.provider === 'user-import' ? ' · 用户导入' : ''}</span><div><button onClick={() => videoFile.current?.click()} disabled={saving || editing}><Upload size={14} />{source.path ? '替换视频' : '导入视频'}</button><button disabled={editing} onClick={() => onAsk(`根据镜头 ${shot.sequence} 当前分镜和已绑定的参考图片${source.path ? '重新' : ''}生成视频。保留已有可用内容。`, scope)}><Sparkles size={14} />{source.path ? '重新生成' : '生成视频'}</button><button onClick={() => onEdit(shot.id)} disabled={!source.path || editing}><Scissors size={14} />剪辑镜头</button></div></div></div>
       <input hidden ref={videoFile} type="file" accept="video/*" onChange={event => { const file = event.target.files?.[0]; if (!file) return; setSaving(true); const oldIds = new Set(project.document.assets.flatMap(asset => asset.versions.map(version => version.id))); void StudioApi.importMedia(project.document.project.id, file, 'REFERENCE').then(result => { const version = result.document.assets.flatMap(asset => asset.versions).find(version => version.media_type === 'VIDEO' && !oldIds.has(version.id)); if (!version) throw new Error('导入视频未找到'); return StudioApi.selectShotMedia(project.document.project.id, shot.id, version.id, selected.revision) }).then(onProject).catch(onError).finally(() => { setSaving(false); if (videoFile.current) videoFile.current.value = '' }) }} />
       <section className="sd-shot-design"><div className="sd-section-label"><h3>分镜设计</h3><span>{editing ? '输入 @ 引用图片 · 悬停可预览' : '只读 · 悬停 @ 可预览图片'}</span></div><DesignText label="叙事目的" value={shot.narrative_purpose} editing={editing} onChange={value => field('narrative_purpose', value)} />

@@ -4,6 +4,11 @@ import type { ProjectAggregate } from './api'
 import { allCues, assetGroups, currentEditorial, mediaUrl } from './studio-content'
 import { assetGroupPreview, fileDetails, fileModificationPrompt, fileReadKey, fileReadLabel, libraryFileCards, projectMediaFiles, selectedFileScope, type LibraryFile, type MediaReadState } from './studio-media-library'
 import { StudioApi, type StudioScope } from './studio-api'
+import { StudioCharacterVoice } from './StudioCharacterVoice'
+import { StudioMediaUses } from './StudioMediaUses'
+import { StudioMediaRecovery } from './StudioMediaRecovery'
+import type { StudioMediaLocation } from './studio-media-location'
+import './studio-assets.css'
 
 const kinds = { all: '全部', CHARACTER: '角色', LOCATION: '场景', PROP: '道具', REFERENCE: '其他' }
 const mediaKinds = { all: '全部', IMAGE: '图片', VIDEO: '视频', AUDIO: '音频' }
@@ -18,7 +23,7 @@ function MediaPreview({ file, compact = false, read, onRead }: { file: LibraryFi
     : <audio controls src={src} preload="metadata" onLoadedMetadata={() => onRead('loaded')} onError={() => onRead('error')} />
 }
 
-export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onError }: { project: ProjectAggregate; onProject: (project: ProjectAggregate) => void; onAsk: (text: string, scope: StudioScope) => void; onScope: (scope: StudioScope) => void; onShot: (id: string) => void; onError: (error: unknown) => void }) {
+export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onLocate, onError }: { project: ProjectAggregate; onProject: (project: ProjectAggregate) => void; onAsk: (text: string, scope: StudioScope) => void; onScope: (scope: StudioScope) => void; onShot: (id: string) => void; onLocate?: (location: StudioMediaLocation) => void; onError: (error: unknown) => void }) {
   const [view, setView] = useState<'objects' | 'files'>('objects')
   const [filter, setFilter] = useState<Filter>('all')
   const [mediaFilter, setMediaFilter] = useState<keyof typeof mediaKinds>('all')
@@ -26,6 +31,7 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [reads, setReads] = useState<Record<string, MediaReadState>>({})
+  const [recoveryNotice, setRecoveryNotice] = useState<{ target: string; text: string } | null>(null)
   const [importKind, setImportKind] = useState('REFERENCE')
   const [importing, setImporting] = useState(false)
   const [replaceId, setReplaceId] = useState<string | undefined>()
@@ -42,6 +48,7 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
   const file = selected ? assetGroupPreview(project, selected, groupFiles, reads, selectedFileId) : files.find(item => item.id === selectedFileId)
   const sharedFiles = fileCards.find(card => card.relatedFiles?.some(item => item.id === file?.id))?.relatedFiles?.filter(item => item.id !== file?.id) ?? []
   const detailOpen = Boolean(selected || file)
+  const recoveryTarget = `${project.document.project.id}:${file?.id ?? ''}`
   const usage = (id: string) => project.document.shots.filter(shot => allCues(shot).some(cue => cue.subject_asset_id === id || groups.find(group => group.id === id)?.files.some(file => file.version.id === cue.asset_version_id)))
   const fileShots = file ? project.document.shots.filter(shot => file.shotIds.includes(shot.id)) : selected ? usage(selected.id) : []
   const lastDetailScope = useRef<string | null>(null)
@@ -73,7 +80,7 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
       <button className={view === 'objects' ? 'is-active' : ''} aria-pressed={view === 'objects'} onClick={() => setView('objects')}>核心资产 <span>{groups.length}</span></button>
       <button className={view === 'files' ? 'is-active' : ''} aria-pressed={view === 'files'} onClick={() => setView('files')}>所有媒体 <span>{count}</span></button>
     </div>
-    <div className="sd-library-toolbar"><div className="sd-filter-tabs">{view === 'objects' ? Object.entries(kinds).map(([key, label]) => <button key={key} className={filter === key ? 'is-active' : ''} onClick={() => setFilter(key as Filter)}>{label}</button>) : Object.entries(mediaKinds).map(([key, label]) => <button key={key} className={mediaFilter === key ? 'is-active' : ''} onClick={() => setMediaFilter(key as keyof typeof mediaKinds)}>{label}</button>)}</div><label className="sd-search"><Search size={15} /><input aria-label="搜索项目资产" placeholder="搜索名称、状态或素材说明" value={search} onChange={event => setSearch(event.target.value)} /></label></div>
+    <div className="sd-library-toolbar"><div className="sd-filter-tabs" role="group" aria-label={view === 'objects' ? '筛选资产类型' : '筛选媒体类型'}>{view === 'objects' ? Object.entries(kinds).map(([key, label]) => <button key={key} className={filter === key ? 'is-active' : ''} aria-pressed={filter === key} onClick={() => setFilter(key as Filter)}>{label}</button>) : Object.entries(mediaKinds).map(([key, label]) => <button key={key} className={mediaFilter === key ? 'is-active' : ''} aria-pressed={mediaFilter === key} onClick={() => setMediaFilter(key as keyof typeof mediaKinds)}>{label}</button>)}</div><label className="sd-search"><Search size={15} /><input aria-label="搜索项目资产" placeholder="搜索名称、状态或素材说明" value={search} onChange={event => setSearch(event.target.value)} /></label></div>
     <div className="sd-asset-grid">{view === 'objects' ? <>
       {visible.map(group => {
         const items = files.filter(item => item.groupId === group.id)
@@ -102,6 +109,10 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
         }).join('\n')}</p></>}
         {file && <><h3>文件信息</h3><p>{file.source}<br />{fileDetails(file)}<br />{file.state} · {fileReadLabel(file, read(file))}{file.warning && <><br /><span className="sd-file-warning">{file.warning}</span></>}</p>{file.version?.review_notes && <><h3>已记录的检查说明</h3><p>{file.version.review_notes}</p></>}</>}
         {selected?.subject.brief && <><h3>保持一致</h3><p>{selected.subject.brief.identity_anchor}</p><ul>{selected.subject.brief.visual_attributes.map(item => <li key={item}>{item}</li>)}</ul></>}
+        {selected?.kind === 'CHARACTER' && selected.subject.bible_entity_id && <StudioCharacterVoice key={`${project.document.project.id}:${selected.subject.bible_entity_id}`} project={project} characterId={selected.subject.bible_entity_id} onProject={onProject} onError={onError} />}
+        {(selected || file) && <StudioMediaUses projectId={project.document.project.id} assetId={selected?.id} versionId={file?.version?.id} path={file?.localPath} reviewToken={project.document.project.updated_at} onLocate={onLocate ? location => { close(); onLocate(location) } : undefined} />}
+        {file?.localPath && <details key={file.localPath} className="sd-media-relink" open={file.missing || read(file) === 'error'}><summary>重新定位原文件</summary><StudioMediaRecovery projectId={project.document.project.id} path={file.localPath} onProject={onProject} onNotice={text => setRecoveryNotice({ target: recoveryTarget, text })} onError={onError} /></details>}
+        {recoveryNotice?.target === recoveryTarget && recoveryNotice.text && <p className="sd-hint" role="status">{recoveryNotice.text}</p>}
         <h3>{file?.take ? '源视频覆盖的镜头' : '这份素材用在哪里'}</h3>
         <div className="sd-asset-usage">{fileShots.map(shot => <button key={shot.id} onClick={() => { close(); onShot(shot.id) }}><span>镜头 {String(shot.sequence).padStart(2, '0')}</span><p>{shot.narrative_purpose}</p><ArrowUpRight size={14} /></button>)}{file?.take?.shot_windows?.map(window => <p className="sd-hint" key={window.shot_id}>镜头 {project.document.shots.find(shot => shot.id === window.shot_id)?.sequence ?? window.shot_id}：源视频 {window.source_in_seconds.toFixed(2)}–{(window.source_in_seconds + window.duration_seconds).toFixed(2)} 秒</p>)}{file?.editorialUsed && <p className="sd-hint">这份文件已用于本集剪辑。</p>}{file?.voiceUsed && <p className="sd-hint">这份文件作为角色声音参考。</p>}{!fileShots.length && !file?.editorialUsed && !file?.voiceUsed && <p className="sd-hint">当前内容尚未引用这份素材。</p>}</div>
         <div className="sd-asset-detail-actions">{selected && <button className="sd-button" disabled={importing} onClick={() => { setReplaceId(file?.asset?.id ?? selected.subject.id); setReplaceVersionId(file?.version?.id); input.current?.click() }}><Upload size={14} />导入替换这份素材</button>}{(selected || file?.take) && <button className="sd-button sd-primary" onClick={() => { close(); onAsk(file ? fileModificationPrompt(file) : `修改「${selected?.name}」的素材。`, file ? selectedFileScope(file) : { kind: 'asset', id: selected?.id, label: selected?.name ?? '项目资产' }) }}><Sparkles size={14} />让 Agent 修改</button>}</div>

@@ -56,6 +56,10 @@ available_tools 只是紧凑目录。
 
 无需 schema 时返回完整 AgentPlanProposal JSON：summary、steps、selected_method_skill_ids、method_selection_rationale、carried_work_order_ids、goal_complete；用 goal_summary 维护当前交付目标、范围和停止条件。
 
+USER_INPUT 的 instructions 会原样作为聊天正文展示给用户，不会再由另一个 Agent 执行或改写。写完整的自然答复或问题，直接称呼用户，说明实际完成内容、具体阻塞与需要用户回复的事项；需要用户查看的真实文件路径和事实也写在这段正文中。不要写“向用户说明”“提供下列”等给执行者的指令。arguments 不会作为正文展开，不能只把问题或路径放在那里。普通 TOOL_CALL、ARTIFACT_PATCH 和 DELEGATION 的 instructions 仍是执行或交接说明。
+
+本计划完成且 goal_complete=true 时，summary 会原样作为最终答复展示给用户。直接说明实际交付、需要查看的真实文件路径和未解决事项，不写“告诉用户已完成”等汇报指令；不要把未完成的候选或未验证的结果写成已交付。目标未完成时，summary 仍是当前计划摘要，goal_summary 仍保留后续目标与停止条件。
+
 重规划只 carried 仍由原 Worker 继续的 WorkOrder；next_owner=LEADER_REPLAN 表示原 WorkOrder 已结束并把控制权交回 Leader，只能通过其 ToolAttemptRef 创建聚焦的新 WorkOrder，绝不能再次 carried。
 
 DELEGATION arguments 写明本次特有的 why_now、必要输入与 acceptance_criteria。constraints、confirmed_decisions、inherited_decision_ids、experience_tags、adjacent_boundaries、tool_attempt_refs、open_questions、expected_output_schema 和 expected_output_slot_ids 仅在有实际补充时填写；省略时沿用合同默认值，不逐项输出空集合或重复定义已有 Worker 结果协议。必要约束、真实问题和引用不能为压缩而省去。

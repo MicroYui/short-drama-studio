@@ -5,6 +5,7 @@ from __future__ import annotations
 from short_drama.skill_ids import SkillIds
 
 from enum import StrEnum
+import math
 from typing import Literal, cast
 
 from pydantic import (
@@ -2723,6 +2724,10 @@ class QAReport(DomainModel):
 class VideoFrameSample(DomainModel):
     source_take_id: str
     timestamp_seconds: float = Field(ge=0.0)
+    requested_timestamp_seconds: float | None = Field(default=None, ge=0.0)
+    timestamp_is_source_pts: bool = False
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
     image_path: str
     reasons: list[str] = Field(min_length=1, max_length=8)
     visual_change_score: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -2852,6 +2857,44 @@ class TechnicalCheck(DomainModel):
     detail: str
 
 
+class VideoAudioExcerpt(DomainModel):
+    audio_path: str
+    source_in_seconds: float = Field(ge=0)
+    source_out_seconds: float = Field(gt=0)
+    duration_seconds: float = Field(gt=0)
+    sample_rate: int = Field(gt=0)
+    channels: int = Field(gt=0)
+    notes: str = "Actual source audio excerpt; audio semantics have not been reviewed. Local excerpt time 0 maps to source_in_seconds."
+
+
+class VideoEditorialUse(DomainModel):
+    timeline_id: str
+    clip_id: str
+    shot_id: str
+    take_id: str
+    media_path: str
+    source_in_seconds: float
+    source_out_seconds: float
+    timeline_start_seconds: float
+    timeline_end_seconds: float
+    speed: float = 1.0
+    reversed: bool = False
+
+    @property
+    def playback_start_source_seconds(self) -> float:
+        return self.source_out_seconds if self.reversed else self.source_in_seconds
+
+    @property
+    def playback_end_source_seconds(self) -> float:
+        return self.source_in_seconds if self.reversed else self.source_out_seconds
+
+
+class VideoEditorialContext(DomainModel):
+    current: VideoEditorialUse
+    previous: VideoEditorialUse | None = None
+    include_previous_boundary: bool = True
+
+
 class VideoInspectionReport(DomainModel):
     id: str
     project_id: str
@@ -2864,6 +2907,8 @@ class VideoInspectionReport(DomainModel):
     covered_shot_ids: list[str] = Field(default_factory=list[str])
     full_take_coverage: bool = False
     source_context: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    observation_scope: Literal["TAKE", "EDITORIAL"] = "TAKE"
+    editorial_context: VideoEditorialContext | None = None
     audio_semantics_observed: Literal[False] = False
     scopes: list[VideoInspectionScope] = Field(min_length=1, max_length=2)
     duration_seconds: float = Field(gt=0.0)
@@ -2871,7 +2916,11 @@ class VideoInspectionReport(DomainModel):
     height: int = Field(gt=0)
     fps: float = Field(gt=0.0)
     audio_present: bool
-    samples: list[VideoFrameSample] = Field(min_length=2, max_length=32)
+    samples: list[VideoFrameSample] = Field(min_length=1, max_length=40)
+    dense_sample_fps: float | None = None
+    detail_frames: list[VideoFrameSample] = Field(default_factory=list[VideoFrameSample], max_length=4)
+    keyframe_max_dimension: int | None = 1280
+    audio_excerpt: VideoAudioExcerpt | None = None
     contact_sheet_path: str
     boundary_contact_sheet_path: str | None = None
     technical_checks: list[TechnicalCheck]
@@ -3029,6 +3078,12 @@ class AudioInspectionReport(DomainModel):
     source_script_version_id: str
     source_editorial_revision: int | None = None
     source_editorial_timeline_id: str | None = None
+    source_context: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    observation_scope: Literal["EDITORIAL", "TAKE"] = "EDITORIAL"
+    time_space: Literal["FILM", "TAKE_SOURCE"] = "FILM"
+    source_take_id: str | None = None
+    observed_source_start_seconds: float | None = None
+    observed_source_end_seconds: float | None = None
     semantic_status: SemanticReviewStatus
     semantic_provider: str | None = None
     transcription_model: str | None = None
@@ -3082,6 +3137,7 @@ class EpisodeReviewReport(DomainModel):
     source_editorial_revision: int | None = None
     source_editorial_project: dict[str, JsonValue] | None = None
     review_manifest: TimelineManifest | None = None
+    source_context: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     status: EpisodeReviewStatus
     semantic_model: str | None = None
     scene_reviews: list[SceneEpisodeReview] = Field(
@@ -3209,18 +3265,36 @@ class CreateProjectRequest(DomainModel):
 
 
 class VideoInspectionRequest(DomainModel):
+    scope: Literal["TAKE", "EDITORIAL"] = Field(default="TAKE", description="TAKE observes source footage. EDITORIAL observes one saved clip use and its actual preceding cut, including trim/speed/reverse; the source interval is resolved from that clip.")
+    timeline_id: str | None = Field(default=None, min_length=1)
+    clip_id: str | None = Field(default=None, min_length=1, description="Exact saved video clip for EDITORIAL. Required when this Take has multiple uses. Use timeline.read_editorial to obtain IDs.")
     previous_take_id: str | None = Field(default=None, max_length=200)
     include_previous_boundary: bool = True
     semantic_review: bool = True
-    max_frames: int = Field(default=14, ge=6, le=24)
+    max_frames: int = Field(default=14, ge=6, le=24, description="Adaptive sparse-sampling limit; dense sampling uses its explicit rate, capped at 36 frames.")
     review_focus: str | None = Field(default=None, max_length=2000)
     source_in_seconds: float = Field(default=0.0, ge=0.0, description="Start in the source Take, not the episode timeline.")
     source_out_seconds: float | None = Field(default=None, gt=0.0, description="Exclusive source end; omit to observe through the end of the Take.")
+    dense_sample_fps: float | None = Field(default=None, ge=1, le=12, description="Opt-in dense sampling of an explicit source interval up to 3 seconds, at most 36 actual frames.")
+    keyframe_times_seconds: list[float] = Field(default_factory=list[float], max_length=4, description="Exact source times within this inspection range for independent detail images.")
+    keyframe_max_dimension: int | None = Field(default=1280, ge=360, le=3840, description="Maximum detail-image dimension without upscaling; null preserves original pixels.")
+    include_audio_excerpt: bool = Field(default=False, description="Save actual PCM audio from the same explicit source interval, at most 3 seconds. This does not perform listening or ASR.")
 
     @model_validator(mode="after")
     def validate_source_range(self) -> VideoInspectionRequest:
+        if self.scope == "TAKE" and (self.timeline_id is not None or self.clip_id is not None):
+            raise ValueError("timeline_id/clip_id require EDITORIAL scope")
+        if self.scope == "EDITORIAL" and (self.previous_take_id is not None or self.source_in_seconds != 0 or self.source_out_seconds is not None):
+            raise ValueError("EDITORIAL resolves source times and predecessor from the saved clip; omit previous_take_id and source_in/out")
         if self.source_out_seconds is not None and self.source_out_seconds <= self.source_in_seconds:
             raise ValueError("Video inspection requires a positive source time range")
+        if self.scope == "TAKE" and (self.dense_sample_fps is not None or self.include_audio_excerpt):
+            if self.source_out_seconds is None or self.source_out_seconds - self.source_in_seconds > 3.000001:
+                raise ValueError("Dense sampling or an audio excerpt requires an explicit source interval of at most 3 seconds")
+        if any(not math.isfinite(value) or value < self.source_in_seconds
+               or (self.source_out_seconds is not None and value >= self.source_out_seconds)
+               for value in self.keyframe_times_seconds):
+            raise ValueError("Detail keyframe times must lie inside the inspected source interval")
         return self
 
 
@@ -3242,7 +3316,24 @@ class TakeComparisonResponse(DomainModel):
     project: ProjectAggregate
 
 
-class AudioInspectionRequest(DomainModel):
+class NativeAudioObservationSource(DomainModel):
+    scope: Literal["EDITORIAL", "TAKE"] = Field(default="EDITORIAL", description="EDITORIAL observes current adopted sound. TAKE observes an original candidate without saving or adopting it.")
+    take_id: str | None = Field(default=None, min_length=1)
+    source_start_seconds: float = Field(default=0, ge=0, allow_inf_nan=False, description="TAKE only: start in the original Take file, not FILM time.")
+    source_end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False, description="TAKE only: exclusive source end; omitted means the actual media end.")
+
+    @model_validator(mode="after")
+    def validate_audio_source(self) -> NativeAudioObservationSource:
+        if self.scope == "TAKE" and self.take_id is None:
+            raise ValueError("scope=TAKE requires take_id")
+        if self.scope == "EDITORIAL" and (self.take_id is not None or self.source_start_seconds != 0 or self.source_end_seconds is not None):
+            raise ValueError("take_id and source range require scope=TAKE; editorial coordinates are FILM")
+        if self.source_end_seconds is not None and self.source_end_seconds <= self.source_start_seconds:
+            raise ValueError("source_end_seconds must follow source_start_seconds")
+        return self
+
+
+class AudioInspectionRequest(NativeAudioObservationSource):
     semantic_review: bool = True
     speaker_continuity: bool = True
     dialogue_padding_seconds: float = Field(default=0.35, ge=0.0, le=1.5)

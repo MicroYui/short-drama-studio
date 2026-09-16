@@ -192,8 +192,8 @@ def test_compare_takes_selects_relative_winner_and_persists_report(
     project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
     warned_winner = service.repository.get_take(take_ids[1])
     assert warned_winner is not None
-    warned_winner.qa_status = QaStatus.REJECTED
-    warned_winner.qa_report.status = QaStatus.REJECTED
+    warned_winner.qa_status = QaStatus.PENDING
+    warned_winner.qa_report.status = QaStatus.PENDING
     warned_winner.qa_report.hard_gate_passed = False
     service.repository.save_take(warned_winner)
     response = service.compare_takes(
@@ -213,12 +213,54 @@ def test_compare_takes_selects_relative_winner_and_persists_report(
     assert len(language.calls) == 1
     assert len(language.calls[0][2]) == 2
     assert language.calls[0][1]["technically_available_take_ids"] == take_ids
-    assert language.calls[0][1]["candidates"][1]["take"]["qa_status"] == "REJECTED"
+    assert language.calls[0][1]["candidates"][1]["take"]["qa_status"] == "PENDING"
 
     restarted = _service(tmp_path, language)
     persisted = restarted.repository.list_take_comparisons(project_id)
     assert [item.id for item in persisted] == [response.report.id]
     assert restarted.get_project(project_id).take_comparisons[0].selected_take_id == take_ids[1]
+
+
+def test_rejected_relative_winner_keeps_report_without_implicit_adoption(
+    tmp_path: Path,
+) -> None:
+    language = FakeTakeComparisonLanguageProvider(
+        decision=TakeComparisonDecision.SELECT_TAKE,
+        winner_index=1,
+    )
+    service = _service(tmp_path, language)
+    project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
+    service.select_take(take_ids[0])
+    rejected = service.repository.get_take(take_ids[1])
+    assert rejected is not None
+    rejected.qa_status = QaStatus.REJECTED
+    rejected.qa_report.status = QaStatus.REJECTED
+    rejected.qa_report.hard_gate_passed = False
+    service.repository.save_take(rejected)
+    before = service.get_project(project_id)
+
+    with pytest.raises(WorkflowConflictError, match="A rejected Take cannot be selected"):
+        service.compare_takes(
+            project_id,
+            TakeComparisonRequest(
+                shot_id=shot_id,
+                take_ids=take_ids,
+                inspect_missing=False,
+                apply_selection=True,
+            ),
+        )
+
+    reopened = _service(tmp_path, language).get_project(project_id)
+    assert reopened.document == before.document
+    assert reopened.takes == before.takes
+    assert len(language.calls) == 1
+    assert language.calls[0][1]["candidates"][1]["take"]["qa_status"] == "REJECTED"
+    assert len(reopened.take_comparisons) == 1
+    report = reopened.take_comparisons[0]
+    assert report.decision == TakeComparisonDecision.SELECT_TAKE
+    assert report.selected_take_id == take_ids[1]
+    assert next(take for take in reopened.takes if take.id == take_ids[0]).is_selected
+    assert not next(take for take in reopened.takes if take.id == take_ids[1]).is_selected
 
 
 def test_compare_takes_none_acceptable_clears_automatic_selection(

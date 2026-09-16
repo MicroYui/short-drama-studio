@@ -28,6 +28,8 @@ export function createWindow(): BrowserWindow {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      // Keep the timeline clock and clip changes aligned with audio while the app is in the background.
+      backgroundThrottling: false,
       webSecurity: isDev ? false : true,
     },
     backgroundColor: '#f5f6f8',

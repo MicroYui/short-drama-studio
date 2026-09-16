@@ -20,6 +20,7 @@ from short_drama.models import (
     ProjectStage,
     QaFailureCategory,
     QaIssue,
+    QaStatus,
     TaskStatus,
 )
 from short_drama.production_contracts import (
@@ -289,6 +290,7 @@ def test_script_only_agent_pipeline_preserves_multi_shot_edit_boundaries(
         opening_take_id,
         H3TakeReviewRequest(
             hard_gate_passed=False,
+            review_status=QaStatus.REJECTED,
             score=2.0,
             notes="The selected generation unit is no longer acceptable.",
             issues=[

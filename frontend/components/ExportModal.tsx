@@ -5,9 +5,8 @@ import { DEFAULT_SUBTITLE_STYLE } from '../types/project-model'
 import type { Track, TimelineClip } from '../types/project-model'
 import {
   selectActiveTimeline,
-  selectAssets,
-  selectClipPathFromAssets,
   selectClips,
+  selectExportClipData,
   selectShowExportModal,
   selectSubtitles,
   selectTracks,
@@ -156,31 +155,11 @@ export function ExportModal({ projectName }: ExportModalProps) {
   const { closeExportModal } = useEditorActions()
   const isOpen = useEditorStore(selectShowExportModal)
   const timeline = useEditorStore(selectActiveTimeline)
-  const assets = useEditorStore(selectAssets)
   const clips = useEditorStore(selectClips)
   const tracks = useEditorStore(selectTracks)
   const subtitles = useEditorStore(selectSubtitles)
 
-  const exportClips = useMemo(() => (
-    clips
-      .filter(clip => clip.type === 'video' || clip.type === 'image' || clip.type === 'audio')
-      .filter(clip => tracks[clip.trackIndex]?.enabled !== false)
-      .map(clip => ({
-        path: selectClipPathFromAssets(assets, clip),
-        type: clip.type,
-        startTime: clip.startTime,
-        duration: clip.duration,
-        trimStart: clip.trimStart,
-        speed: clip.speed || 1,
-        reversed: clip.reversed || false,
-        flipH: clip.flipH || false,
-        flipV: clip.flipV || false,
-        opacity: clip.opacity ?? 100,
-        trackIndex: clip.trackIndex,
-        muted: clip.muted || false,
-        volume: clip.volume ?? 1,
-      }))
-  ), [assets, clips, tracks])
+  const exportClips = useEditorStore(selectExportClipData)
 
   const subtitleData = useMemo(() => (
     subtitles.map(subtitle => {

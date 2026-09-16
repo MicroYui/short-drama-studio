@@ -175,27 +175,11 @@ def _source_identity(source: dict[str, JsonValue], *, document: ProjectDocument 
 def operation_source_staleness_reason(
     service: ShortDramaService, record: H3GroupOperation, *, media_inputs: list[H3MediaInput],
 ) -> str | None:
-    """Recheck the saved group's facts and actual files without compiling or mutating it."""
-    state = record.state
-    if not state.generation_plan_document_id or not state.generation_plan_version_id or not state.generation_unit_id:
-        return "Saved H3 operation is missing its generation-unit source"
-    try:
-        context = service.get_h3_generation_unit_context(record.project_id, H3GenerationUnitContextRequest(
-            generation_plan_document_id=state.generation_plan_document_id,
-            generation_plan_version_id=state.generation_plan_version_id,
-            generation_unit_id=state.generation_unit_id,
-        ), require_current_plan=True)
-        document = service.get_project(record.project_id).document
-        media = service._resolve_approved_asset_inputs(  # pyright: ignore[reportPrivateUsage]
-            document, media_inputs)
-        current: dict[str, JsonValue] = {**record.input_context, "source_context": context.source_context,
-            "media_inputs": [item.model_dump(mode="json") for item in media],
-            "media_file_states": cast(JsonValue, _media_file_states(media))}
-        if _source_identity(record.input_context, document=document) != _source_identity(current, document=document):
-            return "Current group/media differs from the saved H3 operation source; prepare the current group before submitting"
-    except (ValueError, OSError, KeyError) as exc:
-        return str(exc)
-    return None
+    """Recheck saved facts and files through the shared read-only projection."""
+    from short_drama.h3_source_checks import operation_source_reason
+
+    return operation_source_reason(service.get_project(record.project_id).document,
+        record, store=service.repository, media_inputs=media_inputs)
 
 
 def _new_operation(service: ShortDramaService, project_id: str, request: H3GroupOperationRequest, group_id: str) -> H3GroupOperation:

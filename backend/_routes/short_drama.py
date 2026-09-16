@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from _routes.studio import router as studio_router
+from _routes.video_edit import router as video_edit_router
+from short_drama.studio_models import StudioTakeSelectRequest
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from _routes._errors import HTTPError
 from short_drama.asset_catalog import (
@@ -819,10 +821,13 @@ def validate_h3_provider_config(
     response_model=H3ReconciliationCandidatesResponse,
 )
 def list_h3_reconciliation_candidates(
+    offset: int = Query(default=0, ge=0),
+    page_size: int = Query(default=50, ge=1, le=100),
+    max_pages: int = Query(default=10, ge=1, le=10),
     service: ShortDramaService = Depends(get_short_drama_service),
 ) -> H3ReconciliationCandidatesResponse:
     try:
-        return service.list_h3_reconciliation_candidates()
+        return service.list_h3_reconciliation_candidates(offset=offset, page_size=page_size, max_pages=max_pages)
     except (WorkflowConflictError, ProviderOperationError) as exc:
         raise _translate_error(exc) from exc
 
@@ -1853,10 +1858,14 @@ def recover_task_output(
 @router.post("/takes/{take_id}/select", response_model=ProjectAggregate)
 def select_take(
     take_id: str,
+    request: StudioTakeSelectRequest | None = None,
     service: ShortDramaService = Depends(get_short_drama_service),
 ) -> ProjectAggregate:
     try:
-        return service.select_take(take_id)
+        selection = request or StudioTakeSelectRequest()
+        return service.select_take(take_id, shot_ids=selection.shot_ids, clip_ids=selection.clip_ids,
+            expected_editorial_revision=selection.expected_editorial_revision,
+            source_in_seconds=selection.source_in_seconds, source_out_seconds=selection.source_out_seconds)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 
@@ -2068,3 +2077,4 @@ def export_project(
 
 
 router.include_router(studio_router)
+router.include_router(video_edit_router)

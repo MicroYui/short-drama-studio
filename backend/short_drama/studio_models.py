@@ -89,6 +89,64 @@ class StudioTimelineSave(DomainModel):
         return self
 
 
+class StudioTakeSelectRequest(DomainModel):
+    shot_ids: list[str] | None = None
+    clip_ids: list[str] | None = None
+    expected_editorial_revision: int | None = Field(default=None, ge=0)
+    source_in_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False,
+        description="Optional exact start in the candidate Take's source file. Supply both source bounds, one clip_id and the current editorial revision; preserves that use's film position and duration.")
+    source_out_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
+        description="Exclusive candidate source end. The span must equal the selected clip's duration multiplied by its existing speed; subtitles and all unselected uses stay unchanged.")
+
+    @model_validator(mode="after")
+    def validate_source_selection(self) -> StudioTakeSelectRequest:
+        if (self.source_in_seconds is None) != (self.source_out_seconds is None):
+            raise ValueError("source_in_seconds and source_out_seconds must be supplied together")
+        if self.source_in_seconds is not None and self.source_out_seconds is not None:
+            if self.source_out_seconds <= self.source_in_seconds:
+                raise ValueError("source_out_seconds must follow source_in_seconds")
+            if self.clip_ids is None or len(self.clip_ids) != 1:
+                raise ValueError("An exact source interval requires exactly one clip_id")
+            if self.expected_editorial_revision is None:
+                raise ValueError("An exact source interval requires expected_editorial_revision")
+        return self
+
+
+class EditorialTitleStyle(DomainModel):
+    """The same basic title controls exposed by the Studio editor."""
+
+    font_size: float | None = Field(default=None, ge=1, le=500, allow_inf_nan=False,
+        description="Title size in a 1080-unit-high canvas, independent of export resolution.")
+    font_weight: Literal["normal", "bold"] | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    position_x: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    position_y: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    opacity: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+
+
+class EditorialTransition(DomainModel):
+    type: Literal["none", "fade-to-black", "dissolve"]
+    duration_seconds: float = Field(default=0, ge=0, allow_inf_nan=False,
+        description="Positive for a fade/dissolve, no longer than either affected clip. Use none with 0 to clear.")
+
+    @model_validator(mode="after")
+    def validate_duration(self) -> EditorialTransition:
+        if (self.type == "none") != (self.duration_seconds == 0):
+            raise ValueError("A transition needs positive duration_seconds; none uses 0.")
+        return self
+
+
+class EditorialTitleCreate(DomainModel):
+    id: str = Field(min_length=1, max_length=200, description="New title clip ID, unique within the selected timeline. Existing titles use clips by ID.")
+    text: str = Field(min_length=1, pattern=r"^[^{}\\]*$",
+        description="Chinese and multiline text supported; braces and backslashes are not supported by the basic renderer.")
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
+    style: EditorialTitleStyle = Field(default_factory=EditorialTitleStyle)
+    track_index: int | None = Field(default=None, ge=0,
+        description="Unoccupied enabled visual track. Omit to choose one or add a title track without changing existing clips.")
+
+
 class EditorialClipChange(DomainModel):
     id: str
     start_seconds: float | None = Field(default=None, ge=0)
@@ -97,6 +155,11 @@ class EditorialClipChange(DomainModel):
     volume: float | None = Field(default=None, ge=0, le=1)
     muted: bool | None = None
     speed: float | None = Field(default=None, ge=0.1, le=16, allow_inf_nan=False)
+    text: str | None = Field(default=None, min_length=1, pattern=r"^[^{}\\]*$", description="Only for an existing text/title clip; omit to preserve its text.")
+    title_style: EditorialTitleStyle | None = Field(default=None, description="Only supplied basic title fields are merged; other saved style fields stay unchanged.")
+    transition_in: EditorialTransition | None = None
+    transition_out: EditorialTransition | None = Field(default=None,
+        description="Video/image only. Dissolve updates both ends of same-track adjacent clips; none clears the paired dissolve. Cross-shot cuts use FILM scope.")
     remove: bool = False
 
 
@@ -132,6 +195,8 @@ class StudioEditorialEdit(DomainModel):
     subtitles: list[EditorialSubtitleChange] = Field(default_factory=list[EditorialSubtitleChange], max_length=200)
     add_subtitles: list[EditorialSubtitleCreate] = Field(default_factory=list[EditorialSubtitleCreate], max_length=200,
         description="Create captions without reading/writing the full project. Times use FILM coordinates unless shot_id selects SHOT_LOCAL; local cues must fit the edited shot use. Spoken captions should come from actual audio.transcribe_native results, with only supported recognition corrections, not unheard script lines.")
+    add_titles: list[EditorialTitleCreate] = Field(default_factory=list[EditorialTitleCreate], max_length=100,
+        description="Create basic Chinese text overlays with no media asset, independently of spoken subtitles. Times use FILM or the selected SHOT_LOCAL view; local titles must fit the edited shot use.")
     keep_linked_audio: bool = True
     shot_id: str | None = None
     anchor_clip_id: str | None = None
@@ -145,6 +210,13 @@ class StudioEditorialEdit(DomainModel):
             raise ValueError("add_subtitles IDs must be unique within this request.")
         if set(added_ids).intersection(cue.id for cue in self.subtitles):
             raise ValueError("A subtitle ID cannot be both added and edited/removed in one request.")
+        title_ids = [title.id for title in self.add_titles]
+        if len(set(title_ids)) != len(title_ids):
+            raise ValueError("add_titles IDs must be unique within this request.")
+        if set(title_ids).intersection(clip.id for clip in self.clips):
+            raise ValueError("A title ID cannot be both added and edited/removed in one request.")
+        if len({clip.id for clip in self.clips}) != len(self.clips):
+            raise ValueError("clips IDs must be unique within this request; combine changes for one clip.")
         return self
 
 
@@ -203,6 +275,11 @@ class StudioChangeSet(DomainModel):
     summary: str = ""
     items: list[StudioTextChange]
     created_at: str
+
+
+class StudioChanges(DomainModel):
+    changes: list[StudioChangeSet]
+    next_cursor: str | None = None
 
 
 class StudioChangeDecision(DomainModel):
@@ -383,6 +460,8 @@ class StudioEditorial(DomainModel):
     revision: int
     project: dict[str, JsonValue]
     scope: StudioEditorialScope | None = None
+    default_subtitle_font_family: str | None = Field(default=None,
+        description="Confirmed readable local default CJK subtitle family for preview/export. Null when unavailable. Response metadata only; explicit saved font families remain unchanged.")
 
 
 class StudioExportRequest(DomainModel):
@@ -405,7 +484,7 @@ class StudioExport(DomainModel):
     id: str
     project_id: str
     editorial_revision: int
-    status: Literal["running", "completed", "failed"] = "running"
+    status: Literal["running", "cancelling", "cancelled", "completed", "failed"] = "running"
     progress: str = "准备导出"
     video_path: str | None = None
     clean_video_path: str | None = None
@@ -417,3 +496,11 @@ class StudioExport(DomainModel):
     height: int
     fps: int
     created_at: str
+    updated_at: str | None = None
+    finished_at: str | None = None
+    subtitles: bool = True
+
+
+class StudioExports(DomainModel):
+    exports: list[StudioExport]
+    next_cursor: str | None = None

@@ -10,26 +10,28 @@ from uuid import uuid4
 
 import imageio_ffmpeg
 
-from short_drama.media import MediaGenerationError
+from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
 from short_drama.models import (
     ApprovalStatus, Freshness, OutputSpec, ProjectDocument, SubtitleCue,
     TimelineAudioClip, TimelineManifest,
 )
 from short_drama.studio_editorial import EditorClip, EditorProject
+from short_drama.studio_audio_selection import clip_audio_delegated, clip_audio_origin, clip_audio_path
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
 
 
-def _edited_audio(clip: EditorClip, path: Path, folder: Path) -> tuple[str, float]:
-    if clip.speed == 1 and not clip.reversed and clip.volume == 1:
-        return str(path), clip.trimStart
+def _edited_audio(clip: EditorClip, path: Path, folder: Path, *, source_type: str | None = None,
+                  align_source_clock: bool = False) -> tuple[str, float]:
     folder.mkdir(parents=True, exist_ok=True)
     destination = folder / f"clip-{uuid4().hex[:12]}.wav"
     filters = [f"atrim=start={clip.trimStart}:end={clip.trimStart + clip.duration * clip.speed}",
                "asetpts=PTS-STARTPTS"]
-    if clip.reversed:
-        filters.append("areverse")
+    if align_source_clock:
+        # Original Take coordinates include silence before a late audio stream,
+        # matching video_detail.extract_source_audio's source clock.
+        filters.insert(0, "aresample=async=1:first_pts=0")
     rate = clip.speed
     while rate > 2:
         filters.append("atempo=2")
@@ -39,13 +41,41 @@ def _edited_audio(clip: EditorClip, path: Path, folder: Path) -> tuple[str, floa
         rate *= 2
     if rate != 1:
         filters.append(f"atempo={rate}")
-    filters.append(f"volume={clip.volume}")
+    if clip.reversed:
+        filters.append("areverse")
+    # Match frontend/lib/audio-envelope.ts and export/audio-mix.ts: apply
+    # the minimum of both linear fades in playback time, after speed/reverse.
+    # Split pieces retain the original envelope duration and time offset.
+    duration = clip.audioEnvelopeDurationSeconds or clip.duration
+    time = f"(t+{clip.audioEnvelopeOffsetSeconds or 0})"
+    fade_in = min(duration, clip.audioFadeInSeconds)
+    fade_out = min(duration, clip.audioFadeOutSeconds)
+    attack = f"min(1,max(0,{time}/{fade_in}))" if fade_in else "1"
+    release = f"min(1,max(0,({duration}-{time})/{fade_out}))" if fade_out else "1"
+    gain = f"{clip.volume}*min({attack},{release})"
+    # Export extracts stereo/48 kHz Int16 before gain, then rounds the result
+    # to that same PCM format. Preserve this order before inspection's mono
+    # downmix, including the exporter's mono-to-stereo channel gain.
+    stereo_pcm = "aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo"
+    filters.extend([stereo_pcm,
+        f"aeval=exprs='val(0)*{gain}|val(1)*{gain}'", stereo_pcm,
+        f"apad=whole_dur={clip.duration}", f"atrim=end={clip.duration}"])
     process = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-y",
         "-i", str(path), "-vn", "-af", ",".join(filters), "-ac", "1", "-ar", "16000",
         "-c:a", "pcm_s16le", str(destination)], capture_output=True, text=True)
     if process.returncode:
+        if (clip.type == "video" or source_type == "video") and probe_media_with_ffmpeg(path)["audio"] == "missing":
+            # Keep the original evidence so AudioInspector can report the
+            # absent stream; never manufacture a silent sound track.
+            return str(path), clip.trimStart
         raise MediaGenerationError(process.stderr.strip())
     return str(destination), 0.0
+
+
+def prepare_edited_clip_audio(clip: EditorClip, path: Path, folder: Path, *, source_type: str | None = None,
+                               align_source_clock: bool = False) -> tuple[str, float]:
+    """Share the exact adopted sound preparation with local video edits."""
+    return _edited_audio(clip, path, folder, source_type=source_type, align_source_clock=align_source_clock)
 
 
 def editorial_audio_input(
@@ -61,7 +91,6 @@ def editorial_audio_input(
     timeline = next(item for item in project.timelines if item.id == project.activeTimelineId)
     revision = int(cast(int, saved.get("revision", 0)))
     assets = {asset.id: asset for asset in project.assets}
-    clips = {clip.id: clip for clip in timeline.clips}
     takes = {take.id: take for take in service.repository.list_takes(document.project.id)}
     versions = {version.local_path: (asset.id, version.id)
                 for asset in document.assets for version in asset.versions if version.local_path}
@@ -75,19 +104,19 @@ def editorial_audio_input(
         if (clip.type not in {"video", "audio"} or not track.enabled or solo and not track.solo
                 or track.muted or clip.muted or clip.volume == 0):
             continue
+        if clip_audio_delegated(clip, timeline.clips, assets):
+            continue
         asset = assets.get(clip.assetId or "")
         if asset is None:
             raise ValueError(f"Saved audio clip {clip.id} has no bound media")
-        extra = clip.model_extra or {}
-        linked_ids = cast(list[str], extra.get("linkedClipIds", []))
-        video = clip if clip.type == "video" else next(
-            (clips[item] for item in linked_ids if item in clips and clips[item].type == "video"), None)
-        origin = (video.model_extra or {}) if video is not None else extra
+        origin = clip_audio_origin(clip, timeline.clips, assets).model_extra or {}
+        source_path = clip_audio_path(clip, assets)
+        assert source_path is not None
         take_id = str(origin.get("sourceTakeId") or "")
         shot_id = str(origin.get("sourceShotId") or "")
         take = takes.get(take_id)
-        asset_id, version_id = versions.get(asset.path, (None, None))
-        if take is not None and take.media_path == asset.path and shot_id:
+        asset_id, version_id = versions.get(source_path, (None, None))
+        if take is not None and take.media_path == source_path and shot_id:
             audio_shot_id, audio_take_id = shot_id, take_id
             asset_id, version_id = None, None
         elif native_only:
@@ -96,7 +125,7 @@ def editorial_audio_input(
             audio_shot_id, audio_take_id = None, None
         else:
             raise ValueError(f"Saved audio clip {clip.id} has no current Take or asset binding")
-        path, source_in = _edited_audio(clip, Path(asset.path), folder)
+        path, source_in = _edited_audio(clip, Path(source_path), folder, source_type=asset.type)
         audio.append(TimelineAudioClip(id=clip.id, shot_id=audio_shot_id, take_id=audio_take_id,
             asset_id=asset_id, asset_version_id=version_id, media_path=path,
             start_seconds=clip.startTime, source_in_seconds=source_in,

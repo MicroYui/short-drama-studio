@@ -373,18 +373,21 @@ export function getClipEffectStyles(clip: TimelineClip, timeInClip?: number): Re
   if (clip.flipV) transforms.push('scaleY(-1)')
 
   let opacity = (clip.opacity ?? 100) / 100
+  let blackFade = 1
   if (timeInClip !== undefined) {
     const tIn = clip.transitionIn
     const tOut = clip.transitionOut
     if (tIn && tIn.duration > 0 && timeInClip < tIn.duration) {
-      if (tIn.type === 'fade-to-black' || tIn.type === 'fade-to-white') {
+      if (tIn.type === 'fade-to-black') blackFade = Math.min(blackFade, Math.max(0, timeInClip / tIn.duration))
+      if (tIn.type === 'fade-to-white') {
         opacity = Math.min(opacity, timeInClip / tIn.duration)
       }
     }
     if (tOut && tOut.duration > 0) {
       const timeFromEnd = clip.duration - timeInClip
       if (timeFromEnd < tOut.duration) {
-        if (tOut.type === 'fade-to-black' || tOut.type === 'fade-to-white') {
+        if (tOut.type === 'fade-to-black') blackFade = Math.min(blackFade, Math.max(0, timeFromEnd / tOut.duration))
+        if (tOut.type === 'fade-to-white') {
           opacity = Math.min(opacity, timeFromEnd / tOut.duration)
         }
       }
@@ -409,6 +412,7 @@ export function getClipEffectStyles(clip: TimelineClip, timeInClip?: number): Re
   }
 
   const style: React.CSSProperties = {}
+  if (blackFade < 1) filters.push(`brightness(${blackFade})`)
   if (filters.length > 0) style.filter = filters.join(' ')
   if (transforms.length > 0) style.transform = transforms.join(' ')
   if (opacity < 1) style.opacity = opacity

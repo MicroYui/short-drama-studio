@@ -62,6 +62,8 @@ export const StudioApi = {
   saveShotTimeline: (id: string, shotId: string, timeline: unknown, revision: number, anchor?: string | null) => studioRequest<StudioMutation>(`${projectPath(id)}/shots/${encodeURIComponent(shotId)}/editorial`, json('PUT', { timeline, expected_revision: revision, anchor_clip_id: anchor ?? null })),
   exportTimeline: (id: string, request: { expected_revision: number; fps: number; subtitles: boolean } & StudioExportDimensions) => studioRequest<StudioExport>(`${projectPath(id)}/exports`, json('POST', request)),
   exportStatus: (id: string, exportId: string) => studioRequest<StudioExport>(`${projectPath(id)}/exports/${exportId}`),
+  exports: (id: string, before?: string) => studioRequest<components['schemas']['StudioExports']>(`${projectPath(id)}/exports?limit=20${before ? `&before=${encodeURIComponent(before)}` : ''}`),
+  cancelExport: (id: string, exportId: string) => studioRequest<StudioExport>(`${projectPath(id)}/exports/${encodeURIComponent(exportId)}/cancel`, { method: 'POST' }),
   activity: (id: string, after = 0) => studioRequest<StudioActivity>(`${projectPath(id)}/activity?after=${after}`),
   send: (id: string, text: string, scope: StudioScope) => studioRequest<StudioJob>(`${projectPath(id)}/messages`, json('POST', { text, scope })),
   control: (jobId: string, action: 'pause' | 'resume') => studioRequest<StudioJob>(`${base}/jobs/${jobId}/control`, json('POST', { action })),

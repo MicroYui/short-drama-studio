@@ -99,6 +99,9 @@ def test_logger_exception_usage_is_restricted_to_boundaries() -> None:
     allowed = {
         Path("app_factory.py"),
         Path("services/task_runner/threading_runner.py"),
+        # Owns its resource-preparation thread and consumes the exception after
+        # logging; the HTTP request has already returned and cannot log it.
+        Path("short_drama/audio_resources.py"),
     }
 
     for path in backend_dir.rglob("*.py"):

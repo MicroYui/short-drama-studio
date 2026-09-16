@@ -30,7 +30,8 @@ WRITES = frozenset({"artifact.patch_asset_plan", "artifact.patch_asset_plan_fiel
 
 
 def _fixture_work(tmp_path: Path, *, legacy: bool = False):
-    store, work, context = runtime_work(tmp_path / "runtime.sqlite3")
+    store, work, context = runtime_work(tmp_path / "runtime.sqlite3",
+        project_id=str(FIXTURE["read"]["arguments"]["project_id"]))
     work.production_skill_role = ProductionSkillRole.ASSET_PLANNER
     read, write = deepcopy(FIXTURE["read"]), deepcopy(FIXTURE["write"])
     if not legacy:

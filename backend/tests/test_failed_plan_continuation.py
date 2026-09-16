@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import threading
 import time
 from typing import Any
@@ -163,6 +164,45 @@ def test_failed_plan_empty_wait_is_consumed_across_restart(tmp_path: Path) -> No
     assert not PlanGraph(snapshot.current_plan).owns_action(next(action for action in snapshot.actions if action.id == failed_id))
     assert restarted.production_manager.prepare_completion_planning(run_id,
         include_local_plan_completion=True, include_failed_plan=True) is None
+
+
+def test_last_carried_worker_returning_to_leader_can_replan_an_empty_wait(tmp_path: Path) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        requests.append(payload)
+        current = payload["current_plan"]
+        assert current["steps"] == [] and current["carried_work_order_ids"] == []
+        assert "LEADER_REPLAN" in str(payload["reason"])
+        return AgentPlanProposal(summary="Inspect the reported failure before continuing.",
+            steps=[_read(project_id, "inspect-failure")]).model_dump(mode="json")
+
+    client = HarnessLanguageClient(respond)
+    service, project_id = _service(tmp_path, client)
+    view = service.create_agent_run(project_id, AgentRunCreateRequest(objective="Finish the existing video work.",
+        initial_plan=AgentPlanProposal(summary="A single worker.", steps=[_delegate("video-worker")])) )
+    run_id = view.snapshot.run.id
+    advanced = service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1),
+        advance_workers=False, allow_replanning=False)
+    work_id = advanced.created_work_order_ids[0]
+    service.replan_agent_run(run_id, AgentRunReplanRequest(reason="Wait for the same worker.",
+        proposed_plan=AgentPlanProposal(summary="Second shot is being prepared.", carried_work_order_ids=[work_id])))
+    work = service.agent_runtime.store.get_work_order(work_id)
+    assert work is not None
+    work.status, work.next_owner = DelegationStatus.NEEDS_ATTENTION, WorkOrderNextOwner.LEADER_REPLAN
+    service.agent_runtime.store.save_work_order(work)
+    prepared = service.production_manager.prepare_completion_planning(run_id, include_failed_plan=True)
+    assert prepared is not None and prepared.failed_plan_state
+    proposal = service.production_manager.plan_after_completions(prepared)
+    assert service.production_manager.apply_completion_plan(prepared, proposal)
+    assert len(requests) == 1
+    assert len(service.agent_runtime.store.list_work_orders(run_id)) == 1
+    assert not service.get_project(project_id).tasks
+    # Authored empty/incomplete plans must still be rejected, even though the
+    # truthful historical state above can be supplied to the next decision.
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="incomplete Agent plan"):
+        AgentPlanProposal.model_validate_json(json.dumps({"summary": "No executable work.", "goal_complete": False}))
 
 
 @pytest.mark.parametrize("control", ["pause", "message"])

@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button'
 import { Tooltip } from '../../components/ui/tooltip'
 import { AudioWaveform } from '../../components/AudioWaveform'
 import { pathToFileUrl } from '../../lib/file-url'
+import { studioSubtitlePreviewFont, useStudioSubtitleFont } from '../../lib/studio-subtitle-font'
 import { DEFAULT_SUBTITLE_STYLE } from '../../types/project-model'
 import type { Asset, TimelineClip, Track, SubtitleClip } from '../../types/project-model'
 import { getClipEffectStyles, getTransitionBgColor, formatTime, getShortcutLabel, tooltipLabel, getMaskedEffectOverlays } from './video-editor-utils'
@@ -144,7 +145,9 @@ function buildFrameRenderCache(clips: TimelineClip[], subtitles: SubtitleClip[])
 }
 
 function getClipTargetTime(clip: TimelineClip, mediaDuration: number, atTime: number): number {
-  const timeInClip = atTime - clip.startTime
+  // Basic dissolves introduce the adopted first frame; playback starts at the
+  // existing cut, so transition edits never change source trim or film length.
+  const timeInClip = Math.max(0, atTime - clip.startTime)
   const usableMediaDuration = mediaDuration - clip.trimStart - clip.trimEnd
   return clip.reversed
     ? Math.max(0, Math.min(mediaDuration, clip.trimStart + usableMediaDuration - timeInClip * clip.speed))
@@ -302,7 +305,7 @@ function getActiveVideoContributors(
 
   if (primaryClip?.asset?.type === 'video') {
     const primaryOpacity = crossDissolve
-      ? (1 - crossDissolveProgress) * ((crossDissolve.outgoing.opacity ?? 100) / 100)
+      ? (crossDissolve.outgoing.opacity ?? 100) / 100
       : getStyleOpacity(getClipEffectStyles(primaryClip, Math.max(0, time - primaryClip.startTime)))
     contributors.push({
       clip: primaryClip,
@@ -414,6 +417,7 @@ function sameFrameRenderState(a: FrameRenderState, b: FrameRenderState): boolean
 export interface ProgramMonitorProps {
   compositionAspectRatio?: number
   scaleSubtitles?: boolean
+  defaultSubtitleFontFamily?: string | null
   playbackTimeRef: React.MutableRefObject<number>
   setDraggingMarker: React.Dispatch<React.SetStateAction<'timelineIn' | 'timelineOut' | null>>
   kbLayout: KeyboardLayout
@@ -429,7 +433,9 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   kbLayout,
   compositionAspectRatio = 16 / 9,
   scaleSubtitles = false,
+  defaultSubtitleFontFamily,
 }: ProgramMonitorProps, ref) {
+  const confirmedSubtitleFont = useStudioSubtitleFont(scaleSubtitles ? defaultSubtitleFontFamily : null)
   const {
     clearClipSelection,
     pause,
@@ -830,7 +836,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
       if (outgoingClip?.asset?.type === 'video') {
         const baseStyle = getClipEffectStyles(outgoingClip, Math.max(0, atTime - outgoingClip.startTime))
         const outgoingOpacity = crossDissolve
-          ? (1 - crossDissolveProgress) * ((crossDissolve.outgoing.opacity ?? 100) / 100)
+          ? (crossDissolve.outgoing.opacity ?? 100) / 100
           : baseStyle.opacity
         applyEffectStyle(poolContainer, baseStyle, typeof outgoingOpacity === 'number' ? outgoingOpacity : undefined)
       } else {
@@ -842,7 +848,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
     if (activeImageRef.current && activeClip?.asset?.type === 'image') {
       const baseStyle = getClipEffectStyles(activeClip, Math.max(0, atTime - activeClip.startTime))
       const opacity = crossDissolve
-        ? (1 - crossDissolveProgress) * ((crossDissolve.outgoing.opacity ?? 100) / 100)
+        ? (crossDissolve.outgoing.opacity ?? 100) / 100
         : baseStyle.opacity
       applyEffectStyle(activeImageRef.current, baseStyle, typeof opacity === 'number' ? opacity : undefined)
     } else if (activeImageRef.current) {
@@ -851,8 +857,8 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
 
     if (transitionBgRef.current) {
       if (activeClip) {
-        const tInBg = activeClip.transitionIn?.type !== 'none' ? getTransitionBgColor(activeClip.transitionIn.type) : null
-        const tOutBg = activeClip.transitionOut?.type !== 'none' ? getTransitionBgColor(activeClip.transitionOut.type) : null
+        const tInBg = activeClip.transitionIn?.type === 'fade-to-white' ? getTransitionBgColor(activeClip.transitionIn.type) : null
+        const tOutBg = activeClip.transitionOut?.type === 'fade-to-white' ? getTransitionBgColor(activeClip.transitionOut.type) : null
         const bg = tInBg || tOutBg
         if (bg) {
           const effectStyles = getClipEffectStyles(activeClip, Math.max(0, atTime - activeClip.startTime))
@@ -1243,13 +1249,13 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
 
                   {/* Transition background overlay */}
                   {activeClip && (() => {
-                    const tInBg = activeClip.transitionIn?.type !== 'none' ? getTransitionBgColor(activeClip.transitionIn.type) : null
-                    const tOutBg = activeClip.transitionOut?.type !== 'none' ? getTransitionBgColor(activeClip.transitionOut.type) : null
+                    const tInBg = activeClip.transitionIn?.type === 'fade-to-white' ? getTransitionBgColor(activeClip.transitionIn.type) : null
+                    const tOutBg = activeClip.transitionOut?.type === 'fade-to-white' ? getTransitionBgColor(activeClip.transitionOut.type) : null
                     const bg = tInBg || tOutBg
                     if (!bg) return null
                     return <div ref={transitionBgRef} className="absolute inset-0 z-10 pointer-events-none hidden" />
                   })()}
-                  {/* Video pool container — during dissolve, fade out with progress */}
+                  {/* Keep the outgoing layer opaque; incoming alpha gives a linear dissolve. */}
                   <div
                     ref={videoPoolContainerRef}
                     className="absolute inset-0 w-full h-full pointer-events-none z-[2] hidden"
@@ -1275,7 +1281,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                           ref={incomingDissolveVideoRef}
                           key={`dissolve-in-${incoming.id}`}
                           src={inFileUrl}
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-[3]"
                           playsInline
                           muted
                           preload="auto"
@@ -1289,7 +1295,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                           key={`dissolve-in-${incoming.id}`}
                           src={inFileUrl}
                           alt=""
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-[3]"
                         />
                       )
                     }
@@ -1386,7 +1392,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                       top: `${ts.positionY}%`,
                       transform: 'translate(-50%, -50%)',
                       maxWidth: ts.maxWidth > 0 ? `${ts.maxWidth}%` : undefined,
-                      opacity: ts.opacity / 100,
+                      opacity: ts.opacity / 100 * tc.opacity / 100,
                       pointerEvents: 'auto',
                       cursor: 'move',
                     }}
@@ -1429,7 +1435,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                     <div
                       style={{
                         fontFamily: ts.fontFamily,
-                        fontSize: `${ts.fontSize * 0.05}vh`,
+                        fontSize: scaleSubtitles ? `${ts.fontSize * videoFrameSize.height / 1080}px` : `${ts.fontSize * 0.05}vh`,
                         fontWeight: ts.fontWeight,
                         fontStyle: ts.fontStyle,
                         color: ts.color,
@@ -1445,7 +1451,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                         WebkitTextStroke: ts.strokeWidth > 0 && ts.strokeColor !== 'transparent'
                           ? `${ts.strokeWidth}px ${ts.strokeColor}`
                           : undefined,
-                        whiteSpace: 'pre-wrap',
+                        whiteSpace: ts.maxWidth > 0 ? 'pre-wrap' : 'pre',
                         wordBreak: 'break-word',
                         userSelect: 'none',
                       }}
@@ -1462,6 +1468,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                   {activeSubtitles.map(sub => {
                     const track = tracks[sub.trackIndex]
                     const style = { ...DEFAULT_SUBTITLE_STYLE, ...(track?.subtitleStyle || {}), ...sub.style }
+                    const font = studioSubtitlePreviewFont(style, scaleSubtitles ? videoFrameSize.height / 1080 : 1, confirmedSubtitleFont)
                     return (
                       <div
                         key={sub.id}
@@ -1473,9 +1480,9 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                         <span
                           className="inline-block max-w-[90%] text-center mx-auto rounded px-3 py-1.5 leading-snug whitespace-pre-wrap"
                           style={{
-                            fontSize: `${style.fontSize * (scaleSubtitles ? videoFrameSize.height / 1080 : 1)}px`,
-                            padding: scaleSubtitles ? '0 0.3em' : undefined,
-                            fontFamily: style.fontFamily,
+                            fontSize: `${font.fontSize}px`,
+                            padding: scaleSubtitles ? font.matchedDefault ? 0 : '0 0.3em' : undefined,
+                            fontFamily: font.fontFamily,
                             fontWeight: style.fontWeight,
                             fontStyle: style.italic ? 'italic' : 'normal',
                             color: style.color,

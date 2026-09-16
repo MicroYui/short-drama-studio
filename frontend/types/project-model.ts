@@ -103,7 +103,8 @@ export const subtitleStyleSchema = z.object({
 })
 
 export const DEFAULT_SUBTITLE_STYLE = subtitleStyleSchema.parse({
-  fontSize: 32,
+  // 1080px reference height, shared with the Studio ASS export default.
+  fontSize: 56,
   fontFamily: 'sans-serif',
   fontWeight: 'normal',
   color: '#FFFFFF',
@@ -309,6 +310,10 @@ export const timelineClipSchema = z.object({
   reversed: z.boolean().default(false),
   muted: z.boolean().default(false),
   volume: z.number().default(1),
+  audioFadeInSeconds: z.number().nonnegative().optional(),
+  audioFadeOutSeconds: z.number().nonnegative().optional(),
+  audioEnvelopeOffsetSeconds: z.number().nonnegative().nullable().optional(),
+  audioEnvelopeDurationSeconds: z.number().positive().nullable().optional(),
   trackIndex: z.number(),
   asset: assetSchema.nullable(),
   importedName: z.string().optional(),

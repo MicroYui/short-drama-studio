@@ -168,13 +168,16 @@ class StudioAgentRunner:
     def _review_scope(self, job: StudioJob) -> ReviewScope:
         if job.run_id is None:
             return ReviewScope()
-        document = self.service.repository.get_project(job.project_id)
-        if document is None or not document.studio_changes:
+        changes = self.service.repository.list_studio_changes(job.project_id, statuses=["pending"], run_id=job.run_id)
+        if not changes:
+            return ReviewScope()
+        document = self.service.repository.get_project(job.project_id, include_studio_records=False)
+        if document is None:
             return ReviewScope()
         snapshot = self.service.agent_runtime.snapshot(job.run_id)
         return pending_review_scope(document, job.run_id,
             self.service.agent_runtime.store.list_work_orders(job.run_id),
-            snapshot.current_plan.steps if snapshot.current_plan else [], snapshot.actions)
+            snapshot.current_plan.steps if snapshot.current_plan else [], snapshot.actions, changes=changes)
 
     def _wait_for_retry(self, job_id: str) -> None:
         while True:

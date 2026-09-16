@@ -1,4 +1,10 @@
-export interface ExportClip {
+import type { AudioFadeSettings } from '../../frontend/lib/audio-envelope'
+import type { ClipTransition, ColorCorrection, TextOverlayStyle } from '../../frontend/types/project-model'
+
+export interface ExportClip extends AudioFadeSettings {
+  sourceType?: string; audioDelegated?: boolean;
+  id?: string; transitionIn?: ClipTransition; transitionOut?: ClipTransition; textStyle?: TextOverlayStyle;
+  colorCorrection?: ColorCorrection;
   path: string; type: string; startTime: number; duration: number; trimStart: number;
   speed: number; reversed: boolean; flipH: boolean; flipV: boolean; opacity: number; trackIndex: number;
   muted: boolean; volume: number;

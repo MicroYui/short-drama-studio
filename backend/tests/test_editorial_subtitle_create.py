@@ -149,9 +149,12 @@ def test_post_actual_prompt_and_tool_expose_transcript_creation_and_export_limit
     service, _pid, _shots = episode
     prompt = compile_production_prompt(ProductionProfile.AI_SHORT_DRAMA, roles=(ProductionSkillRole.DIRECTOR,),
         stage=ProductionPromptStage.POST, method_skill_ids=("method.drama_series",))
-    for phrase in ("audio.transcribe_native", "add_subtitles", "audio.align_subtitles", "不补成", "text/adjustment", "transitionIn/transitionOut"):
+    for phrase in ("audio.transcribe_native", "add_subtitles", "audio.align_subtitles", "不补成", "add_titles", "title_style", "transition_in/transition_out", "EDITORIAL"):
         assert phrase in prompt.text
     create = service.tool_registry.describe("timeline.edit_clips")
-    assert create.version == 4 and "add_subtitles" in create.description
+    assert create.version == 5 and "add_subtitles" in create.description and "add_titles" in create.description
     export = service.tool_registry.describe("timeline.export_editorial")
-    assert "PNG" in export.description and "尚未接通导出" in export.description
+    assert "PNG" in export.description and "标题" in export.description and "溶解" in export.description
+    for text in (prompt.text, export.description):
+        assert "text/adjustment" not in text
+        assert "非 none 的 transitionIn/transitionOut 尚未接通" not in text

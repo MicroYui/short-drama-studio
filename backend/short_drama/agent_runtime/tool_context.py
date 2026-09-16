@@ -39,19 +39,21 @@ _ROLE_TOOLS: dict[str, tuple[str, ...]] = {
 
 
 def leader_artifact_tool_schema_ids(refs: list[ArtifactRef], project_id: str) -> list[str]:
-    """Starting contracts for saved domains already visible in this planning call.
+    """Starting read contracts for saved domains visible in this planning call.
 
-    This only discovers schemas: no goal-word matching, execution, or assertion
-    that a referenced historical result is currently usable. Drafts are distinct.
+    A saved artifact does not imply this task needs to rewrite or generate it.
+    Write contracts remain discoverable through the complete tool catalog and
+    are retained when requested or used by the current plan. This does not infer
+    intent from goal words or assert a historical result is usable.
     """
     kinds = {ref.artifact_type for ref in refs if ref.project_id == project_id}
     ids: list[str] = []
     if kinds & {"storyboard", "shot", "clip_group"}:
-        ids.extend(("shot.get_storyboard", "shot.patch_storyboard", "change.apply"))
+        ids.append("shot.get_storyboard")
     if kinds & {"generation_plan", "generation_unit"}:
-        ids.extend(("route.get_generation_unit_context", "route.compile_generation_plan"))
+        ids.append("route.get_generation_unit_context")
     if kinds & {"h3_route_plan", "h3_group_operation"}:
-        ids.extend(("route.list_h3_plans", "route.get_h3_plan", "route.prepare_h3_group", "route.plan_h3"))
+        ids.extend(("route.list_h3_plans", "route.get_h3_plan"))
     return ids
 
 

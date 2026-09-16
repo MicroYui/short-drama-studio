@@ -1,0 +1,4 @@
+.sd-media-relink { margin-top: 18px; font-size: 11px; color: var(--sd-secondary); }
+.sd-media-relink > summary { cursor: pointer; }
+.sd-media-recovery { margin-top: 10px; }
+.sd-media-recovery .sd-hint { margin-top: 8px; }

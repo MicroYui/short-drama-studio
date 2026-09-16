@@ -112,6 +112,14 @@ def verify_completion_claims(
                     media.append(_file_receipt(value, field=f"{field}/{key}"))
         else:
             if resolved.get(ref.identity()) is None:
+                if ref.artifact_type == "editorial_timeline":
+                    current_revision = (document.editorial_timeline or {}).get("revision")
+                    current_ref = ref.model_copy(update={"version": None})
+                    if resolver.summarize_artifacts([current_ref])[0] is not None:
+                        raise AgentResultContractError(
+                            f"{field}: claimed revision {ref.version}, current revision {current_revision}; "
+                            "read timeline.read_editorial with this project_id and timeline_id before declaring a current output. "
+                            "Use saved_tool_result_sequences for the exact historical write receipt; do not relabel it as the current revision")
                 raise AgentResultContractError(f"{field}: claimed artifact/version was not found in saved state; return the ArtifactRef from the successful write or report PARTIAL")
             if ref.artifact_type == "take":
                 take = projects.get_take(ref.artifact_id)
@@ -141,6 +149,15 @@ def verify_completion_claims(
                 task = projects.get_task(ref.artifact_id) if ref.artifact_type == "generation_task" else projects.get_image_task(ref.artifact_id)
                 assert task is not None
                 state["status"] = task.status.value
+            elif ref.artifact_type in {"h3_route_plan", "h3_group_operation"}:
+                summary = resolved[ref.identity()]
+                assert summary is not None
+                current = cast(dict[str, JsonValue], json.loads(summary.summary))
+                # The receipt verifies the named saved artifact, while exposing
+                # live input status separately. A historical READY record is
+                # not evidence that the current group remains ready to submit.
+                state = {key: current[key] for key in ("saved_status", "state_revision", "phase",
+                    "route_plan_id", "task_statuses", "source_status", "source_checks", "source_reason") if key in current}
             elif ref.artifact_type == "editorial_timeline":
                 state["editorial_revision"] = (document.editorial_timeline or {}).get("revision")
         receipts.append({"artifact_ref": cast(JsonValue, ref.model_dump(mode="json")), "record_verified": True,

@@ -24,12 +24,13 @@ def current_activity(service: ShortDramaService, project_id: str, after: int = 0
         if run is not None:
             jobs[0] = jobs[0].model_copy(update={"current_goal": run.goal_summary})
         work_orders = store.list_work_orders(run_id)
-        document = service.repository.get_project(project_id)
         review = ReviewScope()
-        if document is not None and document.studio_changes:
+        changes = service.repository.list_studio_changes(project_id, statuses=["pending"], run_id=run_id)
+        document = service.repository.get_project(project_id, include_studio_records=False) if changes else None
+        if document is not None:
             snapshot = service.agent_runtime.snapshot(run_id)
             review = pending_review_scope(document, run_id, work_orders,
-                snapshot.current_plan.steps if snapshot.current_plan else [], snapshot.actions)
+                snapshot.current_plan.steps if snapshot.current_plan else [], snapshot.actions, changes=changes)
         for work in work_orders:
             result = store.get_agent_result(work.id)
             latest = work.specialist_turns[-1] if work.specialist_turns else None

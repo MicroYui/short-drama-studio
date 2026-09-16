@@ -4039,18 +4039,18 @@ def test_language_planner_preloads_small_hot_set_and_discovers_long_tail(
     assert run.snapshot.current_plan.steps[0].tool_name == "project.get"
     assert len(client.inputs) == 2
     first_payload, second_payload = [json.loads(value) for value in client.inputs]
-    # This fixture already contains saved shots. Their current contracts are
-    # available on the first request; the unrelated project read is discovered.
+    # Saved shots expose their read contract without implying a rewrite. The
+    # unrelated project read is discovered through the complete catalog.
     assert any(
         ref["artifact_type"] == "shot" and ref["project_id"] == project_id
         for ref in first_payload["context"]["artifact_index"].values()
     )
     assert set(first_payload["tool_schemas"]) == {
         "artifact.read_current", "agent.read_context", "artifact.get_production_document",
-        "shot.get_storyboard", "shot.patch_storyboard", "change.apply",
+        "shot.get_storyboard",
     }
     catalog = {tool.id: tool for tool in service.tool_registry.list()}
-    for tool_id in ("shot.get_storyboard", "shot.patch_storyboard", "change.apply"):
+    for tool_id in ("shot.get_storyboard",):
         assert first_payload["tool_schemas"][tool_id] == {
             "description": catalog[tool_id].description,
             "input_schema": catalog[tool_id].input_schema,
@@ -4144,6 +4144,7 @@ def test_agent_plan_rejects_an_unregistered_method_skill(tmp_path: Path) -> None
                 "route.list_h3_reconciliation",
                 "route.resolve_h3_submission",
                 "route.resolve_h3_not_submitted",
+                "video.lip_sync",
             },
         ),
         (
@@ -4154,6 +4155,7 @@ def test_agent_plan_rejects_an_unregistered_method_skill(tmp_path: Path) -> None
                 "route.list_h3_reconciliation",
             },
             {
+                "video.lip_sync",
                 "video.enqueue",
                 "video.retake",
                 "video.extend",
@@ -4177,6 +4179,7 @@ def test_agent_plan_rejects_an_unregistered_method_skill(tmp_path: Path) -> None
                 "route.list_h3_reconciliation",
                 "route.resolve_h3_submission",
                 "route.resolve_h3_not_submitted",
+                "video.lip_sync",
             },
         ),
     ],
@@ -4230,7 +4233,14 @@ def test_language_planner_catalog_filters_incompatible_generation_tools(
     }
     assert present <= tool_ids
     assert tool_ids.isdisjoint(absent)
-    assert {"project.get", "video.inspect_take", "route.plan_h3", "task.advance"} <= (
+    assert tool_ids.isdisjoint({
+        "video.lip_sync", "video.retry_lip_sync_preparation",
+        "video.reconcile_lip_sync", "video.adopt_lip_sync",
+    })
+    assert {
+        "project.get", "video.inspect_take", "route.plan_h3", "task.advance",
+        "video.get_lip_sync",
+    } <= (
         tool_ids
     )
 
@@ -7268,6 +7278,40 @@ def test_real_h3_run_cannot_advance_a_mock_task(tmp_path: Path) -> None:
     persisted = service.repository.get_task(task.id)
     assert persisted is not None
     assert persisted.status == TaskStatus.QUEUED
+
+
+@pytest.mark.parametrize("tool_name", ["task.advance", "task.retry", "task.recover_output"])
+@pytest.mark.parametrize("target", [ProductionExecutionTarget.REAL_H3, ProductionExecutionTarget.MOCK, None])
+def test_current_execution_targets_do_not_resume_historical_kling_tasks(
+    tmp_path: Path, tool_name: str, target: ProductionExecutionTarget | None,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+    task = service.enqueue(project.id, EnqueueRequest(candidate_count=1)).tasks[0]
+    task.provider = "kling"
+    service.repository.save_task(task)
+    with pytest.raises(ProductionManagerError, match="历史 Kling 任务只可读取或取消"):
+        service.create_agent_run(project.id, AgentRunCreateRequest(
+            objective="Continue the historical task.",
+            execution_target=target,
+            initial_plan=_single_tool_plan(tool_name, {"task_id": task.id}),
+        ))
+    persisted = service.repository.get_task(task.id)
+    assert persisted is not None and persisted.status == TaskStatus.QUEUED
+
+
+def test_unknown_video_provider_cannot_fall_back_to_mock_task_execution(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+    task = service.enqueue(project.id, EnqueueRequest(candidate_count=1)).tasks[0]
+    task.provider = "not-installed"
+    service.repository.save_task(task)
+    with pytest.raises(ProductionManagerError, match="unknown video provider"):
+        service.create_agent_run(project.id, AgentRunCreateRequest(
+            objective="Do not silently treat an unavailable provider as Mock.",
+            execution_target=ProductionExecutionTarget.MOCK,
+            initial_plan=_single_tool_plan("task.advance", {"task_id": task.id}),
+        ))
 
 
 def test_local_planner_requires_a_semantic_planner_or_caller_plan(

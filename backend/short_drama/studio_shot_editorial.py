@@ -153,7 +153,8 @@ def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
     # Editor markers describe local time, never the full episode's in/out points.
     if local_timeline.model_extra is not None:
         local_timeline.model_extra.pop("markers", None)
-    return StudioEditorial(revision=current.revision, project=_json(local), scope=StudioEditorialScope(
+    return StudioEditorial(revision=current.revision, project=_json(local),
+        default_subtitle_font_family=current.default_subtitle_font_family, scope=StudioEditorialScope(
         shot_id=shot_id, anchor_clip_id=None if insertion else window.clips[0].id if window else None,
         film_start_seconds=start, duration_seconds=0 if insertion else window.end - window.start if window else 0,
         occurrences=[StudioShotOccurrence(anchor_clip_id=item.clips[0].id, start_seconds=item.start, duration_seconds=item.end - item.start) for item in windows]))

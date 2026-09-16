@@ -169,5 +169,9 @@ def test_real_tool_persists_optional_processing_and_reopened_qa_observes_same_sc
     assert json.loads(payload["candidate_creation"]["generation_prompt"]) == request.model_dump(mode="json")
     schema = service.tool_registry.describe("image.composite_plane").input_schema
     for model in ("ImagePlanePaperInk", "ImagePlanePaperCleanup"):
-        assert payload["output_schema"]["$defs"][model] == schema["$defs"][model]
+        # Model input omits decorative titles; actual fields, constraints,
+        # descriptions and defaults must still match the executable Tool.
+        contract = json.loads(json.dumps(schema["$defs"][model]),
+            object_hook=lambda value: {key: child for key, child in value.items() if key != "title"})
+        assert payload["output_schema"]["$defs"][model] == contract
     assert language.calls == 1 and reopened.list_image_tasks(pid).tasks == []

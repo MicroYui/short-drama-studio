@@ -709,7 +709,7 @@ class H3QueryResponse(DomainModel):
 class H3ListResponse(DomainModel):
     model_config = ConfigDict(extra="ignore")
 
-    items: list[H3RemoteTask] = Field(default_factory=list[H3RemoteTask])
+    items: list[H3RemoteTask]
     total: int = 0
 
 
@@ -813,14 +813,42 @@ class H3NotSubmittedResolutionRequest(DomainModel):
 
 class H3TakeReviewRequest(DomainModel):
     hard_gate_passed: bool
+    review_status: QaStatus | None = Field(default=None, description=(
+        "Explicit semantic judgment: PENDING for incomplete observation or conditionally usable media; "
+        "PASSED only when the required checks passed; REJECTED for an observed failure that makes the Take unacceptable. "
+        "When omitted, true hard_gate_passed means PASSED and false means PENDING, not rejection. "
+        "PENDING preserves an existing usable selection. It keeps earlier rejection issues unless "
+        "explicitly withdrawn with retracted_issue_codes and a retraction_reason."
+    ))
     score: float = Field(ge=0.0, le=5.0)
     notes: str = Field(min_length=1)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+    retracted_issue_codes: list[str] = Field(default_factory=list[str], description=(
+        "Exact earlier rejection issue codes whose factual basis is withdrawn after reinspection or a user "
+        "clarification. Use with PENDING and retraction_reason; does not certify unfinished checks, "
+        "clear other failures, or select the Take. Technical media failures cannot be withdrawn here."
+    ))
+    retraction_reason: str | None = Field(default=None, min_length=1, description=(
+        "Explain why these specific earlier rejection findings no longer apply; cite the actual observation "
+        "or user clarification. Missing observation alone is not a reason to withdraw a known failure."
+    ))
 
     @model_validator(mode="after")
-    def require_rejection_classification(self) -> H3TakeReviewRequest:
-        if not self.hard_gate_passed and not self.issues:
+    def validate_review_status(self) -> H3TakeReviewRequest:
+        if self.review_status is not None and (self.review_status == QaStatus.PASSED) != self.hard_gate_passed:
+            raise ValueError("review_status PASSED requires hard_gate_passed=true; PENDING/REJECTED require false")
+        if self.review_status == QaStatus.REJECTED and not self.issues:
             raise ValueError("A rejected H3 Take requires at least one classified QA issue")
+        if self.retracted_issue_codes:
+            codes = self.retracted_issue_codes
+            if len(set(codes)) != len(codes) or any(not code.strip() or code != code.strip() for code in codes):
+                raise ValueError("retracted_issue_codes must be nonempty, trimmed and unique")
+            if self.review_status != QaStatus.PENDING or not (self.retraction_reason or "").strip():
+                raise ValueError("Retracting rejection issues requires PENDING and a specific retraction_reason")
+            if set(codes) & {issue.code for issue in self.issues}:
+                raise ValueError("A withdrawn issue cannot also be submitted as a current issue")
+        elif self.retraction_reason is not None:
+            raise ValueError("retraction_reason requires retracted_issue_codes")
         return self
 
 
@@ -877,8 +905,21 @@ class H3ProviderRunIndexResponse(DomainModel):
     task_state_tool: Literal["task.get"] = "task.get"
 
 
+class H3ReconciliationQuery(DomainModel):
+    start_offset: int = Field(ge=0)
+    next_offset: int | None = Field(default=None, ge=0)
+    page_size: int = Field(ge=1, le=100)
+    max_pages: int = Field(ge=1, le=10)
+    pages_scanned: int = Field(ge=0)
+    tasks_scanned: int = Field(ge=0)
+    unique_tasks_scanned: int = Field(ge=0)
+    stop_reason: Literal["empty_page", "repeated_page", "page_limit"]
+    note: str
+
+
 class H3ReconciliationCandidatesResponse(DomainModel):
     tasks: list[H3RemoteTask]
+    query: H3ReconciliationQuery | None = None
 
 
 class H3TakeReviewResponse(DomainModel):

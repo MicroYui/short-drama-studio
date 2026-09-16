@@ -10,8 +10,9 @@ from pydantic import JsonValue
 from short_drama.models import ProjectDocument, ShotPlan, StructuredScene
 from short_drama.studio_models import (
     StudioChangeRequest, StudioChangeSet, StudioTextChange, StudioTextChangeInput,
-    StudioChangeDecision, StudioChangeResult, StudioSceneSave, StudioShotSave,
+    StudioChangeDecision, StudioChangeResult, StudioChanges, StudioSceneSave, StudioShotSave,
 )
+from short_drama.studio_records import cursor_for_record
 from short_drama.studio_service import StudioContentConflict
 from short_drama.studio_trace import current_trace_context
 
@@ -21,6 +22,20 @@ if TYPE_CHECKING:
 
 def list_changes(document: ProjectDocument) -> list[StudioChangeSet]:
     return [StudioChangeSet.model_validate(value) for value in document.studio_changes]
+
+
+def read_changes(service: ShortDramaService, project_id: str) -> list[StudioChangeSet]:
+    return list(reversed(service.repository.list_studio_changes(project_id)))
+
+
+def page_changes(service: ShortDramaService, project_id: str, *, limit: int = 20,
+                 before: str | None = None, pending_only: bool = False) -> StudioChanges:
+    size = max(1, min(limit, 100))
+    records = service.repository.list_studio_changes(project_id, limit=size + 1, before=before,
+        statuses=["pending"] if pending_only else None)
+    shown = records[:size]
+    cursor = cursor_for_record(cast(dict[str, JsonValue], shown[-1].model_dump(mode="json"))) if len(records) > size else None
+    return StudioChanges(changes=shown, next_cursor=cursor)
 
 
 def _target(document: ProjectDocument, item: StudioTextChangeInput) -> StructuredScene | ShotPlan:
@@ -66,7 +81,7 @@ def _replace(value: str, item: StudioTextChangeInput) -> str:
 
 
 def propose_changes(service: ShortDramaService, project_id: str, request: StudioChangeRequest) -> StudioChangeSet:
-    with service.studio.lock:
+    with service.studio.lock, service.repository.atomic():
         document = service.get_project(project_id).document
         for item in request.items:
             if item.before == item.after:
@@ -80,7 +95,8 @@ def propose_changes(service: ShortDramaService, project_id: str, request: Studio
         run_id = context.get("run_id")
         work_order_id = context.get("work_order_id")
         # Identical retries from the same task return the same current proposal.
-        for previous in list_changes(document):
+        for previous in service.repository.list_studio_changes(project_id, statuses=["pending"],
+                run_id=run_id if isinstance(run_id, str) else None):
             if previous.run_id == run_id and previous.work_order_id == work_order_id and all(i.status == "pending" for i in previous.items) and request.title == previous.title and [
                 i.model_dump(exclude={"id", "status", "decided_at"}) for i in previous.items
             ] == [i.model_dump() for i in request.items]:
@@ -90,8 +106,7 @@ def propose_changes(service: ShortDramaService, project_id: str, request: Studio
             work_order_id=work_order_id if isinstance(work_order_id, str) else None,
             title=request.title, summary=request.summary, created_at=datetime.now(UTC).isoformat(),
             items=[StudioTextChange(**item.model_dump(), id=f"edit-{uuid4().hex[:12]}") for item in request.items])
-        document.studio_changes.append(cast(dict[str, JsonValue], change.model_dump(mode="json")))
-        service.repository.save_project(document)
+        service.repository.save_studio_change(change)
         service.repository.append_studio_event(project_id, "change.proposed", {
             "change_id": change.id, "run_id": change.run_id, "title": change.title,
             "item_count": len(change.items), "summary": change.summary})
@@ -132,9 +147,8 @@ def _remap_references(target: ShotPlan, field: str, before: str, after: str, sta
 
 def decide_change(service: ShortDramaService, project_id: str, change_id: str, item_id: str,
                   request: StudioChangeDecision) -> StudioChangeResult:
-    with service.studio.lock:
-        document = service.get_project(project_id).document
-        change = next((value for value in list_changes(document) if value.id == change_id), None)
+    with service.studio.lock, service.repository.atomic():
+        change = service.repository.get_studio_change(project_id, change_id)
         if change is None:
             raise KeyError(change_id)
         item = next((value for value in change.items if value.id == item_id), None)
@@ -146,6 +160,7 @@ def decide_change(service: ShortDramaService, project_id: str, change_id: str, i
                 raise StudioContentConflict("这项修改已处理。当前结果保留，请提出新的修改。")
             return StudioChangeResult(change=change, project=service.studio.current_project(project_id))
         if request.decision == "accept":
+            document = service.get_project(project_id).document
             target = _target(document, item).model_copy(deep=True)
             owner, field, value = _field(target, item)
             updated = _replace(value, item)
@@ -167,12 +182,9 @@ def decide_change(service: ShortDramaService, project_id: str, change_id: str, i
                 _remap_references(target, item.field, item.before, item.after, value.index(item.before))
                 setattr(owner, field, updated)
                 service.studio.save_shot(project_id, target.id, StudioShotSave(shot=target, expected_revision=target.revision))
-            document = service.get_project(project_id).document
         item.status = status
         item.decided_at = datetime.now(UTC).isoformat()
-        document.studio_changes = [cast(dict[str, JsonValue], change.model_dump(mode="json"))
-            if value.get("id") == change_id else value for value in document.studio_changes]
-        service.repository.save_project(document)
+        service.repository.save_studio_change(change)
         service.repository.append_studio_event(project_id, "change.decided", {
             "change_id": change_id, "item_id": item_id, "run_id": change.run_id,
             "decision": request.decision, "title": item.title})

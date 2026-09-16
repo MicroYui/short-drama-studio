@@ -14,6 +14,7 @@ from short_drama.agent_runtime.models import ArtifactRef, ArtifactSummary
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.h3_models import H3ProductionRoutePlan
 from short_drama.h3_group_operation import H3GroupOperation
+from short_drama.h3_source_checks import H3SourceStore, route_source_checks, source_check_summary
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
     GenerationTask,
@@ -1850,7 +1851,9 @@ class ProjectArtifactResolver:
                      "unit_ids": [item.generation_unit_id for item in plan.decisions
                                   if item.generation_unit_id is not None],
                      "shot_ids": [item.shot_id for item in plan.decisions]
-                     if all(item.generation_unit_id is None for item in plan.decisions) else []}
+                     if all(item.generation_unit_id is None for item in plan.decisions) else [],
+                     "saved_status": plan.status.value,
+                     **source_check_summary(route_source_checks(document, plan, store=cast(H3SourceStore, self._projects)))}
                     for plan in plans
                 ], "details_tool": "route.get_h3_plan"}, ensure_ascii=False, separators=(",", ":")),
             )
@@ -1863,7 +1866,15 @@ class ProjectArtifactResolver:
                 task.id: task.status.value for task_id in state.task_ids
                 if (task := self._projects.get_task(task_id)) is not None
             }
-            return ArtifactSummary(ref=ref, title="H3 current group operation", summary=state.model_dump_json())
+            plan = records.get_h3_route_plan(state.route_plan_id) if state.route_plan_id else None
+            source: dict[str, JsonValue] = {"source_status": "UNKNOWN", "source_checks": [],
+                "source_reason": "This group has no saved route to verify; inspect its current preparation state."}
+            if plan is not None and plan.project_id == ref.project_id:
+                source = source_check_summary(route_source_checks(document, plan, store=cast(H3SourceStore, self._projects)))
+                if plan.source_operation_id not in {None, operation.id}:
+                    source.update(source_status="STALE", source_reason="The group's route belongs to a different saved source operation.")
+            return ArtifactSummary(ref=ref, title="H3 current group operation",
+                summary=json.dumps({**state.model_dump(mode="json"), "saved_status": state.status, **source}, ensure_ascii=False))
         if ref.artifact_type == "h3_route_plan":
             plan = records.get_h3_route_plan(ref.artifact_id)
             if (
@@ -1878,7 +1889,8 @@ class ProjectArtifactResolver:
             return ArtifactSummary(
                 ref=ref,
                 title=f"H3 route plan v{plan.version} state {plan.state_revision}",
-                summary=plan.model_dump_json(),
+                summary=json.dumps({**plan.model_dump(mode="json"), "saved_status": plan.status.value,
+                    **source_check_summary(route_source_checks(document, plan, store=cast(H3SourceStore, self._projects)))}, ensure_ascii=False),
             )
         if ref.artifact_type == "h3_route_asset_preparation":
             matches = [

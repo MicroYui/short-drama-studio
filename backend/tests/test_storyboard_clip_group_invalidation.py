@@ -496,3 +496,82 @@ def test_source_and_scene_sync_does_not_require_rewriting_all_shots(tmp_path: Pa
         production_spec_document_id=updated_spec.document.id, production_spec_version_id=updated_spec.version.id,
         origin=ProductionDocumentOrigin.AGENT))
     assert compiled.generation_plan.script_version_id == current.project.current_script_version_id
+
+
+@pytest.mark.parametrize("change", ["delivery", "visual", "audio", "shot", "group"])
+def test_explicit_take_selection_rechecks_content_after_spec_invalidation(tmp_path: Path, change: str) -> None:
+    from tests.test_storyboard_agent_interfaces import _production_spec, _storyboard
+
+    service = _service(tmp_path)
+    document = service.initialize_fixture().document
+    pid = document.project.id
+    initial_spec = _production_spec(service, pid)
+    initial_spec.provider_preference.resolution = "2K"
+    spec = service.create_production_spec(pid, ProductionSpecCreateRequest(
+        spec=initial_spec, origin=ProductionDocumentOrigin.AGENT))
+    board = service.create_storyboard(pid, StoryboardCreateRequest(
+        storyboard=_storyboard(service, pid, production_spec_document_id=spec.document.id,
+            production_spec_version_id=spec.version.id), origin=ProductionDocumentOrigin.AGENT))
+    plan = service.compile_generation_plan(pid, GenerationPlanCompileRequest(
+        storyboard_document_id=board.document.id, storyboard_version_id=board.version.id,
+        production_spec_document_id=spec.document.id, production_spec_version_id=spec.version.id,
+        origin=ProductionDocumentOrigin.AGENT))
+    shot = service.get_project(pid).document.shots[0]
+    unit = plan.generation_plan.units[0]
+    task = GenerationTask(id="task-before-delivery-change", project_id=pid, shot_id=shot.id,
+        operation=OperationKind.GENERATE, candidate_index=1, status=TaskStatus.SUCCEEDED,
+        provider="minimax", model="MiniMax-H3", resolution="768P", request_fingerprint="existing-result",
+        input_script_version_id=document.project.current_script_version_id,
+        input_bible_version_id=document.project.current_bible_version_id,
+        input_shot_revision=shot.revision, input_shot_revisions={shot.id: shot.revision},
+        storyboard_document_id=board.document.id, storyboard_version_id=board.version.id,
+        generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id,
+        generation_unit_id=unit.id, clip_group_id=unit.clip_group_id, shot_windows=unit.shot_windows,
+        requested_duration_seconds=shot.duration_seconds, attempt=1,
+        created_at="2026-09-13T01:00:00Z", updated_at="2026-09-13T01:00:00Z")
+    service.repository.save_task(task)
+    path = tmp_path / "existing-source.mp4"
+    path.write_bytes(b"existing source bytes; selection does not decode media")
+    original_bytes = path.read_bytes()
+    take = _selected_take(pid, shot.id, task.id, shot.duration_seconds,
+        storyboard_document_id=board.document.id, storyboard_version_id=board.version.id,
+        generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id)
+    take.media_path = str(path)
+    take.clip_group_id, take.generation_unit_id = unit.clip_group_id, unit.id
+    take.shot_windows = unit.shot_windows
+    service.repository.save_take(take)
+
+    revised_spec = spec.spec.model_copy(deep=True)
+    revised_spec.provider_preference.resolution = "768P"
+    revised_spec.notes = ["Use the generated result directly in the presentation."]
+    if change == "visual":
+        revised_spec.visual.medium_lock = "Hand-drawn animation"
+    if change == "audio":
+        revised_spec.audio.dialogue_intent = "Replace spoken dialogue with singing."
+    updated_spec = service.replace_production_spec(pid, ProductionSpecReplaceRequest(
+        base_version_id=spec.version.id, spec=revised_spec, origin=ProductionDocumentOrigin.AGENT))
+    revised_board = board.storyboard.model_copy(deep=True)
+    revised_board.production_spec_version_id = updated_spec.version.id
+    if change == "shot":
+        revised_board.shots[0].visual += " 人物转身离开。"
+    if change == "group":
+        revised_board.clip_groups[0].generation_intent = "Show a different ending to the action."
+    service.replace_storyboard(pid, StoryboardReplaceRequest(
+        base_version_id=board.version.id, storyboard=revised_board, origin=ProductionDocumentOrigin.AGENT))
+    before_selection = service.repository.get_take(take.id)
+    assert before_selection is not None and before_selection.freshness == Freshness.STALE
+    if change != "delivery":
+        with pytest.raises(WorkflowConflictError):
+            service.select_take(take.id)
+        retained = service.repository.get_take(take.id)
+        assert retained is not None and retained.freshness == Freshness.STALE and not retained.is_selected
+        return
+
+    selected = service.select_take(take.id)
+    reused = next(item for item in selected.takes if item.id == take.id)
+    assert reused.freshness == Freshness.CURRENT and reused.is_selected
+    assert reused.storyboard_version_id == board.version.id
+    assert reused.generation_plan_version_id == plan.version.id
+    assert reused.task_id == task.id
+    assert reused.qa_report == take.qa_report
+    assert Path(reused.media_path).read_bytes() == original_bytes

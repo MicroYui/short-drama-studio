@@ -1,0 +1,14 @@
+.sd-editor-draft-status { flex: 0 0 auto; padding: 4px 20px; color: var(--sd-muted); font-size: 12px; }
+.sd-editor-library-toggle, .sd-editor-library-close, .sd-editor-library-backdrop { display: none; }
+@media (max-width: 1250px) {
+  .sd-editor-library-toggle, .sd-editor-library-close { display: inline-flex; }
+  .sd-editor-library-close { float: right; }
+  .sd-editor-library .sd-editor-library-close { width: auto; display: inline-flex; padding: 6px; margin: 0; }
+  .sd-editor-toolbar { flex-wrap: wrap; }
+  .sd-editing .sd-editor-modal.sd-editor-library-open .sd-editor-library {
+    display: block; visibility: visible; position: absolute; z-index: 5; left: 0; top: 62px; bottom: 0;
+    width: min(320px, 85vw); padding: 16px; overflow-y: auto; background: var(--sd-media-raised, #242428);
+    border-right: 1px solid var(--sd-media-border, #555); box-shadow: 8px 0 24px #0002;
+  }
+  .sd-editor-library-backdrop { display: block; position: absolute; inset: 62px 0 0; border: 0; z-index: 4; background: #0003; }
+}

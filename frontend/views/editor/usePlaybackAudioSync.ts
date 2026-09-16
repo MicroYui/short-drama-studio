@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { TimelineClip } from '../../types/project-model'
 import { pathToFileUrl } from '../../lib/file-url'
+import { clipAudioGain } from '../../lib/audio-envelope'
+import { clipAudioDelegated } from '../../lib/clip-audio-source'
 import {
   selectAssets,
   selectClipPathFromAssets,
@@ -32,7 +34,7 @@ const PAUSED_PRELOAD_LOOKAHEAD_SECONDS = 0.5
 const ACTIVATION_SEEK_TOLERANCE_SECONDS = 0.12
 
 function isAudioSourceClip(clip: TimelineClip): boolean {
-  return clip.type === 'audio'
+  return clip.type === 'audio' || clip.type === 'video'
 }
 
 function clipOverlapsWindow(
@@ -89,6 +91,7 @@ export function usePlaybackAudioSync(params: UsePlaybackAudioSyncParams) {
 
       for (const clip of allClips) {
         if (!isAudioSourceClip(clip)) continue
+        if (clipAudioDelegated(clip, allClips, item => selectClipPathFromAssets(currentAssets, item))) continue
         if (currentTracks[clip.trackIndex]?.enabled === false) continue
         const audioPath = selectClipPathFromAssets(currentAssets, clip)
         if (!audioPath) continue
@@ -166,7 +169,7 @@ export function usePlaybackAudioSync(params: UsePlaybackAudioSyncParams) {
           const track = currentTracks[clip.trackIndex]
           const isSoloMuted = anySoloed && !track?.solo
           el.muted = clip.muted || track?.muted || isSoloMuted || false
-          el.volume = clip.volume
+          el.volume = clipAudioGain(clip, atTime - clip.startTime)
 
           if (!el.__audioPlaying || isNewElement) {
             const target = computeTarget(el, atTime)
@@ -225,6 +228,11 @@ export function usePlaybackAudioSync(params: UsePlaybackAudioSyncParams) {
               el!.currentTime = target
             }
             el!.playbackRate = desiredRate
+            const freshTracks = selectTracks(getEditorState())
+            const track = freshTracks[clip.trackIndex]
+            el!.muted = clip.muted || track?.muted || track?.enabled === false
+              || (freshTracks.some(item => item.solo) && !track?.solo) || false
+            el!.volume = clipAudioGain(clip, freshTime - clip.startTime)
             if (clip.reversed) {
               el!.pause()
               el!.__audioPlaying = false
@@ -261,6 +269,7 @@ export function usePlaybackAudioSync(params: UsePlaybackAudioSyncParams) {
 
     const retainedAudioClips = clips.filter(clip => {
       if (!isAudioSourceClip(clip)) return false
+      if (clipAudioDelegated(clip, clips, item => selectClipPathFromAssets(assets, item))) return false
       if (tracks[clip.trackIndex]?.enabled === false) return false
       if (!selectClipPathFromAssets(assets, clip)) return false
       return clipOverlapsWindow(clip, currentTime, PAUSED_LOOKBEHIND_SECONDS, PAUSED_LOOKAHEAD_SECONDS)
@@ -307,7 +316,7 @@ export function usePlaybackAudioSync(params: UsePlaybackAudioSyncParams) {
       const track = tracks[clip.trackIndex]
       const isSoloMuted = anySoloed && !track?.solo
       el.muted = clip.muted || track?.muted || isSoloMuted || false
-      el.volume = clip.volume
+      el.volume = clipAudioGain(clip, currentTime - clip.startTime)
 
       if (el.readyState < 2) continue
 

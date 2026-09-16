@@ -499,6 +499,7 @@
             "type": "array"
           },
           "summary": {
+            "description": "计划摘要。当本计划完成且 goal_complete=true 时，此字段会原样作为最终聊天答复展示给用户：直接说明实际交付、需要用户查看的真实文件路径和未解决事项，不写给 Agent 的汇报指令。目标未完成时仍写当前计划摘要。",
             "maxLength": 4000,
             "minLength": 1,
             "title": "Summary",
@@ -1368,7 +1369,7 @@
             "type": "array"
           },
           "saved_tool_result_sequences": {
-            "description": "可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
+            "description": "可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。历史剪辑 revision 保留为保存时来源并标明当前性，不自动声明当前整条时间线未变；明确当前输出用 updated_artifacts。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
             "items": {
               "minimum": 1.0,
               "type": "integer"
@@ -3515,6 +3516,37 @@
             "title": "Manifest Id",
             "type": "string"
           },
+          "observation_scope": {
+            "default": "EDITORIAL",
+            "enum": [
+              "EDITORIAL",
+              "TAKE"
+            ],
+            "title": "Observation Scope",
+            "type": "string"
+          },
+          "observed_source_end_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Source End Seconds"
+          },
+          "observed_source_start_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Source Start Seconds"
+          },
           "project_id": {
             "title": "Project Id",
             "type": "string"
@@ -3532,6 +3564,13 @@
           },
           "semantic_status": {
             "$ref": "#/components/schemas/SemanticReviewStatus"
+          },
+          "source_context": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Source Context",
+            "type": "object"
           },
           "source_editorial_revision": {
             "anyOf": [
@@ -3558,6 +3597,17 @@
           "source_script_version_id": {
             "title": "Source Script Version Id",
             "type": "string"
+          },
+          "source_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Take Id"
           },
           "speaker_checks": {
             "items": {
@@ -3589,6 +3639,15 @@
             },
             "title": "Technical Checks",
             "type": "array"
+          },
+          "time_space": {
+            "default": "FILM",
+            "enum": [
+              "FILM",
+              "TAKE_SOURCE"
+            ],
+            "title": "Time Space",
+            "type": "string"
           },
           "transcription_model": {
             "anyOf": [
@@ -3631,15 +3690,57 @@
             "title": "Dialogue Padding Seconds",
             "type": "number"
           },
+          "scope": {
+            "default": "EDITORIAL",
+            "description": "EDITORIAL observes current adopted sound. TAKE observes an original candidate without saving or adopting it.",
+            "enum": [
+              "EDITORIAL",
+              "TAKE"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "semantic_review": {
             "default": true,
             "title": "Semantic Review",
             "type": "boolean"
           },
+          "source_end_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "TAKE only: exclusive source end; omitted means the actual media end.",
+            "title": "Source End Seconds"
+          },
+          "source_start_seconds": {
+            "default": 0,
+            "description": "TAKE only: start in the original Take file, not FILM time.",
+            "minimum": 0.0,
+            "title": "Source Start Seconds",
+            "type": "number"
+          },
           "speaker_continuity": {
             "default": true,
             "title": "Speaker Continuity",
             "type": "boolean"
+          },
+          "take_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Id"
           }
         },
         "title": "AudioInspectionRequest",
@@ -3713,6 +3814,128 @@
         ],
         "title": "AudioKind",
         "type": "string"
+      },
+      "AudioResource": {
+        "properties": {
+          "cache_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Path"
+          },
+          "can_prepare": {
+            "default": true,
+            "title": "Can Prepare",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "enum": [
+              "transcription",
+              "speaker"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing_files": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Files",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_prepared",
+              "preparing",
+              "failed",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "model",
+          "status"
+        ],
+        "title": "AudioResource",
+        "type": "object"
+      },
+      "AudioResourcePrepare": {
+        "properties": {
+          "resource": {
+            "enum": [
+              "transcription",
+              "speaker"
+            ],
+            "title": "Resource",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource"
+        ],
+        "title": "AudioResourcePrepare",
+        "type": "object"
+      },
+      "AudioResources": {
+        "properties": {
+          "message": {
+            "default": "声音资源用于对白听审、字幕对齐和音色比较。播放、剪辑、导出无需准备。缓存可用只表示所需文件已齐备，识别效果在实际使用时验证。",
+            "title": "Message",
+            "type": "string"
+          },
+          "resources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AudioResource"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "supported": {
+            "default": true,
+            "title": "Supported",
+            "type": "boolean"
+          }
+        },
+        "title": "AudioResources",
+        "type": "object"
       },
       "AudioSignalMetrics": {
         "additionalProperties": false,
@@ -4034,6 +4257,53 @@
           "name"
         ],
         "title": "AuthorSpec",
+        "type": "object"
+      },
+      "Body_import_portable_project_api_short_drama_studio_projects_import_package_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_portable_project_api_short_drama_studio_projects_import_package_post",
+        "type": "object"
+      },
+      "Body_restore_media_api_short_drama_studio_projects__project_id__media_relink_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "old_path": {
+            "title": "Old Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "old_path"
+        ],
+        "title": "Body_restore_media_api_short_drama_studio_projects__project_id__media_relink_post",
+        "type": "object"
+      },
+      "Body_start_portable_project_import_api_short_drama_studio_projects_import_package_jobs_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_start_portable_project_import_api_short_drama_studio_projects_import_package_jobs_post",
         "type": "object"
       },
       "Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post": {
@@ -7346,6 +7616,13 @@
             ],
             "title": "Semantic Model"
           },
+          "source_context": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Source Context",
+            "type": "object"
+          },
           "source_editorial_project": {
             "anyOf": [
               {
@@ -10300,6 +10577,16 @@
       "H3ReconciliationCandidatesResponse": {
         "additionalProperties": false,
         "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3ReconciliationQuery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tasks": {
             "items": {
               "$ref": "#/components/schemas/H3RemoteTask"
@@ -10312,6 +10599,80 @@
           "tasks"
         ],
         "title": "H3ReconciliationCandidatesResponse",
+        "type": "object"
+      },
+      "H3ReconciliationQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "max_pages": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Pages",
+            "type": "integer"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "page_size": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages_scanned": {
+            "minimum": 0.0,
+            "title": "Pages Scanned",
+            "type": "integer"
+          },
+          "start_offset": {
+            "minimum": 0.0,
+            "title": "Start Offset",
+            "type": "integer"
+          },
+          "stop_reason": {
+            "enum": [
+              "empty_page",
+              "repeated_page",
+              "page_limit"
+            ],
+            "title": "Stop Reason",
+            "type": "string"
+          },
+          "tasks_scanned": {
+            "minimum": 0.0,
+            "title": "Tasks Scanned",
+            "type": "integer"
+          },
+          "unique_tasks_scanned": {
+            "minimum": 0.0,
+            "title": "Unique Tasks Scanned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_offset",
+          "page_size",
+          "max_pages",
+          "pages_scanned",
+          "tasks_scanned",
+          "unique_tasks_scanned",
+          "stop_reason",
+          "note"
+        ],
+        "title": "H3ReconciliationQuery",
         "type": "object"
       },
       "H3RemoteStatus": {
@@ -11256,6 +11617,38 @@
             "minLength": 1,
             "title": "Notes",
             "type": "string"
+          },
+          "retracted_issue_codes": {
+            "description": "Exact earlier rejection issue codes whose factual basis is withdrawn after reinspection or a user clarification. Use with PENDING and retraction_reason; does not certify unfinished checks, clear other failures, or select the Take. Technical media failures cannot be withdrawn here.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Retracted Issue Codes",
+            "type": "array"
+          },
+          "retraction_reason": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explain why these specific earlier rejection findings no longer apply; cite the actual observation or user clarification. Missing observation alone is not a reason to withdraw a known failure.",
+            "title": "Retraction Reason"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit semantic judgment: PENDING for incomplete observation or conditionally usable media; PASSED only when the required checks passed; REJECTED for an observed failure that makes the Take unacceptable. When omitted, true hard_gate_passed means PASSED and false means PENDING, not rejection. PENDING preserves an existing usable selection. It keeps earlier rejection issues unless explicitly withdrawn with retracted_issue_codes and a retraction_reason."
           },
           "score": {
             "maximum": 5.0,
@@ -14855,6 +15248,114 @@
         "title": "LicenseSpec",
         "type": "object"
       },
+      "LipSyncAudioSource": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_id": {
+            "description": "One existing audible audio/video clip in the same timeline, covering the full FILM selection. Omit audio_source to use the target's current original sound.",
+            "minLength": 1,
+            "title": "Clip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clip_id"
+        ],
+        "title": "LipSyncAudioSource",
+        "type": "object"
+      },
+      "LipSyncRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LipSyncAudioSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "expected_editorial_revision": {
+            "minimum": 1.0,
+            "title": "Expected Editorial Revision",
+            "type": "integer"
+          },
+          "intent": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Intent",
+            "type": "string"
+          },
+          "preserve": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Preserve",
+            "type": "array"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "start_seconds": {
+            "description": "Selection start in saved FILM coordinates, inside this exact video clip.",
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "timeline_id": {
+            "title": "Timeline Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "timeline_id",
+          "clip_id",
+          "start_seconds",
+          "end_seconds",
+          "expected_editorial_revision",
+          "intent"
+        ],
+        "title": "LipSyncRequest",
+        "type": "object"
+      },
+      "LipSyncResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/VideoEditRun"
+          },
+          "task": {
+            "$ref": "#/components/schemas/GenerationTask"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "task",
+          "run"
+        ],
+        "title": "LipSyncResponse",
+        "type": "object"
+      },
       "LocalReworkRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16093,6 +16594,50 @@
         "title": "OutputSpec",
         "type": "object"
       },
+      "PackageMedia": {
+        "additionalProperties": false,
+        "properties": {
+          "archive_path": {
+            "title": "Archive Path",
+            "type": "string"
+          },
+          "bytes": {
+            "default": 0,
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_path": {
+            "title": "Source Path",
+            "type": "string"
+          },
+          "status": {
+            "default": "included",
+            "enum": [
+              "included",
+              "missing"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_path",
+          "archive_path"
+        ],
+        "title": "PackageMedia",
+        "type": "object"
+      },
       "PlanRevision": {
         "additionalProperties": false,
         "description": "A replaceable plan graph proposed by the agent for one run.",
@@ -16186,6 +16731,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/JsonValue"
             },
+            "description": "步骤的结构化参数；USER_INPUT 的 arguments 不会作为聊天正文展开，需要告知用户的内容须完整写入 instructions。",
             "title": "Arguments",
             "type": "object"
           },
@@ -16214,6 +16760,7 @@
             "type": "string"
           },
           "instructions": {
+            "description": "本步骤的执行说明。仅 kind=USER_INPUT 时，此字段会原样作为聊天正文展示给用户：写完整的自然答复或问题，直接称呼用户，包含需要用户查看的实际路径、事实及待回复事项；不要写‘向用户说明’‘提供下列’等给 Agent 的执行指令。arguments 不会作为正文展开。其他 kind 仍写工具执行或 Worker 交接说明。",
             "minLength": 1,
             "title": "Instructions",
             "type": "string"
@@ -26950,6 +27497,34 @@
         "title": "StudioChangeSet",
         "type": "object"
       },
+      "StudioChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/StudioChangeSet"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "title": "StudioChanges",
+        "type": "object"
+      },
       "StudioEditorSelectedClip": {
         "additionalProperties": false,
         "properties": {
@@ -27214,6 +27789,18 @@
       "StudioEditorial": {
         "additionalProperties": false,
         "properties": {
+          "default_subtitle_font_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Confirmed readable local default CJK subtitle family for preview/export. Null when unavailable. Response metadata only; explicit saved font families remain unchanged.",
+            "title": "Default Subtitle Font Family"
+          },
           "project": {
             "additionalProperties": {
               "$ref": "#/components/schemas/JsonValue"
@@ -27398,6 +27985,17 @@
             ],
             "title": "Error"
           },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
           "fps": {
             "title": "Fps",
             "type": "integer"
@@ -27445,11 +28043,29 @@
             "default": "running",
             "enum": [
               "running",
+              "cancelling",
+              "cancelled",
               "completed",
               "failed"
             ],
             "title": "Status",
             "type": "string"
+          },
+          "subtitles": {
+            "default": true,
+            "title": "Subtitles",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "video_path": {
             "anyOf": [
@@ -27530,6 +28146,34 @@
           "expected_revision"
         ],
         "title": "StudioExportRequest",
+        "type": "object"
+      },
+      "StudioExports": {
+        "additionalProperties": false,
+        "properties": {
+          "exports": {
+            "items": {
+              "$ref": "#/components/schemas/StudioExport"
+            },
+            "title": "Exports",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "exports"
+        ],
+        "title": "StudioExports",
         "type": "object"
       },
       "StudioJob": {
@@ -27659,6 +28303,142 @@
           "action"
         ],
         "title": "StudioJobControl",
+        "type": "object"
+      },
+      "StudioMediaRelinkResult": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_episode_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Episode Ids",
+            "type": "array"
+          },
+          "notice": {
+            "title": "Notice",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          }
+        },
+        "required": [
+          "project",
+          "affected_episode_ids",
+          "path",
+          "notice"
+        ],
+        "title": "StudioMediaRelinkResult",
+        "type": "object"
+      },
+      "StudioMediaUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/StudioMediaUse"
+            },
+            "title": "Uses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "uses"
+        ],
+        "title": "StudioMediaUsage",
+        "type": "object"
+      },
+      "StudioMediaUse": {
+        "additionalProperties": false,
+        "properties": {
+          "end_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
+          "episode_id": {
+            "title": "Episode Id",
+            "type": "string"
+          },
+          "episode_number": {
+            "title": "Episode Number",
+            "type": "integer"
+          },
+          "episode_title": {
+            "title": "Episode Title",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "shot",
+              "editorial",
+              "voice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "timeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Id"
+          }
+        },
+        "required": [
+          "episode_id",
+          "episode_title",
+          "episode_number",
+          "kind",
+          "target_id",
+          "label"
+        ],
+        "title": "StudioMediaUse",
         "type": "object"
       },
       "StudioMessage-Input": {
@@ -27880,6 +28660,321 @@
           }
         },
         "title": "StudioProjectCreate",
+        "type": "object"
+      },
+      "StudioProjectImportSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Episode Ids",
+            "type": "array"
+          },
+          "media_count": {
+            "title": "Media Count",
+            "type": "integer"
+          },
+          "missing_media": {
+            "items": {
+              "$ref": "#/components/schemas/PackageMedia"
+            },
+            "title": "Missing Media",
+            "type": "array"
+          },
+          "notice": {
+            "title": "Notice",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "trace_path": {
+            "title": "Trace Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "episode_ids",
+          "media_count",
+          "missing_media",
+          "trace_path",
+          "notice"
+        ],
+        "title": "StudioProjectImportSummary",
+        "type": "object"
+      },
+      "StudioProjectPackage": {
+        "additionalProperties": false,
+        "properties": {
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "episode_count": {
+            "title": "Episode Count",
+            "type": "integer"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "media_count": {
+            "title": "Media Count",
+            "type": "integer"
+          },
+          "missing_media": {
+            "items": {
+              "$ref": "#/components/schemas/PackageMedia"
+            },
+            "title": "Missing Media",
+            "type": "array"
+          },
+          "package_id": {
+            "title": "Package Id",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id",
+          "path",
+          "filename",
+          "download_url",
+          "episode_count",
+          "media_count",
+          "missing_media"
+        ],
+        "title": "StudioProjectPackage",
+        "type": "object"
+      },
+      "StudioProjectPackageImport": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Episode Ids",
+            "type": "array"
+          },
+          "media_count": {
+            "title": "Media Count",
+            "type": "integer"
+          },
+          "missing_media": {
+            "items": {
+              "$ref": "#/components/schemas/PackageMedia"
+            },
+            "title": "Missing Media",
+            "type": "array"
+          },
+          "notice": {
+            "title": "Notice",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "trace_path": {
+            "title": "Trace Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "episode_ids",
+          "media_count",
+          "missing_media",
+          "trace_path",
+          "notice"
+        ],
+        "title": "StudioProjectPackageImport",
+        "type": "object"
+      },
+      "StudioProjectTransfer": {
+        "additionalProperties": false,
+        "properties": {
+          "cancellable": {
+            "default": true,
+            "title": "Cancellable",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "imported": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioProjectImportSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "default": "等待开始",
+            "title": "Message",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "collect",
+              "import"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "package": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioProjectPackage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processed_bytes": {
+            "default": 0,
+            "title": "Processed Bytes",
+            "type": "integer"
+          },
+          "processed_files": {
+            "default": 0,
+            "title": "Processed Files",
+            "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "stage": {
+            "default": "queued",
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "cancelled",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Bytes"
+          },
+          "total_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Files"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "operation",
+          "project_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudioProjectTransfer",
+        "type": "object"
+      },
+      "StudioProjectTransfers": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/StudioProjectTransfer"
+            },
+            "title": "Transfers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transfers"
+        ],
+        "title": "StudioProjectTransfers",
         "type": "object"
       },
       "StudioRelatedSceneUpdate": {
@@ -28366,6 +29461,79 @@
           "expected_revision"
         ],
         "title": "StudioShotSave",
+        "type": "object"
+      },
+      "StudioTakeSelectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Ids"
+          },
+          "expected_editorial_revision": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Editorial Revision"
+          },
+          "shot_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Ids"
+          },
+          "source_in_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional exact start in the candidate Take's source file. Supply both source bounds, one clip_id and the current editorial revision; preserves that use's film position and duration.",
+            "title": "Source In Seconds"
+          },
+          "source_out_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive candidate source end. The span must equal the selected clip's duration multiplied by its existing speed; subtitles and all unselected uses stay unchanged.",
+            "title": "Source Out Seconds"
+          }
+        },
+        "title": "StudioTakeSelectRequest",
         "type": "object"
       },
       "StudioTextChange": {
@@ -30616,9 +31784,723 @@
         "title": "ToolEffect",
         "type": "string"
       },
+      "VideoAudioExcerpt": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_path": {
+            "title": "Audio Path",
+            "type": "string"
+          },
+          "channels": {
+            "exclusiveMinimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "notes": {
+            "default": "Actual source audio excerpt; audio semantics have not been reviewed. Local excerpt time 0 maps to source_in_seconds.",
+            "title": "Notes",
+            "type": "string"
+          },
+          "sample_rate": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Rate",
+            "type": "integer"
+          },
+          "source_in_seconds": {
+            "minimum": 0.0,
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_out_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source Out Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "audio_path",
+          "source_in_seconds",
+          "source_out_seconds",
+          "duration_seconds",
+          "sample_rate",
+          "channels"
+        ],
+        "title": "VideoAudioExcerpt",
+        "type": "object"
+      },
+      "VideoEditRun": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_usage": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Usage"
+          },
+          "adopted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted At"
+          },
+          "adopted_clip_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Adopted Clip Ids",
+            "type": "array"
+          },
+          "adoption_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Adoption Notes",
+            "type": "array"
+          },
+          "adoption_status": {
+            "default": "NOT_ADOPTED",
+            "enum": [
+              "NOT_ADOPTED",
+              "ADOPTED",
+              "SOURCE_CHANGED"
+            ],
+            "title": "Adoption Status",
+            "type": "string"
+          },
+          "audio_asset_type": {
+            "enum": [
+              "video",
+              "audio"
+            ],
+            "title": "Audio Asset Type",
+            "type": "string"
+          },
+          "audio_clip": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Audio Clip",
+            "type": "object"
+          },
+          "audio_media_path": {
+            "title": "Audio Media Path",
+            "type": "string"
+          },
+          "audio_track": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Audio Track",
+            "type": "object"
+          },
+          "baseline": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Baseline",
+            "type": "object"
+          },
+          "candidate_media_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Media Path"
+          },
+          "candidate_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Take Id"
+          },
+          "candidate_thumbnail_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Thumbnail Path"
+          },
+          "control_revision": {
+            "default": 0,
+            "title": "Control Revision",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "LIP_SYNC",
+            "default": "LIP_SYNC",
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "prepare",
+                  "upload",
+                  "submit",
+                  "query",
+                  "download"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Stage"
+          },
+          "latest_remote": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Latest Remote",
+            "type": "object"
+          },
+          "model": {
+            "default": "kling-lip-sync",
+            "title": "Model",
+            "type": "string"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "output_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Url"
+          },
+          "paused_after_submit": {
+            "default": false,
+            "title": "Paused After Submit",
+            "type": "boolean"
+          },
+          "phase_seconds": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Phase Seconds",
+            "type": "object"
+          },
+          "preparation_retry_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Preparation Retry Count",
+            "type": "integer"
+          },
+          "prepared_audio_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Audio Path"
+          },
+          "prepared_audio_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Audio Sha256"
+          },
+          "prepared_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Duration Seconds"
+          },
+          "prepared_fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Fps"
+          },
+          "prepared_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Height"
+          },
+          "prepared_video_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Video Path"
+          },
+          "prepared_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Width"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "const": "kling",
+            "default": "kling",
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Task Id"
+          },
+          "quality_status": {
+            "default": "NOT_INSPECTED",
+            "enum": [
+              "NOT_INSPECTED",
+              "TECHNICAL_FAILED",
+              "AWAITING_REVIEW"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "query_failures": {
+            "default": 0,
+            "title": "Query Failures",
+            "type": "integer"
+          },
+          "request": {
+            "$ref": "#/components/schemas/LipSyncRequest"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_files": {
+            "items": {
+              "$ref": "#/components/schemas/VideoEditSourceFile"
+            },
+            "title": "Source Files",
+            "type": "array"
+          },
+          "source_in_seconds": {
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_media_path": {
+            "title": "Source Media Path",
+            "type": "string"
+          },
+          "source_out_seconds": {
+            "title": "Source Out Seconds",
+            "type": "number"
+          },
+          "source_reversed": {
+            "title": "Source Reversed",
+            "type": "boolean"
+          },
+          "source_speed": {
+            "title": "Source Speed",
+            "type": "number"
+          },
+          "source_take_id": {
+            "title": "Source Take Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "QUEUED",
+            "enum": [
+              "QUEUED",
+              "PREPARED",
+              "SUBMITTING",
+              "SUBMIT_UNKNOWN",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "PAUSED",
+              "CANCELLED",
+              "OUTPUT_MISSING"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submission_attempt_state": {
+            "default": "NOT_STARTED",
+            "enum": [
+              "NOT_STARTED",
+              "PREPARED",
+              "STARTED",
+              "ACKNOWLEDGED",
+              "UNKNOWN",
+              "REJECTED"
+            ],
+            "title": "Submission Attempt State",
+            "type": "string"
+          },
+          "submission_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Http Status"
+          },
+          "submission_response": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Submission Response",
+            "type": "object"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "target_clip": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Target Clip",
+            "type": "object"
+          },
+          "target_track": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Target Track",
+            "type": "object"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "upload_error_detail": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Upload Error Detail",
+            "type": "object"
+          },
+          "upload_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Http Status"
+          },
+          "uploaded_video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded Video Url"
+          },
+          "usage_status": {
+            "default": "NOT_PROVIDED",
+            "enum": [
+              "NOT_PROVIDED",
+              "PROVIDED"
+            ],
+            "title": "Usage Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "project_id",
+          "shot_id",
+          "request",
+          "source_take_id",
+          "source_media_path",
+          "source_in_seconds",
+          "source_out_seconds",
+          "source_speed",
+          "source_reversed",
+          "source_files",
+          "target_clip",
+          "target_track",
+          "audio_clip",
+          "audio_track",
+          "audio_media_path",
+          "audio_asset_type",
+          "baseline",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "VideoEditRun",
+        "type": "object"
+      },
+      "VideoEditSourceFile": {
+        "additionalProperties": false,
+        "properties": {
+          "modified_ns": {
+            "title": "Modified Ns",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "modified_ns"
+        ],
+        "title": "VideoEditSourceFile",
+        "type": "object"
+      },
+      "VideoEditorialContext": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/VideoEditorialUse"
+          },
+          "include_previous_boundary": {
+            "default": true,
+            "title": "Include Previous Boundary",
+            "type": "boolean"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoEditorialUse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "current"
+        ],
+        "title": "VideoEditorialContext",
+        "type": "object"
+      },
+      "VideoEditorialUse": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "reversed": {
+            "default": false,
+            "title": "Reversed",
+            "type": "boolean"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_in_seconds": {
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_out_seconds": {
+            "title": "Source Out Seconds",
+            "type": "number"
+          },
+          "speed": {
+            "default": 1.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          },
+          "timeline_end_seconds": {
+            "title": "Timeline End Seconds",
+            "type": "number"
+          },
+          "timeline_id": {
+            "title": "Timeline Id",
+            "type": "string"
+          },
+          "timeline_start_seconds": {
+            "title": "Timeline Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "clip_id",
+          "shot_id",
+          "take_id",
+          "media_path",
+          "source_in_seconds",
+          "source_out_seconds",
+          "timeline_start_seconds",
+          "timeline_end_seconds"
+        ],
+        "title": "VideoEditorialUse",
+        "type": "object"
+      },
       "VideoFrameSample": {
         "additionalProperties": false,
         "properties": {
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
           "image_path": {
             "title": "Image Path",
             "type": "string"
@@ -30632,9 +32514,26 @@
             "title": "Reasons",
             "type": "array"
           },
+          "requested_timestamp_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Timestamp Seconds"
+          },
           "source_take_id": {
             "title": "Source Take Id",
             "type": "string"
+          },
+          "timestamp_is_source_pts": {
+            "default": false,
+            "title": "Timestamp Is Source Pts",
+            "type": "boolean"
           },
           "timestamp_seconds": {
             "minimum": 0.0,
@@ -30647,6 +32546,18 @@
             "minimum": 0.0,
             "title": "Visual Change Score",
             "type": "number"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
           }
         },
         "required": [
@@ -30672,6 +32583,16 @@
       "VideoInspectionReport": {
         "additionalProperties": false,
         "properties": {
+          "audio_excerpt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoAudioExcerpt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "audio_present": {
             "title": "Audio Present",
             "type": "boolean"
@@ -30708,10 +32629,39 @@
             "title": "Created At",
             "type": "string"
           },
+          "dense_sample_fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Sample Fps"
+          },
+          "detail_frames": {
+            "items": {
+              "$ref": "#/components/schemas/VideoFrameSample"
+            },
+            "maxItems": 4,
+            "title": "Detail Frames",
+            "type": "array"
+          },
           "duration_seconds": {
             "exclusiveMinimum": 0.0,
             "title": "Duration Seconds",
             "type": "number"
+          },
+          "editorial_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoEditorialContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "fps": {
             "exclusiveMinimum": 0.0,
@@ -30738,6 +32688,27 @@
             },
             "title": "Issues",
             "type": "array"
+          },
+          "keyframe_max_dimension": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1280,
+            "title": "Keyframe Max Dimension"
+          },
+          "observation_scope": {
+            "default": "TAKE",
+            "enum": [
+              "TAKE",
+              "EDITORIAL"
+            ],
+            "title": "Observation Scope",
+            "type": "string"
           },
           "observations": {
             "items": {
@@ -30794,8 +32765,8 @@
             "items": {
               "$ref": "#/components/schemas/VideoFrameSample"
             },
-            "maxItems": 32,
-            "minItems": 2,
+            "maxItems": 40,
+            "minItems": 1,
             "title": "Samples",
             "type": "array"
           },
@@ -30887,13 +32858,71 @@
       "VideoInspectionRequest": {
         "additionalProperties": false,
         "properties": {
+          "clip_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact saved video clip for EDITORIAL. Required when this Take has multiple uses. Use timeline.read_editorial to obtain IDs.",
+            "title": "Clip Id"
+          },
+          "dense_sample_fps": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opt-in dense sampling of an explicit source interval up to 3 seconds, at most 36 actual frames.",
+            "title": "Dense Sample Fps"
+          },
+          "include_audio_excerpt": {
+            "default": false,
+            "description": "Save actual PCM audio from the same explicit source interval, at most 3 seconds. This does not perform listening or ASR.",
+            "title": "Include Audio Excerpt",
+            "type": "boolean"
+          },
           "include_previous_boundary": {
             "default": true,
             "title": "Include Previous Boundary",
             "type": "boolean"
           },
+          "keyframe_max_dimension": {
+            "anyOf": [
+              {
+                "maximum": 3840.0,
+                "minimum": 360.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1280,
+            "description": "Maximum detail-image dimension without upscaling; null preserves original pixels.",
+            "title": "Keyframe Max Dimension"
+          },
+          "keyframe_times_seconds": {
+            "description": "Exact source times within this inspection range for independent detail images.",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "title": "Keyframe Times Seconds",
+            "type": "array"
+          },
           "max_frames": {
             "default": 14,
+            "description": "Adaptive sparse-sampling limit; dense sampling uses its explicit rate, capped at 36 frames.",
             "maximum": 24.0,
             "minimum": 6.0,
             "title": "Max Frames",
@@ -30923,6 +32952,16 @@
             ],
             "title": "Review Focus"
           },
+          "scope": {
+            "default": "TAKE",
+            "description": "TAKE observes source footage. EDITORIAL observes one saved clip use and its actual preceding cut, including trim/speed/reverse; the source interval is resolved from that clip.",
+            "enum": [
+              "TAKE",
+              "EDITORIAL"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "semantic_review": {
             "default": true,
             "title": "Semantic Review",
@@ -30947,6 +32986,18 @@
             ],
             "description": "Exclusive source end; omit to observe through the end of the Take.",
             "title": "Source Out Seconds"
+          },
+          "timeline_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Id"
           }
         },
         "title": "VideoInspectionRequest",
@@ -39628,6 +41679,123 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/video-edits": {
+      "get": {
+        "operationId": "list_video_edits_api_short_drama_projects__project_id__video_edits_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VideoEditRun"
+                  },
+                  "title": "Response List Video Edits Api Short Drama Projects  Project Id  Video Edits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Video Edits",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/video-edits/{run_id}": {
+      "get": {
+        "operationId": "read_video_edit_api_short_drama_projects__project_id__video_edits__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LipSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Video Edit",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/providers/gpt-image": {
       "get": {
         "operationId": "get_image_provider_config_api_short_drama_providers_gpt_image_get",
@@ -39983,6 +42151,43 @@
     "/api/short-drama/providers/minimax-h3/reconciliation-candidates": {
       "get": {
         "operationId": "list_h3_reconciliation_candidates_api_short_drama_providers_minimax_h3_reconciliation_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_pages",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Max Pages",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -40161,6 +42366,100 @@
         "summary": "Update Stock Provider Config",
         "tags": [
           "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/studio/audio-resources": {
+      "get": {
+        "operationId": "read_audio_resources_api_short_drama_studio_audio_resources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Audio Resources",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/audio-resources/prepare": {
+      "post": {
+        "operationId": "prepare_audio_resource_api_short_drama_studio_audio_resources_prepare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudioResourcePrepare"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioResources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Prepare Audio Resource",
+        "tags": [
+          "short-drama",
+          "studio"
         ]
       }
     },
@@ -40439,6 +42738,185 @@
         ]
       }
     },
+    "/api/short-drama/studio/project-transfers": {
+      "get": {
+        "operationId": "read_project_transfers_api_short_drama_studio_project_transfers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectTransfers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Project Transfers",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/project-transfers/{transfer_id}": {
+      "get": {
+        "operationId": "read_project_transfer_api_short_drama_studio_project_transfers__transfer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectTransfer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Project Transfer",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/project-transfers/{transfer_id}/cancel": {
+      "post": {
+        "operationId": "cancel_portable_project_transfer_api_short_drama_studio_project_transfers__transfer_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectTransfer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Cancel Portable Project Transfer",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
     "/api/short-drama/studio/projects": {
       "post": {
         "operationId": "create_project_api_short_drama_studio_projects_post",
@@ -40485,6 +42963,110 @@
           }
         },
         "summary": "Create Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/import-package": {
+      "post": {
+        "operationId": "import_portable_project_api_short_drama_studio_projects_import_package_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_portable_project_api_short_drama_studio_projects_import_package_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectPackageImport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Import Portable Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/import-package-jobs": {
+      "post": {
+        "operationId": "start_portable_project_import_api_short_drama_studio_projects_import_package_jobs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_start_portable_project_import_api_short_drama_studio_projects_import_package_jobs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectTransfer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Start Portable Project Import",
         "tags": [
           "short-drama",
           "studio"
@@ -40658,6 +43240,98 @@
           }
         },
         "summary": "Read Changes",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/changes/page": {
+      "get": {
+        "operationId": "read_change_page_api_short_drama_studio_projects__project_id__changes_page_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pending_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Pending Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioChanges"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Change Page",
         "tags": [
           "short-drama",
           "studio"
@@ -41035,6 +43709,86 @@
       }
     },
     "/api/short-drama/studio/projects/{project_id}/exports": {
+      "get": {
+        "operationId": "read_exports_api_short_drama_studio_projects__project_id__exports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioExports"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Exports",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      },
       "post": {
         "operationId": "export_editorial_api_short_drama_studio_projects__project_id__exports_post",
         "parameters": [
@@ -41159,6 +43913,68 @@
         ]
       }
     },
+    "/api/short-drama/studio/projects/{project_id}/exports/{export_id}/cancel": {
+      "post": {
+        "operationId": "cancel_editorial_export_api_short_drama_studio_projects__project_id__exports__export_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioExport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Cancel Editorial Export",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
     "/api/short-drama/studio/projects/{project_id}/media": {
       "post": {
         "operationId": "upload_media_api_short_drama_studio_projects__project_id__media_post",
@@ -41216,6 +44032,170 @@
           }
         },
         "summary": "Upload Media",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/media/relink": {
+      "post": {
+        "operationId": "restore_media_api_short_drama_studio_projects__project_id__media_relink_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_restore_media_api_short_drama_studio_projects__project_id__media_relink_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMediaRelinkResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Restore Media",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/media/usage": {
+      "get": {
+        "operationId": "read_media_usage_api_short_drama_studio_projects__project_id__media_usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "asset_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "asset_version_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Version Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMediaUsage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Media Usage",
         "tags": [
           "short-drama",
           "studio"
@@ -41342,6 +44322,172 @@
           }
         },
         "summary": "Rename Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/package": {
+      "post": {
+        "operationId": "collect_portable_project_api_short_drama_studio_projects__project_id__package_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectPackage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Collect Portable Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/package-jobs": {
+      "post": {
+        "operationId": "start_portable_project_collection_api_short_drama_studio_projects__project_id__package_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProjectTransfer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Start Portable Project Collection",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/package/{package_id}": {
+      "get": {
+        "operationId": "download_portable_project_api_short_drama_studio_projects__project_id__package__package_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Download Portable Project",
         "tags": [
           "short-drama",
           "studio"
@@ -42080,6 +45226,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/StudioTakeSelectRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

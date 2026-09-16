@@ -1664,7 +1664,10 @@ export function ShortDramaStudio() {
     void perform(
       '抽帧检查镜内与镜间连续性',
       () => ShortDramaApi.inspectTakeVideo(takeId, {
+        scope: 'TAKE',
         source_in_seconds: 0,
+        include_audio_excerpt: false,
+        keyframe_max_dimension: 1280,
         previous_take_id: null,
         include_previous_boundary: true,
         semantic_review: true,
@@ -1680,6 +1683,8 @@ export function ShortDramaStudio() {
     void perform(
       '检查对白、声线与字幕时间',
       () => ShortDramaApi.inspectProjectAudio(activeProjectId, {
+        scope: 'EDITORIAL',
+        source_start_seconds: 0,
         semantic_review: true,
         speaker_continuity: true,
         dialogue_padding_seconds: 0.35,

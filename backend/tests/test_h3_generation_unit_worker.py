@@ -63,10 +63,10 @@ class _FakeH3Client:
     def query(self, task_id: str) -> H3RemoteTask:
         return self.remote_tasks[task_id].model_copy(deep=True)
 
-    def list_tasks(self, *, page_size: int = 20) -> list[H3RemoteTask]:
+    def list_tasks(self, *, page_size: int = 20, offset: int = 0) -> list[H3RemoteTask]:
         return [
             task.model_copy(deep=True)
-            for task in list(self.remote_tasks.values())[:page_size]
+            for task in list(self.remote_tasks.values())[offset:offset + page_size]
         ]
 
     def cancel_or_delete(self, task_id: str) -> H3DeleteResponse:

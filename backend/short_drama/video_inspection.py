@@ -20,6 +20,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
 from pydantic import Field, JsonValue
 
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
+from short_drama.video_detail import extract_detail_frames, extract_source_audio, sample_dense_window
 from short_drama.models import (
     ApprovalStatus,
     Asset,
@@ -36,6 +37,8 @@ from short_drama.models import (
     ShotPlan,
     Take,
     TechnicalCheck,
+    VideoEditorialContext,
+    VideoEditorialUse,
     VideoFrameSample,
     VideoInspectionReport,
     VideoInspectionRequest,
@@ -299,12 +302,33 @@ def inspection_matches_request(
     report: VideoInspectionReport, *, document: ProjectDocument, take: Take,
     request: VideoInspectionRequest, previous_take: Take | None = None,
 ) -> bool:
+    if request.scope != report.observation_scope:
+        return False
+    if request.scope == "EDITORIAL":
+        from short_drama.observation_sources import video_report_source_status
+
+        context = report.editorial_context
+        if context is None or request.include_previous_boundary != context.include_previous_boundary or (request.clip_id is not None and context.current.clip_id != request.clip_id) or (
+                request.timeline_id is not None and context.current.timeline_id != request.timeline_id):
+            return False
+        status, _reasons = video_report_source_status(document, take, report,
+            {item.id: item for item in [take, previous_take] if item is not None})
+        if status != "CURRENT":
+            return False
+        request = request.model_copy(update={"source_in_seconds": context.current.source_in_seconds,
+                                             "source_out_seconds": context.current.source_out_seconds})
     end = request.source_out_seconds if request.source_out_seconds is not None else take.duration_seconds
     shots = inspection_shots(document, take, request.source_in_seconds, end)
     return (
         report.take_id == take.id
         and report.semantic_status == SemanticReviewStatus.COMPLETE
         and report.review_focus == request.review_focus
+        and report.dense_sample_fps == request.dense_sample_fps
+        and [frame.requested_timestamp_seconds for frame in report.detail_frames] == list(dict.fromkeys(request.keyframe_times_seconds))
+        and (not request.keyframe_times_seconds or report.keyframe_max_dimension == request.keyframe_max_dimension)
+        and all(Path(frame.image_path).is_file() for frame in report.detail_frames)
+        and (not request.include_audio_excerpt or not report.audio_present
+             or (report.audio_excerpt is not None and Path(report.audio_excerpt.audio_path).is_file()))
         and abs(report.observed_source_in_seconds - request.source_in_seconds) < 0.001
         and report.observed_source_out_seconds is not None
         and abs(report.observed_source_out_seconds - end) < 0.05
@@ -467,6 +491,7 @@ class VideoInspector:
         request: VideoInspectionRequest,
         language_client: LanguageProviderClient | None,
         created_at: str,
+        editorial_context: VideoEditorialContext | None = None,
     ) -> VideoInspectionReport:
         report_id = f"video-inspection-{uuid4().hex}"
         report_dir = self.workspace_root / document.project.id / "inspections" / report_id
@@ -476,15 +501,30 @@ class VideoInspector:
         media_path = Path(take.media_path).expanduser().resolve()
         probe = self.probe_video(media_path)
         source_end = request.source_out_seconds if request.source_out_seconds is not None else probe.duration_seconds
-        current_samples = self.sample_video(
-            media_path=media_path,
-            take_id=take.id,
-            probe=probe,
-            output_dir=frames_dir,
-            max_frames=request.max_frames,
-            source_in_seconds=request.source_in_seconds,
-            source_out_seconds=source_end,
+        if request.source_in_seconds >= probe.duration_seconds or source_end > probe.duration_seconds + 0.05:
+            raise ValueError("Inspection source range must lie within the available Take")
+        source_end = min(source_end, probe.duration_seconds)
+        if (request.dense_sample_fps is not None or request.include_audio_excerpt) and source_end - request.source_in_seconds > 3.000001:
+            raise ValueError("Dense sampling/audio excerpt requires an adopted interval of at most 3 seconds; use TAKE with an explicit shorter source range")
+        if any(value < request.source_in_seconds or value >= source_end for value in request.keyframe_times_seconds):
+            raise ValueError("Detail keyframe times must lie inside the adopted source interval")
+        source_context = inspection_source_context(
+            document, take, inspection_shots(document, take, request.source_in_seconds, source_end), previous_take,
         )
+        if request.dense_sample_fps is not None:
+            current_samples = sample_dense_window(source=media_path, take_id=take.id, output_dir=frames_dir,
+                start=request.source_in_seconds, end=source_end, fps=request.dense_sample_fps)
+        else:
+            current_samples = self.sample_video(
+                media_path=media_path, take_id=take.id, probe=probe, output_dir=frames_dir,
+                max_frames=request.max_frames, source_in_seconds=request.source_in_seconds, source_out_seconds=source_end)
+        if editorial_context is not None and editorial_context.current.reversed:
+            current_samples.reverse()
+        detail_frames = extract_detail_frames(source=media_path, take_id=take.id, output_dir=frames_dir,
+            times=request.keyframe_times_seconds, start=request.source_in_seconds, end=source_end,
+            source_fps=probe.fps, max_dimension=request.keyframe_max_dimension)
+        audio_excerpt = extract_source_audio(source=media_path, destination=report_dir / "source-audio.wav",
+            start=request.source_in_seconds, end=source_end) if request.include_audio_excerpt and probe.audio_present else None
         contact_sheet = report_dir / "intra-shot-contact-sheet.jpg"
         self._build_contact_sheet(
             current_samples,
@@ -495,6 +535,14 @@ class VideoInspector:
         scopes = [VideoInspectionScope.INTRA_SHOT]
         boundary_sheet: Path | None = None
         all_samples = list(current_samples)
+
+        def edge_times(use: VideoEditorialUse, *, end: bool, fps: float) -> list[float]:
+            endpoint = use.playback_end_source_seconds if end else use.playback_start_source_seconds
+            direction = -1 if use.reversed else 1
+            distances = [.4 * use.speed, max(.05 * use.speed, 1.1 / fps)] if end else [max(.05 * use.speed, 1.1 / fps), .4 * use.speed]
+            return [min(use.source_out_seconds - min(.001, (use.source_out_seconds - use.source_in_seconds) / 2),
+                        max(use.source_in_seconds, endpoint + direction * (-value if end else value))) for value in distances]
+
         if previous_take is not None and previous_shot is not None:
             previous_probe = self.probe_video(
                 Path(previous_take.media_path).expanduser().resolve()
@@ -505,7 +553,8 @@ class VideoInspector:
                 media_path=Path(previous_take.media_path).expanduser().resolve(),
                 take_id=previous_take.id,
                 duration_seconds=previous_probe.duration_seconds,
-                timestamps=[
+                timestamps=edge_times(editorial_context.previous, end=True, fps=previous_probe.fps)
+                if editorial_context is not None and editorial_context.previous is not None else [
                     max(0.0, previous_end - 0.4),
                     max(
                         0.0,
@@ -521,7 +570,8 @@ class VideoInspector:
                 media_path=media_path,
                 take_id=take.id,
                 duration_seconds=probe.duration_seconds,
-                timestamps=[
+                timestamps=edge_times(editorial_context.current, end=False, fps=probe.fps)
+                if editorial_context is not None else [
                     min(request.source_in_seconds + 0.05, max(request.source_in_seconds, source_end - 0.01)),
                     min(request.source_in_seconds + 0.4, max(request.source_in_seconds, source_end - 0.01)),
                 ],
@@ -552,11 +602,12 @@ class VideoInspector:
                 detail=f"{probe.duration_seconds:.3f} seconds",
             ),
             TechnicalCheck(
-                name="adaptive-sampling",
-                passed=len(current_samples) >= 2,
+                name="dense-sampling" if request.dense_sample_fps is not None else "adaptive-sampling",
+                passed=len(current_samples) >= 1,
                 detail=(
                     f"Selected {len(current_samples)} frames from source {request.source_in_seconds:.3f}–{source_end:.3f}s; "
-                    "coverage and high-change samples are both retained."
+                    + (f"Requested {request.dense_sample_fps:g} fps; returned frames carry actual source PTS."
+                       if request.dense_sample_fps is not None else "Coverage and high-change samples are both retained.")
                 ),
             ),
         ]
@@ -564,9 +615,11 @@ class VideoInspector:
         observations: list[VideoObservation] = []
         issues: list[QaIssue] = []
         warnings: list[str] = []
-        source_context = inspection_source_context(
-            document, take, inspection_shots(document, take, request.source_in_seconds, source_end), previous_take,
-        )
+        if request.include_audio_excerpt:
+            warnings.append("已保存该源区间实际声音，可独立播放；本报告未进行听审。" if audio_excerpt is not None
+                            else "源视频没有音轨；未创建声音片段，也未进行听审。")
+        if request.dense_sample_fps is not None:
+            warnings.append("密集抽帧仍是离散静态画面，不能据此确认连续动作细节、对白或音画同步。")
         missing_references = source_context.get("unobserved_reference_version_ids")
         if missing_references:
             warnings.append("部分选中生成参考未能提供可观察图片：" + json.dumps(missing_references, ensure_ascii=False))
@@ -574,7 +627,7 @@ class VideoInspector:
             warnings.append("本报告仅覆盖所记录的源区间和关注点，不能作为整组全部内容的检查结论。")
         semantic_model: str | None = None
         summary = (
-            "已完成媒体探测与适应性抽帧；该报告只提供可观察证据，不替代导演决策。"
+            "已完成媒体探测与抽帧；该报告只提供可观察证据，不替代导演决策。"
         )
         if request.semantic_review:
             if language_client is None:
@@ -593,9 +646,11 @@ class VideoInspector:
                         previous_take=previous_take,
                         request=request,
                         samples=all_samples,
+                        detail_frames=detail_frames,
                         contact_sheet=contact_sheet,
                         boundary_sheet=boundary_sheet,
                         client=language_client,
+                        editorial_context=editorial_context,
                     )
                     status = SemanticReviewStatus.COMPLETE
                     observations = review.observations
@@ -616,8 +671,10 @@ class VideoInspector:
             observed_source_out_seconds=min(source_end, probe.duration_seconds),
             covered_shot_ids=[item.id for item in inspection_shots(document, take, request.source_in_seconds, source_end)],
             full_take_coverage=(request.review_focus is None and request.source_in_seconds == 0
-                                and source_end >= probe.duration_seconds - 0.05),
+                                and source_end >= probe.duration_seconds - 0.05 and request.scope == "TAKE"),
             source_context=source_context,
+            observation_scope=request.scope,
+            editorial_context=editorial_context,
             scopes=scopes,
             duration_seconds=probe.duration_seconds,
             width=probe.width,
@@ -625,6 +682,10 @@ class VideoInspector:
             fps=probe.fps,
             audio_present=probe.audio_present,
             samples=all_samples,
+            dense_sample_fps=request.dense_sample_fps,
+            detail_frames=detail_frames,
+            keyframe_max_dimension=request.keyframe_max_dimension,
+            audio_excerpt=audio_excerpt,
             contact_sheet_path=str(contact_sheet.resolve()),
             boundary_contact_sheet_path=(
                 str(boundary_sheet.resolve()) if boundary_sheet is not None else None
@@ -792,9 +853,11 @@ class VideoInspector:
         previous_take: Take | None,
         request: VideoInspectionRequest,
         samples: list[VideoFrameSample],
+        detail_frames: list[VideoFrameSample],
         contact_sheet: Path,
         boundary_sheet: Path | None,
         client: LanguageProviderClient,
+        editorial_context: VideoEditorialContext | None = None,
     ) -> SemanticVideoReview:
         current_bible = next(
             (
@@ -846,7 +909,7 @@ class VideoInspector:
             {
                 "index": 1,
                 "role": "CURRENT_TAKE_TIMELINE",
-                "description": "当前 Take 的按时间顺序自适应抽帧",
+                "description": "当前 Take 的定向密集抽帧" if request.dense_sample_fps is not None else "当前 Take 的按时间顺序自适应抽帧",
             }
         ]
         next_image_index = 2
@@ -867,6 +930,10 @@ class VideoInspector:
                     "description": label,
                 }
             )
+            next_image_index += 1
+        for frame in detail_frames:
+            image_map.append({"index": next_image_index, "role": "DETAIL_KEYFRAME",
+                "description": f"实际源帧 {frame.timestamp_seconds:.6f}s，{frame.width}x{frame.height}；用于局部细节观察"})
             next_image_index += 1
         payload = {
             "output_schema": SemanticVideoReview.model_json_schema(),
@@ -901,9 +968,13 @@ class VideoInspector:
             "reference_plans": [item.model_dump(mode="json") for item in reference_plans]
             if take.shot_windows else [],
             "samples": [sample.model_dump(mode="json") for sample in samples],
+            "detail_frames": [sample.model_dump(mode="json") for sample in detail_frames],
+            "dense_sample_fps": request.dense_sample_fps,
             "allowed_issue_categories": [item.value for item in QaFailureCategory],
             "confidence_values": [item.value for item in ObservationConfidence],
             "review_focus": request.review_focus,
+            "observation_scope": request.scope,
+            "editorial_context": editorial_context.model_dump(mode="json") if editorial_context else None,
             "unobserved_reference_version_ids": [version_id for plan in reference_plans
                                                   for version_id in selected_generation_reference_ids(document, plan)
                                                   if version_id not in seen_reference_ids
@@ -919,6 +990,7 @@ class VideoInspector:
         if boundary_sheet is not None:
             image_urls.append(_image_data_url(boundary_sheet))
         image_urls.extend(url for _label, url in reference_images)
+        image_urls.extend(_image_data_url(Path(frame.image_path)) for frame in detail_frames)
         output = client.generate_text(
             instructions=instructions,
             input_text=json.dumps(payload, ensure_ascii=False, indent=2),

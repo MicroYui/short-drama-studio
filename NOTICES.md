@@ -7,8 +7,18 @@ references below document the retained upstream source, not enabled providers.
 
 ## Production methods and optional workflows
 
-- MiniMax-H3 public Skills: https://github.com/MiniMax-AI/skills . Original source
-  notices remain in `backend/short_drama/skills/sources/minimax_h3/original/`.
+- MiniMax-H3 public Skills were imported from
+  https://github.com/MiniMax-AI/MiniMax-H3/tree/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills .
+  This is not the separate `MiniMax-AI/skills` repository. The pinned H3 README
+  links the MiniMax H3 Community License Agreement:
+  https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE .
+  Original text, author metadata and references remain in
+  `backend/short_drama/skills/sources/minimax_h3/original/`; manifests identify
+  the imported files and local adaptations. Public availability is not an
+  unrestricted redistribution grant. Before public distribution, confirm the
+  applicable rights and obligations for the actual imported text and adaptations,
+  including any community-authored material, and provide required license and
+  notice materials. The current internal candidate retains this pending condition.
 - MiniMax Design 3.0.11 Workflow text and the 19 locally installed Design 3.0.14
   Skill packages were obtained from the local app and its Skill directory.
   The latter's original text, reference documents and author metadata remain in
@@ -26,9 +36,16 @@ references below document the retained upstream source, not enabled providers.
   GPL-3.0; their source and license remain with those services. The plugin clone
   under `output/product-delivery/upstream` is research/acceptance material and is
   not bundled into the application.
-- Local rendering uses the FFmpeg binary supplied by imageio-ffmpeg. Its build
-  license must accompany any redistributed binary; retained package notices and
-  https://ffmpeg.org/legal.html identify the upstream terms and source.
+- The current macOS arm64 package uses FFmpeg 7.1 supplied by imageio-ffmpeg 0.6.0
+  (`ffmpeg-macos-aarch64-v7.1`), copyright (c) 2000–2024 the FFmpeg developers.
+  The executable reports GNU GPL version 2 or later and is built with
+  `--enable-gpl`, `--enable-libx264` and `--enable-libx265`. Its GPL text is in
+  `licenses/FFmpeg-GPL-2.0.txt`; the observed build configuration and distribution
+  source are in `licenses/FFmpeg-build.md`. The imageio-ffmpeg wrapper's BSD license
+  remains separate and does not describe the executable's GPL license.
+  Complete corresponding source delivery for this exact binary has not yet been
+  arranged; public binary distribution remains pending that work. No source offer
+  is made by this notice. See https://ffmpeg.org/legal.html .
 
 ---
 
@@ -51,7 +68,10 @@ rebuild instructions and both license texts are retained in
 - **LTX-2**
   Copyright (c) Lightricks Ltd.
   License: LTX-2 Community License
-  https://github.com/Lightricks/LTX-2/blob/main/LICENSE
+  https://github.com/Lightricks/LTX-2/blob/9377758131b1ffde4b7f766804590a6617bf2ab9/LICENSE
+  This license covers model implementation code as well as weights. The
+  short-drama package excludes the unused `ltx_core` / `ltx_pipelines` packages
+  and legacy model services; source references remain in the development checkout.
 
 - **Gemma 3**
   Copyright (c) Google LLC.
@@ -88,8 +108,10 @@ rebuild instructions and both license texts are retained in
 - **tqdm** — Copyright (c) Casper da Costa-Luis — Mozilla Public License 2.0
 - **pynvml** — Copyright (c) NVIDIA Corporation — BSD 3-Clause License
 - **pydantic** — Copyright (c) Samuel Colvin and Pydantic Services Inc. — MIT License
-- **ltx-core** — Copyright (c) Lightricks — Apache License 2.0
-- **ltx-pipelines** — Copyright (c) Lightricks — Apache License 2.0
+- **ltx-core / ltx-pipelines** — Development dependencies retained from LTX-2
+  revision `9377758131b1ffde4b7f766804590a6617bf2ab9`; excluded from the short-drama
+  application package. The locked source's license is the LTX-2 Community License
+  linked above; the inspected packages contain no independent Apache-2.0 grant.
 - **diffusers** — Copyright (c) Hugging Face — Apache License 2.0
 - **ftfy** — Copyright (c) Robyn Speer and Luminoso Technologies — Apache License 2.0
 - **imageio** — Copyright (c) imageio contributors — BSD 2-Clause License

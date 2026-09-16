@@ -15,7 +15,7 @@ import shutil
 import threading
 from copy import deepcopy
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -52,10 +52,6 @@ from short_drama.asset_catalog import (
     missing_canonical_assets,
     missing_reference_views,
     search_asset_catalog,
-)
-from short_drama.asset_reference_truth import (
-    AssetReferenceTruthError,
-    resolve_current_asset_media,
 )
 from short_drama.asset_plan_reconciler import (
     AssetPlanReconcileError,
@@ -129,7 +125,6 @@ from short_drama.h3_models import (
 from short_drama.h3_route_planner import (
     RoutePlanningError,
     build_h3_production_route_plan,
-    generation_unit_media_candidates,
     validate_route_plan_freshness,
 )
 from short_drama.h3_worker import (
@@ -138,6 +133,11 @@ from short_drama.h3_worker import (
     PersistentH3Worker,
     default_h3_client_factory,
 )
+from short_drama.video_edit_worker import KlingClientFactory, PersistentVideoEditWorker
+from short_drama.video_edit_models import LipSyncRequest, LipSyncResponse, LipSyncAdoptResponse, VideoEditRun
+from short_drama.video_edit_service import enqueue_lip_sync, adopt_lip_sync, lip_sync_response
+from short_drama.providers.kling_lip_sync_client import KlingClientError
+from short_drama.providers.kling_config import KlingProviderConfigStore, KlingProviderConfigUpdate, KlingProviderConfigResponse
 from short_drama.h3_video_guides import H3VideoGuideBuilder
 from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
@@ -173,7 +173,6 @@ from short_drama.image_models import (
 from short_drama.language_models import (
     H3GenerationUnitContextRequest,
     H3GenerationUnitContextResponse,
-    H3CurrentSourceDocument,
     LanguagePromptCompileRequest,
     LanguagePromptCompileResponse,
     LanguageProviderConfigResponse,
@@ -519,7 +518,6 @@ from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_prompt,
     compile_h3_request,
-    validate_h3_audio_durations,
     validate_h3_inputs,
     validate_h3_probe,
 )
@@ -785,6 +783,7 @@ class ShortDramaService:
         database_path: Path,
         workspace_root: Path,
         h3_client_factory: H3ClientFactory | None = None,
+        kling_client_factory: KlingClientFactory | None = None,
         image_provider_factory: ImageProviderFactory | None = None,
         language_provider_factory: LanguageProviderClientFactory | None = None,
         stock_asset_client: StockAssetSearchClient | None = None,
@@ -817,6 +816,11 @@ class ShortDramaService:
             config_store=self.h3_config,
             client_factory=h3_client_factory or default_h3_client_factory,
             source_staleness_checker=self._h3_task_operation_staleness_reason,
+        )
+        self.kling_config = KlingProviderConfigStore(database_path.parent / "short-drama-kling-provider-settings.json", self.h3_config)
+        self.video_edit_worker = PersistentVideoEditWorker(
+            repository=self.repository, workspace_root=workspace_root, config_store=self.kling_config,
+            client_factory=kling_client_factory,
         )
         self.image_config = ImageProviderConfigStore(
             database_path.parent / "short-drama-image-provider-settings.json"
@@ -7914,15 +7918,28 @@ class ShortDramaService:
                     raise WorkflowConflictError(
                         "Recompiling an existing GenerationPlan requires base_version_id"
                     )
-                result = self._revise_production_document_locked(
-                    document,
-                    production_document_id=generation_document.id,
-                    base_version_id=request.base_version_id,
-                    payload=production_document_payload(generation_plan),
-                    source_artifact_refs=source_refs,
-                    origin=request.origin,
-                    created_at=now,
+                self._production_document_version(
+                    generation_document, request.base_version_id
                 )
+                current_version = self._production_document_version(
+                    generation_document, None
+                )
+                # Parallel group owners may compile the same current inputs.
+                # Reuse that result instead of creating competing revisions.
+                if current_version.payload == production_document_payload(generation_plan):
+                    result = ProductionDocumentMutationResponse(
+                        document=generation_document, version=current_version
+                    )
+                else:
+                    result = self._revise_production_document_locked(
+                        document,
+                        production_document_id=generation_document.id,
+                        base_version_id=request.base_version_id,
+                        payload=production_document_payload(generation_plan),
+                        source_artifact_refs=source_refs,
+                        origin=request.origin,
+                        created_at=now,
+                    )
             slot = self._bind_output_slot_locked(
                 document,
                 OutputSlotBindRequest(
@@ -10958,6 +10975,7 @@ class ShortDramaService:
             editorial_project=read_editorial(self, document.project.id).project,
             takes=self.repository.list_takes(document.project.id),
             inspections=self.repository.list_video_inspections(document.project.id),
+            audio_inspections=self.repository.list_audio_inspections(document.project.id),
         )
 
     @staticmethod
@@ -11068,86 +11086,18 @@ class ShortDramaService:
         return read_h3_group_operation(self, project_id, operation_id)
 
     def get_h3_generation_unit_context(
-        self,
-        project_id: str,
-        request: H3GenerationUnitContextRequest,
+        self, project_id: str, request: H3GenerationUnitContextRequest,
         *, require_current_plan: bool = False,
     ) -> H3GenerationUnitContextResponse:
-        from short_drama.generation_plan_state import derive_current_generation_plan
+        from short_drama.h3_source_checks import generation_unit_context
 
-        # Public READ observes current facts. Preparation and source verification
-        # explicitly retain the strict saved-plan contract.
         with self._lock:
             document = self._require_project_document(project_id)
-            requested_document = self._managed_project_document(
-                document, request.generation_plan_document_id, GENERATION_PLAN_DOCUMENT_KIND)
-            if requested_document.id != document.generation_plan_document_id:
-                raise WorkflowConflictError("Requested GenerationPlan is not this project's plan")
-            requested_version = self._production_document_version(requested_document, request.generation_plan_version_id)
-            requested_plan = self._parse_generation_plan(requested_version)
-            if requested_plan.project_id != project_id:
-                raise WorkflowConflictError("Requested GenerationPlan belongs to another project")
-            requested_unit = next((u for u in requested_plan.units if u.id == request.generation_unit_id), None)
-            if requested_unit is None:
-                raise ArtifactNotFoundError(request.generation_unit_id)
             try:
-                current_plan, board, spec = derive_current_generation_plan(document)
+                return generation_unit_context(document, request, store=self.repository,
+                    require_current_plan=require_current_plan)
             except ValueError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
-            unit = next((u for u in current_plan.units if u.id == request.generation_unit_id), None)
-            if unit is None:
-                raise WorkflowConflictError(f"Generation unit {request.generation_unit_id} no longer exists in the current Storyboard")
-            changes: list[str] = []
-            try:
-                validate_generation_units_current(document, requested_plan, [unit.id])
-            except ValueError as exc:
-                if require_current_plan:
-                    raise WorkflowConflictError(str(exc)) from exc
-                changes.append(str(exc))
-            for field in ("script_version_id", "bible_version_id", "storyboard_document_id", "storyboard_version_id",
-                          "production_spec_document_id", "production_spec_version_id"):
-                if getattr(requested_plan, field) != getattr(current_plan, field):
-                    changes.append(f"/{field}: {getattr(requested_plan, field)} -> {getattr(current_plan, field)}")
-            for field in type(unit).model_fields:
-                if getattr(requested_unit, field) != getattr(unit, field):
-                    changes.append(f"/generation_unit/{field}")
-            # Strict callers keep the exact requested (still-current) unit.
-            if require_current_plan:
-                unit = requested_unit
-            shots = [self._require_shot_in_document(document, sid) for sid in unit.shot_ids]
-            current_group = next(g for g in board.clip_groups if g.id == unit.clip_group_id)
-            def identity(document_id: str, version_id: str) -> H3CurrentSourceDocument:
-                item = next(d for d in document.production_documents if d.id == document_id)
-                version = next(v for v in item.versions if v.id == version_id)
-                return H3CurrentSourceDocument(document_id=item.id, version_id=version.id, version=version.version)
-        plan_document = self._managed_project_document(
-            document, request.generation_plan_document_id, GENERATION_PLAN_DOCUMENT_KIND,
-        )
-        version = self._production_document_version(plan_document, request.generation_plan_version_id)
-        _instructions, source_text = build_generation_unit_language_prompt_input(
-            document, unit, shots, route=VideoGenerationRoute.DIRECT,
-            duration_seconds=math.ceil(unit.requested_duration_seconds),
-            production_spec=spec, media_inputs=[],
-            actual_previous_media_boundary=self._previous_adopted_media_boundary(document, shots[0].id),
-        )
-        source: dict[str, JsonValue] = json.loads(source_text)
-        # This is an input inventory before the Agent selects a route. Provider
-        # grammar and final compilation instructions belong to the compile Tool.
-        for key in ("task", "operation_scope", "route", "required_prompt_schema", "route_media_bindings", "production_rules"):
-            source.pop(key, None)
-        candidates, warnings = generation_unit_media_candidates(document, shots)
-        return H3GenerationUnitContextResponse(
-            project_id=project_id,
-            generation_plan_document_id=plan_document.id,
-            generation_plan_version_id=version.id,
-            generation_plan_version=version.version,
-            generation_unit_id=unit.id,
-            source_status="CURRENT_PROJECTION" if changes else "CURRENT_PLAN",
-            source_changes=changes, current_clip_group=current_group,
-            current_storyboard=identity(current_plan.storyboard_document_id, current_plan.storyboard_version_id),
-            current_production_spec=identity(current_plan.production_spec_document_id, current_plan.production_spec_version_id),
-            source_context=source, media_candidates=candidates, warnings=warnings,
-        )
 
     def _compile_h3_generation_unit_with_language_model(
         self,
@@ -11993,29 +11943,23 @@ class ShortDramaService:
                 raise WorkflowConflictError("Director inspection no longer refers to a current shot Take")
             if request.take_id is None:
                 selected_take = inspected_take
-            from short_drama.video_inspection import inspection_shots, inspection_source_context
-
-            inspection_end = inspection.observed_source_out_seconds
-            evidence_current = False
-            if inspection_end is not None and inspection.source_context:
-                inspection_previous = self.repository.get_take(inspection.previous_take_id) if inspection.previous_take_id else None
-                try:
-                    inspected_shots = inspection_shots(document, inspected_take, inspection.observed_source_in_seconds, inspection_end)
-                    evidence_current = inspection.source_context == inspection_source_context(document, inspected_take, inspected_shots, inspection_previous)
-                except ValueError:
-                    # Preserve historical evidence with an explicit status even
-                    # when its old group no longer maps to current shots.
-                    evidence_current = False
+            from short_drama.observation_sources import video_report_source_status
+            source_status, source_reasons = video_report_source_status(document, inspected_take, inspection,
+                {item.id: item for item in self.repository.list_takes(project_id)})
             media_evidence["video_inspection"] = inspection.model_dump(
                 mode="json", include={"id", "take_id", "review_focus", "observed_source_in_seconds",
                                       "observed_source_out_seconds", "covered_shot_ids", "semantic_status",
                                       "observations", "issues", "warnings", "audio_semantics_observed"},
             )
-            media_evidence["video_inspection_source_status"] = "CURRENT" if evidence_current else "HISTORICAL_OR_UNVERIFIED"
-            qa_issues.extend(issue.model_copy(deep=True) for issue in inspection.issues)
-            reviewer_notes.append(
-                f"{inspection.id}: {inspection.summary}"
-            )
+            media_evidence["video_inspection_source_status"] = source_status
+            media_evidence["video_inspection_source_reasons"] = cast(JsonValue, source_reasons)
+            if source_status == "CURRENT":
+                qa_issues.extend(issue.model_copy(deep=True) for issue in inspection.issues)
+                reviewer_notes.append(f"{inspection.id}: {inspection.summary}; applies only to its recorded source interval and focus")
+            else:
+                media_evidence["video_inspection"] = {"id": inspection.id, "source_status": source_status,
+                    "source_reasons": cast(JsonValue, source_reasons), "observed_source_in_seconds": inspection.observed_source_in_seconds,
+                    "observed_source_out_seconds": inspection.observed_source_out_seconds}
         if request.audio_inspection_id is not None:
             audio_inspection = self.repository.get_audio_inspection(
                 request.audio_inspection_id
@@ -12046,6 +11990,14 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "Director advice Take and audio inspection do not refer to the same output"
                 )
+            from short_drama.observation_sources import audio_report_evidence
+            audio_evidence = audio_report_evidence(document, audio_inspection, shot_id=shot_id,
+                take_id=request.take_id, source_take=self.repository.get_take(audio_inspection.source_take_id)
+                if audio_inspection.source_take_id else None)
+            current_clip_ids = {str(item.get("clip_id")) for item in cast(list[dict[str, JsonValue]], audio_evidence["clip_inspections"])}
+            current_cue_ids = {str(item.get("cue_id")) for item in cast(list[dict[str, JsonValue]], audio_evidence["dialogue_checks"])}
+            shot_clip_inspections = [item for item in shot_clip_inspections if item.clip_id in current_clip_ids]
+            shot_dialogue_checks = [item for item in shot_dialogue_checks if item.cue_id in current_cue_ids]
             qa_issues.extend(
                 issue.model_copy(deep=True)
                 for item in shot_clip_inspections
@@ -12072,17 +12024,11 @@ class ShortDramaService:
                     category=QaFailureCategory.DIALOGUE_AUDIO,
                 )
                 for check in audio_inspection.speaker_checks
+                if check.model_dump(mode="json") in cast(list[JsonValue], audio_evidence["speaker_checks"])
                 if check.assessment == AudioContinuityAssessment.REVIEW
                 and bool(set(check.script_line_ids) & relevant_line_ids)
             )
-            reviewer_notes.append(
-                f"{audio_inspection.id}: {audio_inspection.summary}"
-            )
-            media_evidence["audio_inspection"] = {
-                "id": audio_inspection.id,
-                "clip_inspections": [item.model_dump(mode="json") for item in shot_clip_inspections],
-                "dialogue_checks": [item.model_dump(mode="json") for item in shot_dialogue_checks],
-            }
+            media_evidence["audio_inspection"] = audio_evidence
         if request.episode_review_id is not None:
             episode_review = self.repository.get_episode_review(
                 request.episode_review_id
@@ -12099,6 +12045,17 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "Director advice episode review has no evidence for this shot"
                 )
+            from short_drama.observation_sources import episode_report_is_current
+            takes = self.repository.list_takes(project_id)
+            current_findings = [item for item in linked_findings if all(
+                episode_report_is_current(document, episode_review, takes, shot_id=related_shot_id)
+                for related_shot_id in item.shot_ids)]
+            episode_current = len(current_findings) == len(linked_findings)
+            media_evidence["episode_review"] = {"id": episode_review.id,
+                "source_status": "CURRENT" if episode_current else "PARTIAL" if current_findings else "HISTORICAL_OR_UNVERIFIED",
+                "source_reasons": [] if episode_current else ["A finding's related shot, scene, media or editorial use changed, or source snapshot is missing"],
+                "historical_finding_ids": [item.id for item in linked_findings if item not in current_findings]}
+            linked_findings = current_findings
             qa_issues.extend(
                 item.issue.model_copy(deep=True) for item in linked_findings
             )
@@ -12546,38 +12503,11 @@ class ShortDramaService:
             )
 
     def _h3_route_source_checks(self, plan: H3ProductionRoutePlan) -> list[H3RouteSourceCheck]:
-        """Observe the current source without changing the saved READY snapshot."""
-        from short_drama.studio_references import assert_generation_references
+        """Observe current source without changing the saved READY snapshot."""
+        from short_drama.h3_source_checks import route_source_checks
 
-        checks: list[H3RouteSourceCheck] = []
         with self._lock:
-            document = self._require_project_document(plan.project_id)
-            for decision in plan.decisions:
-                status: Literal["CURRENT", "STALE", "UNKNOWN"] = "CURRENT"
-                reason: str | None = None
-                try:
-                    scoped = plan.model_copy(update={"decisions": [decision]})
-                    validate_route_plan_freshness(scoped, document)
-                    media = self._resolve_approved_asset_inputs(document, decision.media_inputs)
-                    for shot_id in decision.shot_ids or [decision.shot_id]:
-                        assert_generation_references(document, self._require_shot_in_document(document, shot_id), media, require_all=False)
-                    if decision.action == H3ShotRouteAction.GENERATE:
-                        validate_h3_probe(route=decision.route, prompt=decision.prompt,
-                            duration_seconds=decision.duration_seconds, media_inputs=media)
-                    reason = self._h3_route_operation_staleness_reason(scoped, media_inputs=media)
-                    if reason is not None:
-                        status = "STALE"
-                except (ValueError, OSError, KeyError) as exc:
-                    status, reason = "STALE", str(exc)
-                checks.append(H3RouteSourceCheck(
-                    route_plan_id=plan.id, state_revision=plan.state_revision,
-                    generation_unit_id=decision.generation_unit_id, shot_id=decision.shot_id,
-                    checked_at=utc_now(), status=status,
-                    scope="SAVED_OPERATION_SOURCE" if plan.source_operation_id else "CURRENT_INPUTS_ONLY",
-                    reason=reason if reason is not None else (None if plan.source_operation_id else
-                        "Current structured inputs checked; this legacy route has no saved operation source snapshot."),
-                ))
-        return checks
+            return route_source_checks(self._require_project_document(plan.project_id), plan, store=self.repository)
 
     def get_h3_production_route_plan(
         self, project_id: str, plan_id: str,
@@ -13844,33 +13774,35 @@ class ShortDramaService:
             raise ArtifactNotFoundError(task_id)
         return run
 
-    def list_h3_reconciliation_candidates(self) -> H3ReconciliationCandidatesResponse:
+    def list_h3_reconciliation_candidates(
+        self, *, offset: int = 0, page_size: int = 50, max_pages: int = 10,
+    ) -> H3ReconciliationCandidatesResponse:
         try:
-            tasks = self.h3_worker.list_reconciliation_candidates()
-        except H3ProviderConfigurationError as exc:
+            return self.h3_worker.list_reconciliation_candidates(offset=offset, page_size=page_size, max_pages=max_pages)
+        except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
-        return H3ReconciliationCandidatesResponse(tasks=tasks)
 
     def list_h3_reconciliation_candidates_for_task(
         self,
         project_id: str,
         task_id: str,
+        *, offset: int = 0, page_size: int = 50, max_pages: int = 10,
     ) -> H3ReconciliationCandidatesResponse:
         self._require_project_document(project_id)
         task = self._require_task(task_id)
         if task.project_id != project_id:
             raise ArtifactNotFoundError(task_id)
         try:
-            tasks = self.h3_worker.list_reconciliation_candidates_for_task(task_id)
+            return self.h3_worker.list_reconciliation_candidates_for_task(
+                task_id, offset=offset, page_size=page_size, max_pages=max_pages)
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
         except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
-        return H3ReconciliationCandidatesResponse(tasks=tasks)
 
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate:
         with self._lock:
@@ -13908,6 +13840,58 @@ class ShortDramaService:
             self.repository.save_project(document)
             return self._aggregate(document)
 
+    def enqueue_lip_sync(self, project_id: str, request: LipSyncRequest) -> LipSyncResponse:
+        self._require_lip_sync_execution()
+        return enqueue_lip_sync(self, project_id, request)
+
+    def _require_lip_sync_execution(self) -> None:
+        try:
+            self.video_edit_worker.require_execution()
+        except InvalidTaskTransition as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def get_kling_config(self) -> KlingProviderConfigResponse:
+        return self.kling_config.response()
+
+    def update_kling_config(self, request: KlingProviderConfigUpdate) -> KlingProviderConfigResponse:
+        self._require_lip_sync_execution()
+        return self.kling_config.update(request)
+
+    def retry_lip_sync_preparation(self, project_id: str, run_id: str) -> LipSyncResponse:
+        self._require_lip_sync_execution()
+        response = self.get_lip_sync(project_id, run_id)
+        try:
+            task = self.video_edit_worker.retry_preparation(response.task.id)
+        except InvalidTaskTransition as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        self._refresh_project_stage(project_id)
+        _log_video_task_transition(response.task, task, action="retry_lip_sync_preparation")
+        return self.get_lip_sync(project_id, run_id)
+
+    def get_lip_sync(self, project_id: str, run_id: str) -> LipSyncResponse:
+        return lip_sync_response(self, run_id, project_id=project_id)
+
+    def list_lip_sync(self, project_id: str) -> list[VideoEditRun]:
+        self._require_project_document(project_id)
+        return self.repository.list_video_edit_runs(project_id)
+
+    def adopt_lip_sync(self, project_id: str, run_id: str) -> LipSyncAdoptResponse:
+        self._require_lip_sync_execution()
+        return adopt_lip_sync(self, project_id, run_id)
+
+    def reconcile_lip_sync(self, project_id: str, run_id: str, provider_task_id: str | None = None) -> LipSyncResponse:
+        self._require_lip_sync_execution()
+        response = self.get_lip_sync(project_id, run_id)
+        try:
+            task = self.video_edit_worker.reconcile(response.task.id, provider_task_id)
+        except InvalidTaskTransition as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except KlingClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        self._refresh_project_stage(project_id)
+        _log_video_task_transition(response.task, task, action="reconcile_lip_sync")
+        return self.get_lip_sync(project_id, run_id)
+
     def get_generation_task(self, task_id: str) -> GenerationTask:
         return self._require_task(task_id)
 
@@ -13918,16 +13902,19 @@ class ShortDramaService:
     def advance_task(self, task_id: str) -> GenerationTask:
         persisted = self._require_task(task_id)
         try:
-            task = (
-                self.h3_worker.advance(task_id)
-                if persisted.provider == "minimax"
-                else self.worker.advance(task_id)
-            )
+            if persisted.provider == "minimax":
+                task = self.h3_worker.advance(task_id)
+            elif persisted.provider == "kling":
+                task = self.video_edit_worker.advance(task_id)
+            elif persisted.provider == "mock":
+                task = self.worker.advance(task_id)
+            else:
+                raise WorkflowConflictError(f"Unknown video provider: {persisted.provider}")
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
         except (InvalidTaskTransition, H3ProviderConfigurationError, H3CapabilityError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
-        except H3ClientError as exc:
+        except (H3ClientError, KlingClientError) as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         _log_video_task_transition(persisted, task, action="advance")
@@ -13964,22 +13951,46 @@ class ShortDramaService:
     def cancel_task(self, task_id: str) -> GenerationTask:
         persisted = self._require_task(task_id)
         try:
-            task = (
-                self.h3_worker.cancel(task_id)
-                if persisted.provider == "minimax"
-                else self.worker.cancel(task_id)
-            )
+            if persisted.provider == "minimax":
+                task = self.h3_worker.cancel(task_id)
+            elif persisted.provider == "kling":
+                task = self.video_edit_worker.cancel(task_id)
+            elif persisted.provider == "mock":
+                task = self.worker.cancel(task_id)
+            else:
+                raise WorkflowConflictError(f"Unknown video provider: {persisted.provider}")
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
         except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
-        except H3ClientError as exc:
+        except (H3ClientError, KlingClientError) as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         _log_video_task_transition(persisted, task, action="cancel")
         return task
 
     def retry_task(self, task_id: str) -> GenerationTask:
+        persisted = self._require_task(task_id)
+        if persisted.provider == "kling":
+            self._require_lip_sync_execution()
+            run = self.repository.get_video_edit_run_for_task(task_id)
+            if run is None or run.status not in {"FAILED", "CANCELLED"}:
+                raise WorkflowConflictError("未知、暂停或已有候选不能重发；请查询原任务或明确采用候选。")
+            if run.status == "FAILED" and run.submission_attempt_state == "NOT_STARTED":
+                return self.retry_lip_sync_preparation(persisted.project_id, run.id).task
+            if run.submission_attempt_state in {"STARTED", "UNKNOWN"}:
+                raise WorkflowConflictError("口型提交结果未知；请保留原任务并对账，不能重新生成。")
+            changed = self.video_edit_worker.source_changed(run)
+            if changed:
+                raise WorkflowConflictError(changed)
+            document = self._require_project_document(persisted.project_id)
+            request = run.request.model_copy(update={"expected_editorial_revision": (document.editorial_timeline or {}).get("revision", 1)})
+            retry = self.enqueue_lip_sync(persisted.project_id, request).task
+            retry.retry_of_task_id, retry.attempt = task_id, persisted.attempt + 1
+            self.repository.save_task(retry)
+            return retry
+        if persisted.provider not in {"mock", "minimax"}:
+            raise WorkflowConflictError(f"Unknown video provider: {persisted.provider}")
         with self._lock:
             task = self._require_task(task_id)
             if task.status not in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
@@ -14054,6 +14065,11 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "Use explicit MiniMax task reconciliation for an H3 SUBMIT_UNKNOWN task"
             )
+        if persisted.provider == "kling":
+            self._require_lip_sync_execution()
+            raise WorkflowConflictError("口型修复请使用 video.reconcile_lip_sync 查询原任务；已有 ID 时 request 可为空。")
+        if persisted.provider != "mock":
+            raise WorkflowConflictError(f"Unknown video provider: {persisted.provider}")
         try:
             task = self.worker.reconcile(task_id)
         except KeyError as exc:
@@ -14115,30 +14131,76 @@ class ShortDramaService:
     def recover_task_output(self, task_id: str) -> GenerationTask:
         persisted = self._require_task(task_id)
         try:
-            task = (
-                self.h3_worker.recover_output(task_id)
-                if persisted.provider == "minimax"
-                else self.worker.recover_output(task_id)
-            )
+            if persisted.provider == "minimax":
+                task = self.h3_worker.recover_output(task_id)
+            elif persisted.provider == "kling":
+                task = self.video_edit_worker.reconcile(task_id)
+            elif persisted.provider == "mock":
+                task = self.worker.recover_output(task_id)
+            else:
+                raise WorkflowConflictError(f"Unknown video provider: {persisted.provider}")
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
         except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
-        except H3ClientError as exc:
+        except (H3ClientError, KlingClientError) as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         _log_video_task_transition(persisted, task, action="recover_output")
         return task
 
+    def _validate_stale_take_reuse(self, document: ProjectDocument, take: Take) -> None:
+        """Recheck an explicitly chosen result after broad planning invalidation."""
+        if (take.storyboard_document_id is None or take.storyboard_version_id is None
+                or take.storyboard_document_id != document.storyboard_document_id):
+            raise WorkflowConflictError("A stale Take needs a matching current Storyboard before it can be selected")
+        board_document = self._production_document(document, take.storyboard_document_id)
+        source = self._parse_storyboard(self._production_document_version(board_document, take.storyboard_version_id))
+        current_version = self._production_document_version(board_document)
+        current = self._parse_storyboard(current_version)
+        current_shots, board_id, board_version_id = self._timeline_storyboard_truth(document)
+        if take.clip_group_id is not None:
+            source_group = next((item for item in source.clip_groups if item.id == take.clip_group_id), None)
+            current_group = next((item for item in current.clip_groups if item.id == take.clip_group_id), None)
+            if source_group is None or source_group != current_group:
+                raise WorkflowConflictError("The stale Take no longer matches its current clip group")
+        source_spec_document = self._production_document(document, source.production_spec_document_id)
+        source_spec = self._parse_production_spec(self._production_document_version(
+            source_spec_document, source.production_spec_version_id))
+        current_spec_document = self._production_document(document, current.production_spec_document_id)
+        current_spec = self._parse_production_spec(self._production_document_version(
+            current_spec_document, current.production_spec_version_id))
+        # Delivery notes and provider preferences do not change existing pixels.
+        # Creative direction and the actual shot inputs still have to match.
+        if (source_spec.visual != current_spec.visual or source_spec.audio != current_spec.audio
+                or source_spec.genre_and_setting != current_spec.genre_and_setting
+                or source_spec.language != current_spec.language or source_spec.aspect_ratio != current_spec.aspect_ratio
+                or source_spec.master_audio_binding_version_id != current_spec.master_audio_binding_version_id):
+            raise WorkflowConflictError("The stale Take no longer matches the current creative direction")
+        shots = {shot.id: shot for shot in current_shots}
+        for shot_id in take.covered_shot_ids():
+            if shot_id not in shots:
+                raise WorkflowConflictError("The stale Take covers a shot that is no longer current")
+            self._validate_timeline_take_source(document, take, shots[shot_id],
+                storyboard_document_id=board_id, storyboard_version_id=board_version_id)
+
     def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
-                    clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None) -> ProjectAggregate:
+                    clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None,
+                    source_in_seconds: float | None = None, source_out_seconds: float | None = None) -> ProjectAggregate:
+        from short_drama.studio_models import StudioTakeSelectRequest
+        try:
+            StudioTakeSelectRequest(shot_ids=shot_ids, clip_ids=clip_ids,
+                expected_editorial_revision=expected_editorial_revision,
+                source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         with self._lock:
             take = self.repository.get_take(take_id)
             if take is None:
                 raise ArtifactNotFoundError(take_id)
-            document = self._require_project_mutation_allowed(take.project_id)
-            if take.freshness != Freshness.CURRENT:
-                raise WorkflowConflictError("A stale Take cannot be selected for the current timeline")
+            if self.repository.get_video_edit_run_for_task(take.task_id) is not None:
+                self._require_lip_sync_execution()
+                raise WorkflowConflictError("口型候选仅适用于原选区；请使用 video.adopt_lip_sync，不能整镜替换。")
             if take.availability != TakeAvailability.AVAILABLE:
                 raise WorkflowConflictError("A missing Take cannot be selected")
             try:
@@ -14150,38 +14212,60 @@ class ShortDramaService:
                         raise OSError("file is empty")
             except OSError as exc:
                 raise WorkflowConflictError(f"Take {take.id} media is unavailable at {take.media_path}: {exc}; restore or select a usable file before adoption") from exc
-            selected_ids = shot_ids if shot_ids is not None else take.covered_shot_ids()
-            if not selected_ids or set(selected_ids) - set(take.covered_shot_ids()):
-                raise WorkflowConflictError("Selected shot_ids must be covered by this Take")
-            if expected_editorial_revision is not None and (document.editorial_timeline or {}).get("revision", 0) != expected_editorial_revision:
-                raise WorkflowConflictError("Current editorial changed; read the affected shot's current edit before adopting this candidate")
-            from short_drama.studio_take_selection import adopt_take_in_editorial
-            try:
-                adopted_ids = adopt_take_in_editorial(document, self.repository.list_takes(take.project_id), take, selected_ids, clip_ids=clip_ids)
-            except ValueError as exc:
-                raise WorkflowConflictError(str(exc)) from exc
-            selected = self.repository.select_take(take_id, shot_ids=adopted_ids)
-            if selected is None:
-                raise ArtifactNotFoundError(take_id)
-            self._invalidate_current_manifests(document)
-            now = utc_now()
-            if selected.output_slot_id is not None:
-                self._bind_output_slot_locked(
-                    document,
-                    OutputSlotBindRequest(
-                        slot_id=selected.output_slot_id,
-                        artifact_ref=ProductionDocumentArtifactRef(
-                            project_id=selected.project_id,
-                            artifact_type="take",
-                            artifact_id=selected.id,
+            # File IO stays outside the write transaction. The selection and
+            # actual edit must commit together, including a failed final save.
+            with self.repository.atomic():
+                if self.repository.get_take(take_id) != take:
+                    raise WorkflowConflictError("The candidate changed; read its current source before adopting it")
+                document = self._require_project_mutation_allowed(take.project_id)
+                reusing_stale_take = take.freshness != Freshness.CURRENT
+                selected_ids = shot_ids if shot_ids is not None else take.covered_shot_ids()
+                if not selected_ids or set(selected_ids) - set(take.covered_shot_ids()):
+                    raise WorkflowConflictError("Selected shot_ids must be covered by this Take")
+                if expected_editorial_revision is not None and (document.editorial_timeline or {}).get("revision", 0) != expected_editorial_revision:
+                    raise WorkflowConflictError("Current editorial changed; read the affected shot's current edit before adopting this candidate")
+                if reusing_stale_take:
+                    self._validate_stale_take_reuse(document, take)
+                if take.qa_status == QaStatus.REJECTED:
+                    raise WorkflowConflictError("A rejected Take cannot be selected; resolve the recorded failure or choose another usable candidate")
+                from short_drama.studio_take_selection import adopt_take_in_editorial
+                previous_editorial = document.editorial_timeline
+                try:
+                    adopted_ids = adopt_take_in_editorial(document, self.repository.list_takes(take.project_id), take, selected_ids,
+                        clip_ids=clip_ids, source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds)
+                except ValueError as exc:
+                    raise WorkflowConflictError(str(exc)) from exc
+                slot = self._project_output_slot(document, take.output_slot_id) if take.output_slot_id else None
+                binding_current = take.output_slot_id is None or (slot is not None and slot.current_artifact_ref is not None
+                    and slot.current_artifact_ref.artifact_type == "take" and slot.current_artifact_ref.artifact_id == take.id)
+                if (not reusing_stale_take and binding_current and document.editorial_timeline is previous_editorial
+                    and set(adopted_ids).issubset(take.selected_shot_ids)):
+                    return self._aggregate(document)
+                if reusing_stale_take:
+                    take.freshness = Freshness.CURRENT
+                    self.repository.save_take(take)
+                selected = self.repository.select_take(take_id, shot_ids=adopted_ids)
+                if selected is None:
+                    raise ArtifactNotFoundError(take_id)
+                self._invalidate_current_manifests(document)
+                now = utc_now()
+                if selected.output_slot_id is not None:
+                    self._bind_output_slot_locked(
+                        document,
+                        OutputSlotBindRequest(
+                            slot_id=selected.output_slot_id,
+                            artifact_ref=ProductionDocumentArtifactRef(
+                                project_id=selected.project_id,
+                                artifact_type="take",
+                                artifact_id=selected.id,
+                            ),
                         ),
-                    ),
-                    updated_at=now,
-                )
-            document.project.stage = self._task_derived_project_stage(take.project_id)
-            document.project.updated_at = now
-            self.repository.save_project(document)
-            return self._aggregate(document)
+                        updated_at=now,
+                    )
+                document.project.stage = self._task_derived_project_stage(take.project_id)
+                document.project.updated_at = now
+                self.repository.save_project(document)
+                return self._aggregate(document)
 
     def extract_take_frame(
         self, project_id: str, request: TakeFrameAssetRequest,
@@ -14219,13 +14303,50 @@ class ShortDramaService:
         take_id: str,
         request: VideoInspectionRequest,
     ) -> VideoInspectionResponse:
-        take = self.repository.get_take(take_id)
-        if take is None:
-            raise ArtifactNotFoundError(take_id)
-        document = self._require_project_document(take.project_id)
-        shot = self._require_shot_in_document(document, take.shot_id)
+        from short_drama.models import VideoEditorialContext
+        from short_drama.production_media_context import resolve_editorial_uses
+        from short_drama.studio_editorial import read_editorial
 
-        previous_shot, previous_take = self._video_inspection_previous_source(document, shot, take, request)
+        editorial_context: VideoEditorialContext | None = None
+        with self._lock:
+            take = self.repository.get_take(take_id)
+            if take is None:
+                raise ArtifactNotFoundError(take_id)
+            document = self._require_project_document(take.project_id)
+            shot = self._require_shot_in_document(document, take.shot_id)
+            if request.scope == "EDITORIAL":
+                takes = self.repository.list_takes(take.project_id)
+                # A grouped Take can be used by any of its shots. Without a
+                # selected clip, require one exact use of this Take.
+                editorial = read_editorial(self, take.project_id).project
+                clip_id = request.clip_id
+                if clip_id is None:
+                    from short_drama.studio_editorial import EditorProject
+                    editor = EditorProject.model_validate(editorial)
+                    timeline = next((item for item in editor.timelines if item.id == (request.timeline_id or editor.activeTimelineId)), None)
+                    uses = [item for item in timeline.clips if item.type == "video"
+                            and ((item.model_extra or {}).get("sourceTakeId") or item.assetId) == take.id] if timeline else []
+                    if len(uses) != 1:
+                        raise WorkflowConflictError("EDITORIAL requires an exact timeline_id/clip_id when the Take has zero or multiple uses")
+                    clip_id = uses[0].id
+                try:
+                    current_use, before = resolve_editorial_uses(document, target_shot_id=shot.id,
+                        editorial_project=editorial, takes=takes, timeline_id=request.timeline_id,
+                        clip_id=clip_id, require_target=True, include_previous=request.include_previous_boundary)
+                    if current_use is None or current_use.take_id != take.id:
+                        raise ValueError("Selected editorial clip does not use this Take")
+                    editorial_context = VideoEditorialContext(current=current_use,
+                        previous=before if request.include_previous_boundary else None,
+                        include_previous_boundary=request.include_previous_boundary)
+                    shot = self._require_shot_in_document(document, current_use.shot_id)
+                    previous_take = next((item for item in takes if before is not None and item.id == before.take_id), None) if request.include_previous_boundary else None
+                    previous_shot = self._require_shot_in_document(document, before.shot_id) if before is not None and request.include_previous_boundary else None
+                    request = request.model_copy(update={"source_in_seconds": current_use.source_in_seconds,
+                                                         "source_out_seconds": current_use.source_out_seconds})
+                except ValueError as exc:
+                    raise WorkflowConflictError(str(exc)) from exc
+            else:
+                previous_shot, previous_take = self._video_inspection_previous_source(document, shot, take, request)
 
         language_client = None
         if request.semantic_review:
@@ -14243,6 +14364,7 @@ class ShortDramaService:
                 request=request,
                 language_client=language_client,
                 created_at=utc_now(),
+                editorial_context=editorial_context,
             )
         except ValueError as exc:
             raise WorkflowConflictError(str(exc)) from exc
@@ -14415,9 +14537,13 @@ class ShortDramaService:
 
         with self._lock:
             document = self._require_project_document(project_id).model_copy(deep=True)
+        from short_drama.observation_sources import audio_source_context
+        from short_drama.take_audio import prepare_take_audio, take_audio_source_is_current
         created_at = utc_now()
-        editorial = editorial_audio_input(self, document, created_at)
-        manifest = editorial[0] if editorial else self._current_manifest(document)
+        candidate = prepare_take_audio(self, document, request, created_at) if request.scope == "TAKE" else None
+        source_context = candidate.source_context if candidate else audio_source_context(document)
+        editorial = editorial_audio_input(self, document, created_at) if candidate is None else None
+        manifest = candidate.manifest if candidate else editorial[0] if editorial else self._current_manifest(document)
         report = self.audio_inspector.inspect_manifest(
             document=document,
             manifest=manifest,
@@ -14425,7 +14551,18 @@ class ShortDramaService:
             semantic_service=self.audio_semantic_service,
             created_at=created_at,
         )
-        if editorial:
+        report.source_context = source_context
+        if candidate:
+            report.observation_scope, report.time_space = "TAKE", "TAKE_SOURCE"
+            report.source_take_id = candidate.take.id
+            report.observed_source_start_seconds, report.observed_source_end_seconds = candidate.start, candidate.end
+            report.technical_checks = [check for check in report.technical_checks if not check.name.startswith("subtitle-")]
+            report.summary = (f"Inspected original Take audio {candidate.start:g}–{candidate.end:g}s; "
+                "signal measurements only. No assumed dialogue timing, speaker verification, current FILM coverage or adoption.")
+            report.warnings.append("TAKE_SOURCE: clip timeline_start_seconds is the original Take source start; signal metric windows are local to extracted audio. Use audio.transcribe_native scope=TAKE for ASR. No timeline or subtitles were saved.")
+            if not take_audio_source_is_current(self.repository.get_take(candidate.take.id), source_context):
+                report.warnings.append("Original Take media or binding changed during inspection; this is historical source evidence")
+        elif editorial:
             report.source_editorial_revision = editorial[1]
             report.source_editorial_timeline_id = editorial[2]
             report.warnings.append(
@@ -14592,7 +14729,9 @@ class ShortDramaService:
             for item in self.repository.list_episode_reviews(document.project.id)
             if item.manifest_id == manifest.id
         ]
-        if existing and not force_new:
+        from short_drama.observation_sources import episode_report_is_current, episode_source_context
+        takes = self.repository.list_takes(document.project.id)
+        if existing and not force_new and episode_report_is_current(document, existing[-1], takes):
             return existing[-1]
         now = utc_now()
         report = EpisodeReviewReport(
@@ -14603,6 +14742,7 @@ class ShortDramaService:
             source_editorial_revision=editorial_revision,
             source_editorial_project=editorial_project,
             review_manifest=manifest if editorial_project is not None else None,
+            source_context=episode_source_context(document, manifest, takes, editorial_project),
             status=EpisodeReviewStatus.RUNNING,
             created_at=now,
             updated_at=now,
@@ -14620,6 +14760,9 @@ class ShortDramaService:
         if report.status != EpisodeReviewStatus.RUNNING:
             return report
         document = self._require_project_document(report.project_id)
+        from short_drama.observation_sources import episode_report_is_current
+        if not episode_report_is_current(document, report, self.repository.list_takes(document.project.id)):
+            raise WorkflowConflictError("Episode review sources changed; request review_current_episode again to inspect current content. Prior findings remain historical.")
         manifest = report.review_manifest or next(
             (item for item in document.manifests if item.id == report.manifest_id),
             None,
@@ -14670,6 +14813,8 @@ class ShortDramaService:
                     latest_inspection_by_take=latest_inspection_by_take,
                     client=client,
                     editorial_project=report.source_editorial_project,
+                    video_inspections=self.repository.list_video_inspections(document.project.id),
+                    audio_inspections=self.repository.list_audio_inspections(document.project.id),
                 )
             except (LanguageProviderError, ValueError) as exc:
                 return self._record_episode_review_failure(
@@ -14793,7 +14938,8 @@ class ShortDramaService:
         take_id: str,
         request: H3TakeReviewRequest,
     ) -> H3TakeReviewResponse:
-        with self._lock:
+        retraction_event: dict[str, JsonValue] | None = None
+        with self._lock, self.repository.atomic():
             take = self.repository.get_take(take_id)
             if take is None:
                 raise ArtifactNotFoundError(take_id)
@@ -14809,30 +14955,52 @@ class ShortDramaService:
                 )
 
             now = utc_now()
-            status = QaStatus.PASSED if request.hard_gate_passed else QaStatus.REJECTED
+            status = request.review_status or (QaStatus.PASSED if request.hard_gate_passed else QaStatus.PENDING)
+            withdrawn = set(request.retracted_issue_codes)
+            previous_issues = {issue.code: issue for issue in take.qa_report.issues}
+            if withdrawn:
+                if take.qa_status != QaStatus.REJECTED or not withdrawn <= previous_issues.keys():
+                    raise WorkflowConflictError("Read the current rejected Take and withdraw only its recorded issue codes")
+                if any(previous_issues[code].category == QaFailureCategory.TECHNICAL_MEDIA for code in withdrawn):
+                    raise WorkflowConflictError("Technical media failures cannot be withdrawn by semantic review")
+                retraction_event = {
+                    "project_id": take.project_id, "take_id": take.id,
+                    "retracted_issue_codes": cast(list[JsonValue], request.retracted_issue_codes),
+                    "reason": request.retraction_reason,
+                    "previous_report": take.qa_report.model_dump(mode="json"),
+                }
+            preserve_rejection = (status == QaStatus.PENDING and take.qa_status == QaStatus.REJECTED
+                                  and (not withdrawn or bool(previous_issues.keys() - withdrawn)))
+            if preserve_rejection or evidence.technical_passed is False:
+                status = QaStatus.REJECTED
             # A review request represents the current semantic judgment. Keep durable
             # media failures from the worker, but do not let superseded visual issues
             # accumulate forever across a reinspection of the same Take.
             merged_issues = {
                 issue.code: issue
                 for issue in take.qa_report.issues
-                if issue.category == QaFailureCategory.TECHNICAL_MEDIA
+                if issue.code not in withdrawn
+                and (preserve_rejection or issue.category == QaFailureCategory.TECHNICAL_MEDIA)
             }
             merged_issues.update({issue.code: issue for issue in request.issues})
+            review_notes = request.notes
+            if withdrawn:
+                review_notes += ("\n撤回旧判断（" + ", ".join(request.retracted_issue_codes)
+                                 + "）：" + (request.retraction_reason or ""))
             take.qa_status = status
             take.qa_report.status = status
             take.qa_report.hard_gate_passed = request.hard_gate_passed
             take.qa_report.score = request.score
             take.qa_report.issues = list(merged_issues.values())
-            take.qa_report.reviewer_notes = request.notes
+            take.qa_report.reviewer_notes = review_notes
             take.qa_report.reviewed_at = now
             was_selected = bool(take.selected_shot_ids)
-            if status != QaStatus.PASSED:
+            if status == QaStatus.REJECTED:
                 take.selected_shot_ids = []
                 take.is_selected = False
             self.repository.save_take(take)
 
-            if status != QaStatus.PASSED and was_selected:
+            if status == QaStatus.REJECTED and was_selected:
                 self._invalidate_current_manifests(document)
                 self._invalidate_take_output_slot_if_current_locked(
                     document,
@@ -14844,18 +15012,22 @@ class ShortDramaService:
             evidence.status = EvidenceStatus.REVIEWED
             evidence.hard_gate_passed = request.hard_gate_passed
             evidence.score = request.score
-            evidence.notes = request.notes
+            evidence.notes = review_notes
             evidence.reviewed_at = now
             self.repository.save_route_evidence(evidence)
 
             document.project.stage = self._task_derived_project_stage(take.project_id)
             document.project.updated_at = now
             self.repository.save_project(document)
-            return H3TakeReviewResponse(
+            response = H3TakeReviewResponse(
                 take=take,
                 evidence=evidence,
                 project=self._aggregate(document),
             )
+        if retraction_event is not None:
+            retraction_event["result_status"] = response.take.qa_status.value
+            record_trace("h3.review_retracted", retraction_event)
+        return response
 
     def revise_script_line(
         self,
@@ -15613,54 +15785,14 @@ class ShortDramaService:
         return document, shot, prompt, duration, media_inputs
 
     def _resolve_approved_asset_inputs(
-        self,
-        document: ProjectDocument,
-        media_inputs: list[H3MediaInput],
+        self, document: ProjectDocument, media_inputs: list[H3MediaInput],
     ) -> list[H3MediaInput]:
-        expected_kinds = {
-            AssetMediaType.IMAGE: H3MediaKind.IMAGE,
-            AssetMediaType.VIDEO: H3MediaKind.VIDEO,
-            AssetMediaType.AUDIO: H3MediaKind.AUDIO,
-        }
-        resolved: list[H3MediaInput] = []
-        for media in media_inputs:
-            if media.asset_version_id is None:
-                if media.subject_asset_id is not None:
-                    raise WorkflowConflictError(
-                        "A subject-linked H3 media input requires an AssetVersion"
-                    )
-                resolved.append(media)
-                continue
-            try:
-                _asset, version = resolve_current_asset_media(
-                    document,
-                    asset_version_id=media.asset_version_id,
-                    subject_asset_id=media.subject_asset_id,
-                    explicit_choice=True,
-                )
-            except AssetReferenceTruthError as exc:
-                raise WorkflowConflictError(
-                    str(exc)
-                ) from exc
-            expected_kind = expected_kinds.get(version.media_type)
-            if expected_kind is None or expected_kind != media.kind:
-                raise WorkflowConflictError(
-                    f"Approved asset version {version.id} is not compatible with {media.kind.value}"
-                )
-            if version.local_path is not None:
-                source = H3MediaSource(local_path=version.local_path)
-            elif version.external_url is not None:
-                source = H3MediaSource(external_url=version.external_url)
-            else:
-                raise WorkflowConflictError(
-                    f"Approved asset version {version.id} has no usable media source"
-                )
-            resolved.append(media.model_copy(update={"source": source}))
+        from short_drama.h3_source_checks import resolve_h3_asset_inputs
+
         try:
-            validate_h3_audio_durations(document, resolved)
-        except H3CapabilityError as exc:
+            return resolve_h3_asset_inputs(document, media_inputs)
+        except ValueError as exc:
             raise WorkflowConflictError(str(exc)) from exc
-        return resolved
 
     def _h3_candidate_request_fingerprint(
         self,

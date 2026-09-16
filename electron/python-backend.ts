@@ -231,6 +231,7 @@ export function getPythonPath(): string {
       logger.info(`Using bundled Python: ${bundledPython}`)
       return bundledPython
     }
+    throw new Error(`应用安装包缺少本地运行环境：${bundledPython}。请重新安装完整的 Short Drama Studio 应用。`)
   }
 
   // Check for venv in backend directory
@@ -474,7 +475,9 @@ export async function startPythonBackend(): Promise<void> {
 
         backendOwnership = null
         publishBackendHealthStatus({ status: 'dead', exitCode: code })
-        settleReject(new Error(`Python backend exited during startup with code ${code}`))
+        settleReject(new Error(sawPortConflict && process.env.LTX_PORT
+          ? `本地端口 ${process.env.LTX_PORT} 已被其他程序占用。释放该端口后可重试启动。`
+          : `本地制片服务在启动时退出（退出码 ${code ?? '未知'}）。请查看本次日志中的具体错误。`))
         return
       }
 

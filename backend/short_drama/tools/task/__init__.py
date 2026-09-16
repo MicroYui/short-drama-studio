@@ -142,7 +142,8 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
     )
     register_action(
         tool_id="task.retry",
-        description="Retry one failed persisted generation task.",
+        description=("Explicitly retry one failed or cancelled persisted generation task for a supported provider. "
+            "Fix the concrete problem first. Unknown submissions must be reconciled, not retried."),
         action=service.retry_task,
         effect=ToolEffect.WRITE,
     )

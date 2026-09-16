@@ -37,8 +37,8 @@ def _saved_project(document: ProjectDocument) -> tuple[EditorProject, EditorTime
 
 def native_audio_sources(service: ShortDramaService, document: ProjectDocument, project: EditorProject,
                     timeline: EditorTimeline) -> list[NativeSource]:
+    from short_drama.studio_audio_selection import clip_audio_delegated, clip_audio_origin, clip_audio_path
     assets = {asset.id: asset for asset in project.assets}
-    clips = {clip.id: clip for clip in timeline.clips}
     takes = {take.id: take for take in service.repository.list_takes(document.project.id)}
     solo = any(track.solo for track in timeline.tracks)
     sources: list[NativeSource] = []
@@ -46,17 +46,17 @@ def native_audio_sources(service: ShortDramaService, document: ProjectDocument, 
         track = timeline.tracks[clip.trackIndex]
         if clip.type not in {"video", "audio"} or not track.enabled or (solo and not track.solo) or track.muted or clip.muted or clip.volume == 0:
             continue
+        if clip_audio_delegated(clip, timeline.clips, assets):
+            continue
         asset = assets.get(clip.assetId or "")
         if asset is None:
             continue
-        extra = clip.model_extra or {}
-        links = cast(list[str], extra.get("linkedClipIds", []))
-        video = clip if clip.type == "video" else next((clips[item] for item in links if item in clips and clips[item].type == "video"), None)
-        origin = (video.model_extra or {}) if video is not None else extra
+        origin = clip_audio_origin(clip, timeline.clips, assets).model_extra or {}
+        source_path = clip_audio_path(clip, assets)
         take_id, shot_id = str(origin.get("sourceTakeId") or ""), str(origin.get("sourceShotId") or "")
         take = takes.get(take_id)
-        if take is not None and take.media_path == asset.path and shot_id:
-            sources.append(NativeSource(clip, take_id, shot_id, asset.path))
+        if take is not None and take.media_path == source_path and shot_id and source_path:
+            sources.append(NativeSource(clip, take_id, shot_id, source_path))
     return sources
 
 

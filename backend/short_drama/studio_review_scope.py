@@ -6,6 +6,7 @@ from pydantic import JsonValue
 from short_drama.agent_runtime.models import ActionRecord, PlanStep, WorkOrder
 from short_drama.models import ProjectDocument
 from short_drama.studio_changes import list_changes
+from short_drama.studio_models import StudioChangeSet
 
 
 @dataclass
@@ -16,10 +17,11 @@ class ReviewScope:
 
 
 def pending_review_scope(document: ProjectDocument, run_id: str, work_orders: list[WorkOrder],
-                         steps: list[PlanStep], actions: list[ActionRecord]) -> ReviewScope:
+                         steps: list[PlanStep], actions: list[ActionRecord], *,
+                         changes: list[StudioChangeSet] | None = None) -> ReviewScope:
     scope = ReviewScope()
     target_ids: set[str] = set()
-    for change in list_changes(document):
+    for change in list_changes(document) if changes is None else changes:
         if change.run_id != run_id:
             continue
         pending = [item for item in change.items if item.status == "pending"]

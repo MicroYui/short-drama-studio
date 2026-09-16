@@ -137,13 +137,16 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
         return ToolExecution(output=result, warnings=tuple(result.warnings))
 
     registry.register(ToolSpec(
-        id="audio.transcribe_native", version=1, category=ToolCategory.AUDIO,
+        id="audio.transcribe_native", version=2, category=ToolCategory.AUDIO,
         description=(
-            "Transcribe actual audible native Take audio without requiring existing captions. "
-            "Reads the selected Studio timeline with actual trims, speed, reverse, volume and track audibility; "
+            "Transcribe native sound from current EDITORIAL uses or an original candidate TAKE, without saving edits or adopting. "
+            "For an unadopted/rejected candidate, pass scope=TAKE, take_id and optional source_start_seconds/source_end_seconds; "
+            "returns TAKE_SOURCE times, no editorial revision or clip IDs. Never create a temporary saved timeline just to listen. "
+            "Default EDITORIAL reads the selected Studio timeline with actual trims, speed, reverse, volume and track audibility; "
             "music and separate narration are excluded. Optional clip_ids/shot_ids limit scope. "
             "Returns source revision, original ASR text and approximate character times in FILM coordinates, "
             "plus a persisted report. Does not save captions or claim speaker/lip-sync verification. "
+            "TAKE_SOURCE is not FILM placement or current-cut coverage; read the actual use and map times before creating captions. "
             "For first captions, review transcription against actual dialogue then use timeline.edit_clips add_subtitles; "
             "audio.align_subtitles adjusts already-existing caption timing."
         ), effect=ToolEffect.READ, idempotent=True,
@@ -313,10 +316,14 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
     registry.register(
         ToolSpec(
             id="audio.inspect_manifest",
-            version=1,
+            version=2,
             category=ToolCategory.AUDIO,
             description=(
-                "Inspect audio and subtitles from the saved Studio editorial timeline, including "
+                "Inspect current EDITORIAL sound/subtitles or an original candidate TAKE range, without adopting or saving edits. "
+                "For candidate signal measurements pass scope=TAKE, take_id and optional source_start_seconds/source_end_seconds. "
+                "TAKE does not require selection/QA; it returns TAKE_SOURCE evidence and never assumes dialogue cue times, "
+                "speaker identity or current-cut coverage. Use audio.transcribe_native with the same TAKE scope for ASR. "
+                "Default EDITORIAL inspects the saved Studio editorial timeline, including "
                 "current trims, timing, mute, volume and speed, and persist a report tied to its "
                 "editorial revision. Does not rebuild or replace edits. Uses the current legacy "
                 "TimelineManifest only when no Studio edit has been saved. The Studio report's "

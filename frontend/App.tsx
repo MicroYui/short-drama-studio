@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { PythonSetup } from './components/PythonSetup'
+import { StudioStartupFailure } from './components/StudioStartupFailure'
 import { StudioWorkspace } from './features/short-drama/StudioWorkspace'
 import { useBackend } from './hooks/use-backend'
 import { logger } from './lib/logger'
@@ -11,58 +12,64 @@ export default function App() {
 
 function DesktopStudio() {
   const [pythonReady, setPythonReady] = useState<boolean | null>(null)
-  const [backendStartRequested, setBackendStartRequested] = useState(false)
+  const [startupAttempt, setStartupAttempt] = useState(0)
+  const [starting, setStarting] = useState(true)
+  const [startupError, setStartupError] = useState<string | null>(null)
+  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   const { connected, processStatus, isLoading } = useBackend()
+  const workspaceReady = pythonReady === true && connected && !isLoading
+
+  useEffect(() => {
+    if (workspaceReady) setWorkspaceOpened(true)
+  }, [workspaceReady])
 
   useEffect(() => {
     let cancelled = false
     const check = async () => {
+      let stage = '检查本地运行环境'
       try {
         const result = await window.electronAPI.checkPythonReady()
         if (!cancelled) setPythonReady(result.ready)
+        if (result.ready) {
+          stage = '启动本地制片服务'
+          await window.electronAPI.startPythonBackend()
+        }
       } catch (error) {
-        logger.error(`Failed to check Python readiness: ${error}`)
-        if (!cancelled) setPythonReady(true)
+        logger.error(`Failed to prepare Studio backend: ${error}`)
+        if (!cancelled) setStartupError(`${stage}失败：${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        if (!cancelled) setStarting(false)
       }
     }
     void check()
     return () => { cancelled = true }
-  }, [])
+  }, [startupAttempt])
 
-  useEffect(() => {
-    if (pythonReady !== true || backendStartRequested) return
-    setBackendStartRequested(true)
-    void window.electronAPI.startPythonBackend().catch((error) => {
-      logger.error(`Failed to start Python backend: ${error}`)
-    })
-  }, [backendStartRequested, pythonReady])
+  const retryStartup = () => {
+    setStartupError(null)
+    setStarting(true)
+    setStartupAttempt(value => value + 1)
+  }
+
+  // Keep the same workspace instance after its first successful connection.
+  // Replacing it with a launch screen would discard every unsaved editor/chat input.
+  if (workspaceOpened || workspaceReady) {
+    return <StudioWorkspace backendStatus={processStatus ?? 'restarting'} onReconnect={() => window.electronAPI.startPythonBackend()} />
+  }
+
+  if (startupError || (pythonReady === true && processStatus === 'dead' && !starting)) {
+    return <StudioStartupFailure reason={startupError ?? '本地服务已退出。可重试启动，或打开本次日志查看具体原因。'} onRetry={retryStartup} />
+  }
 
   if (pythonReady === null) {
     return <LaunchStatus title="正在准备短剧工作台" detail="检查本地运行环境…" />
   }
 
   if (!pythonReady) {
-    return <PythonSetup onReady={() => setPythonReady(true)} />
+    return <PythonSetup onReady={() => { setPythonReady(true); retryStartup() }} />
   }
 
-  if (processStatus === 'dead') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#08090c] p-6 text-zinc-100">
-        <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-950/20 p-6 text-center">
-          <AlertCircle className="mx-auto h-10 w-10 text-red-400" />
-          <h1 className="mt-4 text-lg font-semibold">本地制片核心未能启动</h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">请重新启动应用。已保存的项目和制作记录仍在本机，可继续编辑。</p>
-          <button className="mt-5 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950" onClick={() => window.location.reload()}>重新加载</button>
-        </div>
-      </div>
-    )
-  }
-
-  if (isLoading || !connected) {
-    return <LaunchStatus title="正在打开工作台" detail="准备项目、素材和剪辑工具…" />
-  }
-
-  return <StudioWorkspace />
+  return <LaunchStatus title="正在打开工作台" detail="准备项目、素材和剪辑工具…" />
 }
 
 function LaunchStatus({ title, detail }: { title: string; detail: string }) {

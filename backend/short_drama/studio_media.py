@@ -38,7 +38,8 @@ def referenced_media_paths(value: JsonValue) -> set[Path]:
     return paths
 
 
-def resolve_media_path(service: ShortDramaService, path: str, project_id: str | None = None) -> Path:
+def resolve_media_path(service: ShortDramaService, path: str, project_id: str | None = None,
+                       *, require_exists: bool = True) -> Path:
     candidate = Path(path).expanduser().resolve()
     # Index once for a grid of thumbnails; refresh on a newly imported path.
     # Existing files remain registered in project history even after replacement.
@@ -53,7 +54,7 @@ def resolve_media_path(service: ShortDramaService, path: str, project_id: str | 
             cache[project_id] = paths
         if candidate not in cache[project_id]:
             raise ValueError("文件未登记到项目媒体中，请先导入。")
-    if not candidate.is_file():
+    if require_exists and not candidate.is_file():
         raise FileNotFoundError("项目记录中的媒体文件未找到，请重新导入。")
     return candidate
 

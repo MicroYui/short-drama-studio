@@ -126,10 +126,10 @@ class FakeH3Client:
     def query(self, task_id: str) -> H3RemoteTask:
         return self.remote_tasks[task_id].model_copy(deep=True)
 
-    def list_tasks(self, *, page_size: int = 20) -> list[H3RemoteTask]:
+    def list_tasks(self, *, page_size: int = 20, offset: int = 0) -> list[H3RemoteTask]:
         return [
             task.model_copy(deep=True)
-            for task in list(self.remote_tasks.values())[:page_size]
+            for task in list(self.remote_tasks.values())[offset:offset + page_size]
         ]
 
     def cancel_or_delete(self, task_id: str) -> H3DeleteResponse:
@@ -1229,6 +1229,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
         take.id,
         H3TakeReviewRequest(
             hard_gate_passed=False,
+            review_status=QaStatus.REJECTED,
             score=2.8,
             notes="The first semantic review found a composition issue.",
             issues=[
@@ -1249,6 +1250,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
         take.id,
         H3TakeReviewRequest(
             hard_gate_passed=False,
+            review_status=QaStatus.REJECTED,
             score=3.1,
             notes="The current semantic review replaces the superseded issue list.",
             issues=[
@@ -1350,6 +1352,7 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
         take.id,
         H3TakeReviewRequest(
             hard_gate_passed=False,
+            review_status=QaStatus.REJECTED,
             score=1.5,
             notes="The actor turns their head back against the intended travel direction.",
             issues=[

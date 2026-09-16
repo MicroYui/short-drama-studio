@@ -18,6 +18,7 @@ import imageio_ffmpeg
 import numpy as np
 
 from short_drama.media import MediaGenerationError
+from short_drama.audio_resources import AudioResourceManager
 from short_drama.models import (
     AudioClipInspection,
     AudioContinuityAssessment,
@@ -109,6 +110,7 @@ class TransformersAudioSemanticService:
     ) -> None:
         self.transcription_model = transcription_model
         self.speaker_model = speaker_model
+        self.audio_resources = AudioResourceManager(transcription_model, speaker_model)
         self._requested_device = device
         self._resolved_device: str | None = None
         self._transcription_processor: Any | None = None
@@ -161,18 +163,19 @@ class TransformersAudioSemanticService:
     def _load_transcriber(self) -> tuple[Any, Any]:
         if self._transcription_processor is not None and self._transcription_network is not None:
             return self._transcription_processor, self._transcription_network
+        model_path = self.audio_resources.require_cached("transcription")
         from transformers import AutoProcessor, WhisperForConditionalGeneration
 
         processor = cast(
             Any,
             AutoProcessor.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
-                self.transcription_model
+                model_path, local_files_only=True
             ),
         )
         network = cast(
             Any,
             WhisperForConditionalGeneration.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
-                self.transcription_model
+                model_path, local_files_only=True
             ),
         )
         network.to(self._device())
@@ -186,18 +189,19 @@ class TransformersAudioSemanticService:
             return None
         if self._speaker_processor is not None and self._speaker_network is not None:
             return self._speaker_processor, self._speaker_network
+        model_path = self.audio_resources.require_cached("speaker")
         from transformers import AutoFeatureExtractor, WavLMForXVector
 
         processor = cast(
             Any,
             AutoFeatureExtractor.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
-                self.speaker_model
+                model_path, local_files_only=True
             ),
         )
         network = cast(
             Any,
             WavLMForXVector.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
-                self.speaker_model
+                model_path, local_files_only=True
             ),
         )
         network.to(self._device())

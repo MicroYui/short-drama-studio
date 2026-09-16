@@ -13,6 +13,7 @@ files:
   - package.json
   - LICENSE.txt
   - NOTICES.md
+  - licenses/**/*
   - resources/studio-icon.png
   - resources/studio-icon.ico
   - "!**/*.map"
@@ -40,6 +41,10 @@ extraResources:
       - "!outputs/**"
       - "!models/**"
       - "!tests/**"
+      # The short-drama product does not run or distribute the upstream LTX model backend.
+      - "!services/**"
+      - "!handlers/**"
+      - "!ltx2_server.py"
   - from: python-deps-hash.txt
     to: python-deps-hash.txt
 
@@ -88,6 +93,10 @@ mac:
         - "**/*"
         - "!__pycache__/**"
         - "!*.pyc"
+        - "!**/site-packages/ltx_core/**"
+        - "!**/site-packages/ltx_pipelines/**"
+        - "!**/site-packages/ltx_core-*.dist-info/**"
+        - "!**/site-packages/ltx_pipelines-*.dist-info/**"
   target:
     - target: dmg
       arch:

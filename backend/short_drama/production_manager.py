@@ -505,7 +505,11 @@ class ProjectDocumentStore(Protocol):
 class AgentPlanProposal(DomainModel):
     """A complete, replaceable plan authored by an Agent or supplied by a caller."""
 
-    summary: str = Field(min_length=1, max_length=4000)
+    summary: str = Field(min_length=1, max_length=4000, description=(
+        "计划摘要。当本计划完成且 goal_complete=true 时，此字段会原样作为最终聊天答复展示给用户："
+        "直接说明实际交付、需要用户查看的真实文件路径和未解决事项，不写给 Agent 的汇报指令。"
+        "目标未完成时仍写当前计划摘要。"
+    ))
     # Appended plans retain earlier steps; their history must not hit the former
     # per-response limit. The language request still has its token/output budget.
     steps: list[PlanStep] = Field(default_factory=list[PlanStep])
@@ -628,7 +632,7 @@ class AgentWorkOrderResultRequest(DomainModel):
     concise_summary: str = Field(min_length=1, max_length=4000, description="本次分工的完成判断与结果摘要；无需重复逐项抄写已保存的媒体元数据。")
     saved_tool_result_sequences: list[Annotated[int, Field(strict=True, ge=1)]] = Field(
         default_factory=list[int],
-        description="可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
+        description="可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。历史剪辑 revision 保留为保存时来源并标明当前性，不自动声明当前整条时间线未变；明确当前输出用 updated_artifacts。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
     )
     deliverable: dict[str, JsonValue] = Field(
         default_factory=dict[str, JsonValue],
@@ -2341,7 +2345,7 @@ def _specialist_working_set(
                 if compact_result is None
                 else compact_result.get("status")
             ),
-            request_identifiers=_specialist_request_identifiers(turn.arguments),
+            request_identifiers=_specialist_checkpoint_arguments(turn.tool_name, turn.arguments),
             artifact_refs=turn_refs,
             error=(None if compact_result is None else compact_result.get("error")),
         )
@@ -2688,6 +2692,21 @@ def _specialist_working_set(
             # The selected version appears once in this exact read. Rebuild its
             # entity only when a later related write retires the broad snapshot.
             entities.pop(key)
+    current_assets = {entity.state["current_version_id"]: entity for entity in entities.values()
+        if entity.kind == "asset" and isinstance(entity.state.get("current_version_id"), str)}
+    for key, entity in list(entities.items()):
+        if entity.kind != "asset_version":
+            continue
+        asset = current_assets.get(entity.id)
+        if (asset is not None and asset.state.get("current_version_id") == entity.id
+            and asset.state.get("descriptor_version_id") == entity.id
+            and "descriptor" in entity.state
+            and asset.state.get("descriptor") == entity.state["descriptor"]):
+            # The current definition is already visible on this exact Asset.
+            # Other versions retain their own descriptors; saved Tool results
+            # and construction metadata are not changed by this projection.
+            entities[key] = entity.model_copy(update={"state": {
+                name: value for name, value in entity.state.items() if name != "descriptor"}})
     repair_tool_schema_ids = sorted(pending_tool_repairs)
     if latest_turn is not None:
         latest_repair = pending_tool_repairs.get(latest_turn.tool_name)
@@ -2978,7 +2997,7 @@ def _specialist_turn_handoff(
     selected_version_ids: frozenset[str] = frozenset(),
 ) -> dict[str, JsonValue]:
     request_arguments = (
-        _specialist_request_identifiers(turn.arguments)
+        _specialist_checkpoint_arguments(turn.tool_name, turn.arguments)
         if identifiers_only
         else _compact_specialist_tool_arguments(
             turn.tool_name,
@@ -3079,6 +3098,21 @@ def _fold_saved_storyboard_directory(
             kind="storyboard_directory", id=doc_id, source_tool=turn.tool_name,
             source_sequence=turn.sequence, state=saved,
         )
+
+
+def _specialist_checkpoint_arguments(
+    tool_name: str, arguments: Mapping[str, JsonValue],
+) -> dict[str, JsonValue]:
+    identifiers = _specialist_request_identifiers(arguments)
+    if tool_name == "video.select_take":
+        # A Take/clip ID alone cannot distinguish planned-window adoption from
+        # an exact observed source interval. Keep this small operation scope in
+        # both the next handoff and its later checkpoint, without replaying a
+        # ProjectAggregate or treating proposed arguments as saved facts.
+        for key in ("expected_editorial_revision", "source_in_seconds", "source_out_seconds"):
+            if key in arguments:
+                identifiers[key] = arguments[key]
+    return identifiers
 
 
 def _specialist_request_identifiers(
@@ -5919,10 +5953,15 @@ class ProductionManager:
                 return None
             document = self._require_project(snapshot.run.project_id)
             self.refresh_project_memory(document)
-            prepared = CompletionPlanningInput(
+            # Built only from typed persisted state, not an authored proposal.
+            # Skip nested proposal revalidation for an exhausted carried wait.
+            prepared = CompletionPlanningInput.model_construct(
                 run_id=run_id, plan_revision_id=plan.id, completed_work_order_ids=new_ids,
                 latest_user_instructions=list(snapshot.run.latest_user_instructions),
-                current_plan=AgentPlanProposal(
+                # This is a persisted state view. Its last carried Worker may
+                # just have returned to the Leader, leaving no executable work.
+                # New authored proposals still require a valid progress path.
+                current_plan=AgentPlanProposal.model_construct(
                     summary=plan.summary, steps=plan.steps,
                     selected_method_skill_ids=plan.selected_method_skill_ids,
                     method_selection_rationale=plan.method_selection_rationale,
@@ -7240,7 +7279,7 @@ class ProductionManager:
             ]}.values())
             completion_receipts = (
                 verify_completion_claims(self.projects, project_id=run.project_id,
-                    artifact_refs=[*request.created_artifacts, *request.updated_artifacts, *saved_results.artifact_refs],
+                    artifact_refs=[*request.created_artifacts, *request.updated_artifacts, *saved_results.current_artifact_refs],
                     expected_output_slot_ids=work_order.expected_output_slot_ids,
                     deliverable=request.deliverable)
                 if request.status == AgentResultStatus.COMPLETED else []
@@ -7276,7 +7315,7 @@ class ProductionManager:
             None,
         )
         handoff_refs = _artifact_write_handoff_refs(
-            [*request.created_artifacts, *request.updated_artifacts, *saved_results.artifact_refs]
+            [*request.created_artifacts, *request.updated_artifacts, *saved_results.current_artifact_refs]
         )
         if action is not None:
             if request.status == AgentResultStatus.COMPLETED:
@@ -8970,11 +9009,18 @@ class ProductionManager:
         elif tool_name in _REAL_H3_ONLY_TOOL_IDS:
             required_target = ProductionExecutionTarget.REAL_H3
         elif tool_name in _PROVIDER_BOUND_TASK_TOOL_IDS and task is not None:
-            required_target = (
-                ProductionExecutionTarget.REAL_H3
-                if task.provider == "minimax"
-                else ProductionExecutionTarget.MOCK
-            )
+            if task.provider == "minimax":
+                required_target = ProductionExecutionTarget.REAL_H3
+            elif task.provider == "kling":
+                raise AgentToolScopeError(
+                    "当前视频生成仅支持 MiniMax H3；历史 Kling 任务只可读取或取消。"
+                )
+            elif task.provider == "mock":
+                required_target = ProductionExecutionTarget.MOCK
+            else:
+                raise AgentToolScopeError(
+                    f"Tool {tool_name!r} cannot execute unknown video provider {task.provider!r}"
+                )
         if required_target is not None and agent_run_id is not None:
             run = self.runtime.store.get_run(agent_run_id)
             if run is None:

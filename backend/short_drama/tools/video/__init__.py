@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from short_drama.video_edit_models import LipSyncResponse
+
 from short_drama.media_frame_asset import TakeFrameAssetRequest, TakeFrameAssetResponse
 
 from short_drama.models import (
@@ -27,15 +29,20 @@ from short_drama.tools.contracts import (
     ToolSpec,
 )
 from short_drama.tools.registry import ToolRegistry
+from short_drama.studio_models import StudioTakeSelectRequest
+from short_drama.tools.video.selection_receipt import take_selection_receipt
 
 
 class VideoToolService(Protocol):
+    def get_lip_sync(self, project_id: str, run_id: str) -> LipSyncResponse: ...
+
     def extract_take_frame(self, project_id: str, request: TakeFrameAssetRequest) -> TakeFrameAssetResponse: ...
 
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate: ...
 
     def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
-                    clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None) -> ProjectAggregate: ...
+                    clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None,
+                    source_in_seconds: float | None = None, source_out_seconds: float | None = None) -> ProjectAggregate: ...
 
     def inspect_take_video(
         self,
@@ -62,6 +69,11 @@ class VideoToolService(Protocol):
     ) -> GenerationTask: ...
 
 
+class VideoLipSyncRunInput(ToolModel):
+    project_id: str
+    run_id: str
+
+
 class VideoEnqueueInput(ToolModel):
     project_id: str
     request: EnqueueRequest
@@ -72,11 +84,8 @@ class VideoExtractFrameInput(ToolModel):
     request: TakeFrameAssetRequest
 
 
-class VideoSelectTakeInput(ToolModel):
+class VideoSelectTakeInput(StudioTakeSelectRequest):
     take_id: str
-    shot_ids: list[str] | None = None
-    clip_ids: list[str] | None = None
-    expected_editorial_revision: int | None = None
 
 
 class VideoInspectTakeInput(ToolModel):
@@ -101,6 +110,13 @@ class VideoLocalReworkInput(ToolModel):
 
 
 def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
+    registry.register(ToolSpec(id="video.get_lip_sync", version=1, category=ToolCategory.VIDEO,
+        description=("Read only a historical lip-sync run, submission state, candidate and adoption result. "
+            "No model call or state change. Current video generation uses MiniMax H3; Kling execution is unavailable."),
+        effect=ToolEffect.READ, idempotent=True, input_model=VideoLipSyncRunInput, output_model=LipSyncResponse,
+        handler=lambda request: ToolExecution(output=service.get_lip_sync(request.project_id, request.run_id)),
+        tags=frozenset({"video", "lip_sync", "read"})))
+
     def extract_frame(request: VideoExtractFrameInput) -> ToolExecution[TakeFrameAssetResponse]:
         result = service.extract_take_frame(request.project_id, request.request)
         return ToolExecution(output=result, artifact_refs=(
@@ -181,25 +197,29 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
 
     def select(request: VideoSelectTakeInput) -> ToolExecution[ProjectAggregate]:
         project = service.select_take(request.take_id, shot_ids=request.shot_ids,
-            clip_ids=request.clip_ids, expected_editorial_revision=request.expected_editorial_revision)
+            clip_ids=request.clip_ids, expected_editorial_revision=request.expected_editorial_revision,
+            source_in_seconds=request.source_in_seconds, source_out_seconds=request.source_out_seconds)
         project_id = project.document.project.id
+        refs = (ArtifactRef(project_id=project_id, artifact_type="take", artifact_id=request.take_id),)
         return ToolExecution(
             output=project,
-            artifact_refs=(
-                ArtifactRef(
-                    project_id=project_id,
-                    artifact_type="take",
-                    artifact_id=request.take_id,
-                ),
-            ),
+            artifact_refs=refs,
+            receipt=take_selection_receipt(project, request.take_id, request, refs),
         )
 
     registry.register(
         ToolSpec(
             id="video.select_take",
-            version=1,
+            version=2,
             category=ToolCategory.VIDEO,
-            description="Select one current Take for its shot.",
+            description=("Adopt a usable Take for its shot, or use clip_ids to replace only specific current uses. "
+                "For an observed candidate interval, supply source_in_seconds/source_out_seconds, exactly one clip_id "
+                "and expected_editorial_revision. The source span must equal that clip's duration × speed. "
+                "Preserves film position, duration, user controls, subtitles and unselected uses; replaces only the "
+                "selected video's source and its linked native sound. Align changed dialogue captions separately "
+                "with timeline.edit_clips after observing the actual candidate audio. The receipt reports the saved "
+                "editorial revision and actual adopted clip/source intervals and native sound bindings; an unchanged "
+                "revision can acknowledge an already identical adoption. This acknowledges selection, not quality review or export."),
             effect=ToolEffect.WRITE,
             idempotent=True,
             input_model=VideoSelectTakeInput,
@@ -214,6 +234,8 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
         project_id = result.project.document.project.id
         return ToolExecution(
             output=result,
+            warnings=tuple([*result.report.warnings,
+                "视频观察没有听审。音频片段可独立播放；已采用的原声可用 audio.transcribe_native、audio.align_subtitles 或 audio.inspect_manifest 分析，所用坐标以各工具合同为准。"]),
             artifact_refs=(
                 ArtifactRef(
                     project_id=project_id,
@@ -231,10 +253,17 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     registry.register(
         ToolSpec(
             id="video.inspect_take",
-            version=2,
+            version=4,
             category=ToolCategory.VIDEO,
             description=(
                 "Inspect a generated Take or explicit source_in/source_out interval; persist visual observations, exact scope and source revisions. "
+                "For the current edit or neighboring cut use scope=EDITORIAL with timeline_id/clip_id from timeline.read_editorial. "
+                "EDITORIAL resolves the selected clip's trim/speed/reverse and actual predecessor; omit source_in/out and previous_take_id. "
+                "Multiple uses require a clip ID; unresolved or overlapping uses are reported instead of guessed. "
+                "Default scope=TAKE preserves original-footage observation and source-time boundaries, not the current edit. "
+                "Optional dense_sample_fps (up to 12) observes an explicit <=3s interval with at most 36 actual timestamped frames. "
+                "keyframe_times_seconds requests up to four detail images (keyframe_max_dimension=null preserves original pixels). "
+                "include_audio_excerpt saves a separate actual PCM excerpt of the same <=3s source interval for playback or independent audio analysis. "
                 "This tool does not listen to speech or provide dialogue timestamps. "
                 "Reuse a report only when its recorded range, focus and current sources match; COMPLETE alone does not establish whole-group coverage. "
                 "After assembling current Takes, use audio.align_subtitles or audio.inspect_manifest for native audio."

@@ -8,6 +8,7 @@ from pydantic import JsonValue
 
 from short_drama.studio_editorial import EditorProject, read_editorial, require_unambiguous_editorial_ids
 from short_drama.studio_shot_editorial import editorial_shot_windows
+from short_drama.studio_visual_edits import clip_visual_fields
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
@@ -87,7 +88,8 @@ def read_editorial_selection(
             "source_shot_id": cast(JsonValue, (clip.model_extra or {}).get("sourceShotId")),
             "source_take_id": cast(JsonValue, (clip.model_extra or {}).get("sourceTakeId")),
             "source_window_start_seconds": cast(JsonValue, (clip.model_extra or {}).get("sourceWindowStart")),
-            "source_window_end_seconds": cast(JsonValue, (clip.model_extra or {}).get("sourceWindowEnd"))}
+            "source_window_end_seconds": cast(JsonValue, (clip.model_extra or {}).get("sourceWindowEnd")),
+            **clip_visual_fields(clip)}
             for clip in selected_clips],
         "shot_local_mappings": mappings,
         "mapping_coordinates": "SHOT_LOCAL intersections; add film_start_seconds. Top-level rows retain full FILM boundaries.",

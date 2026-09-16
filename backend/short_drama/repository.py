@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, cast
 from pydantic import JsonValue
 
 from short_drama.document_merge import merge_current_content
-from short_drama.studio_models import StudioEvent, StudioJob
+from short_drama.studio_models import StudioChangeSet, StudioEvent, StudioExport, StudioJob
+from short_drama.studio_package_models import StudioProjectTransfer
+from short_drama.video_edit_models import VideoEditRun
+from short_drama.studio_records import (
+    RECORD_FIELDS, content_json, hydrate_records, import_document_records, migrate_records, read_records, write_record,
+)
 from datetime import UTC, datetime
 from short_drama.observability import log_event
 
@@ -67,10 +72,19 @@ class ShortDramaRepository:
         self.database_path = database_path
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._transaction_state = threading.local()
         self._migrate()
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
+        active: object = getattr(self._transaction_state, "connection", None)
+        if isinstance(active, sqlite3.Connection):
+            try:
+                yield active
+            except BaseException:
+                self._transaction_state.failed = True
+                raise
+            return
         connection = sqlite3.connect(self.database_path, timeout=30.0)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -82,6 +96,30 @@ class ShortDramaRepository:
             raise
         finally:
             connection.close()
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        """Share one short synchronous transaction across existing domain saves."""
+        with self._lock:
+            active: object = getattr(self._transaction_state, "connection", None)
+            if isinstance(active, sqlite3.Connection):
+                try:
+                    yield
+                except BaseException:
+                    self._transaction_state.failed = True
+                    raise
+                return
+            with self._connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                self._transaction_state.connection = connection
+                self._transaction_state.failed = False
+                try:
+                    yield
+                    if self._transaction_state.failed:
+                        raise RuntimeError("An operation failed inside the atomic transaction")
+                finally:
+                    self._transaction_state.connection = None
+                    self._transaction_state.failed = False
 
     def _migrate(self) -> None:
         with self._lock, self._connection() as connection:
@@ -400,6 +438,20 @@ class ShortDramaRepository:
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(11, datetime('now'))"
             )
+            migrate_records(connection)
+            connection.execute("""CREATE TABLE IF NOT EXISTS studio_project_transfers (
+                id TEXT PRIMARY KEY, project_id TEXT, operation TEXT NOT NULL,
+                status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                record_json TEXT NOT NULL)""")
+            connection.execute("CREATE INDEX IF NOT EXISTS studio_project_transfers_created ON studio_project_transfers(created_at DESC, id DESC)")
+            connection.execute("CREATE INDEX IF NOT EXISTS studio_project_transfers_status ON studio_project_transfers(status, created_at DESC, id DESC)")
+            connection.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(13, datetime('now'))")
+            connection.execute("""CREATE TABLE IF NOT EXISTS video_edit_runs (
+                id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL,
+                status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                record_json TEXT NOT NULL)""")
+            connection.execute("CREATE INDEX IF NOT EXISTS video_edit_runs_project ON video_edit_runs(project_id, created_at, id)")
+            connection.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(14, datetime('now'))")
 
     def save_planning_run_with_project(
         self,
@@ -435,12 +487,13 @@ class ShortDramaRepository:
                     project.name,
                     project.stage.value,
                     project.updated_at,
-                    document.model_dump_json(),
+                    content_json(document),
                     project.id,
                 ),
             )
             if project_cursor.rowcount != 1:
                 raise ValueError(f"Project does not exist: {project.id}")
+            import_document_records(connection, document)
 
     def insert_planning_run_with_project(
         self,
@@ -466,12 +519,13 @@ class ShortDramaRepository:
                     project.name,
                     project.stage.value,
                     project.updated_at,
-                    document.model_dump_json(),
+                    content_json(document),
                     project.id,
                 ),
             )
             if project_cursor.rowcount != 1:
                 raise ValueError(f"Project does not exist: {project.id}")
+            import_document_records(connection, document)
             connection.execute(
                 """
                 INSERT INTO planning_runs(id, status, updated_at, record_json)
@@ -744,15 +798,101 @@ class ShortDramaRepository:
 
     def save_project(self, document: ProjectDocument) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
             self._save_project_on_connection(connection, document)
+
+    def update_project_family_media(
+        self, project_id: str,
+        transform: Callable[[Sequence[ProjectDocument], Sequence[Take]], Sequence[str]], *,
+        event_data: dict[str, JsonValue],
+    ) -> list[str]:
+        """Apply an in-memory media edit to current episodes, Takes and events atomically."""
+        with self._lock, self._connection() as connection:
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
+            selected = self._read_effective_project(connection, project_id)
+            if selected is None:
+                raise KeyError(project_id)
+            root_id = selected.project.parent_project_id or project_id
+            rows = connection.execute(
+                "SELECT id FROM projects WHERE id=? OR "
+                "json_extract(document_json, '$.project.parent_project_id')=? "
+                "ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, id",
+                (root_id, root_id, root_id),
+            ).fetchall()
+            documents = [document for row in rows if (
+                document := self._read_effective_project(connection, cast(str, row["id"]))
+            ) is not None]
+            before_documents = {document.project.id: document.model_dump_json() for document in documents}
+            placeholders = ",".join("?" for _ in documents)
+            takes = [Take.model_validate_json(cast(str, row["record_json"])) for row in connection.execute(
+                f"SELECT record_json FROM takes WHERE project_id IN ({placeholders}) ORDER BY id",
+                tuple(before_documents),
+            )]
+            before_takes = {take.id: take.model_dump_json() for take in takes}
+            affected = list(dict.fromkeys(transform(documents, takes)))
+            if not affected:
+                raise ValueError("该文件的引用已改变，请刷新素材后重新定位。")
+            if not set(affected).issubset(before_documents):
+                raise ValueError("Media updates must belong to the selected project family")
+            for document in documents:
+                if document.model_dump_json() != before_documents[document.project.id]:
+                    # A family relink explicitly changes file locations. Only
+                    # its changed records may update independent history;
+                    # ordinary content snapshots can only introduce new IDs.
+                    before = cast(dict[str, JsonValue], json.loads(before_documents[document.project.id]))
+                    for kind in RECORD_FIELDS:
+                        old_values = before.get(kind)
+                        old_records = {value.get("id"): value for value in old_values if isinstance(value, dict)} if isinstance(old_values, list) else {}
+                        for value in getattr(document, kind):
+                            if old_records.get(value.get("id")) != value:
+                                write_record(connection, kind, document.project.id, value, replace=True)
+                    self._save_project_on_connection(connection, document)
+            for take in takes:
+                if take.model_dump_json() != before_takes[take.id]:
+                    self._write_take(connection, take)
+            for episode_id in affected:
+                connection.execute(
+                    "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
+                    (episode_id, "assets.updated", datetime.now(UTC).isoformat(),
+                     json.dumps(event_data, ensure_ascii=False)),
+                )
+        return affected
+
+    def insert_project_media_bundle(self, documents: Sequence[ProjectDocument],
+                                    tasks: Sequence[GenerationTask], takes: Sequence[Take],
+                                    video_edit_runs: Sequence[VideoEditRun] = ()) -> bool:
+        """Insert a migrated project's content and Take provenance in one transaction."""
+        with self._lock, self._connection() as connection:
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
+            identities = {"projects": [document.project.id for document in documents],
+                          "generation_tasks": [task.id for task in tasks], "takes": [take.id for take in takes],
+                          "video_edit_runs": [run.id for run in video_edit_runs]}
+            for table, ids in identities.items():
+                if len(ids) != len(set(ids)):
+                    raise ValueError(f"Duplicate {table} identities in project package")
+                for identity in ids:
+                    if connection.execute(f"SELECT 1 FROM {table} WHERE id=?", (identity,)).fetchone():
+                        return False
+            for document in documents:
+                self._save_project_on_connection(connection, document)
+            for task in tasks:
+                self._write_task(connection, task)
+            for take in takes:
+                self._write_take(connection, take)
+            for run in video_edit_runs:
+                self._write_video_edit_run(connection, run)
+        return True
 
     def register_reference_pack_entries(
         self, project_id: str, apply_entries: Callable[[ProjectDocument], bool],
     ) -> ProjectDocument:
         """Validate all chosen uses against current shared media, then save once."""
         with self._lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
             document = self._read_effective_project(connection, project_id)
             if document is None:
                 raise KeyError(project_id)
@@ -766,7 +906,8 @@ class ShortDramaRepository:
     ) -> None:
         """Commit the one content edit and its existing Take invalidation atomically."""
         with self._lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
             self._save_project_on_connection(connection, document, reject_conflicts=True,
                 validate_merged=validate_merged, write_content=write_content)
             affected = set(changed_shot_ids)
@@ -792,10 +933,16 @@ class ShortDramaRepository:
         payload = cast(dict[str, JsonValue], document.model_dump(mode="json"))
         conflicts: list[str] = []
         if current is not None and document.loaded_snapshot is not None:
-            payload = cast(dict[str, JsonValue], merge_current_content(
-                document.loaded_snapshot, payload,
-                cast(dict[str, JsonValue], current.model_dump(mode="json")), conflicts=conflicts,
-            ))
+            # Loading already serialized a detached current snapshot. Without a
+            # concurrent edit, the new dump is the complete proposed value and
+            # needs neither another dump nor a deep copy through the merge.
+            current_payload = current.loaded_snapshot
+            if current_payload is None:
+                current_payload = cast(dict[str, JsonValue], current.model_dump(mode="json"))
+            if document.loaded_snapshot != current_payload:
+                payload = cast(dict[str, JsonValue], merge_current_content(
+                    document.loaded_snapshot, payload, current_payload, conflicts=conflicts,
+                ))
         if reject_conflicts:
             # These timestamps are generated by this save, not user content.
             # They must not turn an unrelated edit into a registration conflict.
@@ -816,27 +963,31 @@ class ShortDramaRepository:
             document.record_loaded_content(conflicts)
             return
         parent_id = merged.project.parent_project_id
-        stored = merged.model_copy(deep=True)
+        stored = merged.model_copy()
+        shared_changed = False
         if parent_id is not None:
             parent = self._read_effective_project(connection, parent_id)
             if parent is None or parent.project.parent_project_id is not None:
                 raise ValueError("An episode must belong to an existing root project")
-            parent.assets = merged.assets
-            parent.reference_packs = merged.reference_packs
-            for asset in parent.assets:
+            for asset in merged.assets:
                 asset.project_id = parent_id
-            for pack in parent.reference_packs:
+            for pack in merged.reference_packs:
                 pack.project_id = parent_id
-            self._write_project(connection, parent)
+            shared_changed = parent.assets != merged.assets or parent.reference_packs != merged.reference_packs
+            if shared_changed:
+                parent.assets = merged.assets
+                parent.reference_packs = merged.reference_packs
+                self._write_project(connection, parent)
             stored.assets = []
             stored.reference_packs = []
         self._write_project(connection, stored)
+        hydrate_records(connection, merged)
         connection.execute(
             "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
             (document.project.id, "content.updated", datetime.now(UTC).isoformat(),
              json.dumps({"kept_user_edits": conflicts}, ensure_ascii=False)),
         )
-        if merged.project.parent_project_id:
+        if shared_changed:
             connection.execute(
                 "INSERT INTO studio_events(project_id, kind, created_at, data_json) VALUES(?, ?, ?, ?)",
                 (merged.project.parent_project_id, "assets.updated", datetime.now(UTC).isoformat(), "{}"),
@@ -859,11 +1010,13 @@ class ShortDramaRepository:
             VALUES(?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
             name=excluded.name, stage=excluded.stage, updated_at=excluded.updated_at,
             document_json=excluded.document_json""",
-            (project.id, project.name, project.stage.value, project.updated_at, document.model_dump_json()),
+            (project.id, project.name, project.stage.value, project.updated_at, content_json(document)),
         )
+        import_document_records(connection, document)
 
     @staticmethod
-    def _read_effective_project(connection: sqlite3.Connection, project_id: str) -> ProjectDocument | None:
+    def _read_effective_project(connection: sqlite3.Connection, project_id: str, *,
+                                include_studio_records: bool = True) -> ProjectDocument | None:
         row = connection.execute("SELECT document_json FROM projects WHERE id = ?", (project_id,)).fetchone()
         if row is None:
             return None
@@ -875,8 +1028,111 @@ class ShortDramaRepository:
             parent = ProjectDocument.model_validate_json(cast(str, parent_row["document_json"]))
             document.assets = list({asset.id: asset for asset in [*document.assets, *parent.assets]}.values())
             document.reference_packs = list({pack.id: pack for pack in [*document.reference_packs, *parent.reference_packs]}.values())
+        if include_studio_records:
+            hydrate_records(connection, document)
         document.record_loaded_content()
         return document
+
+    @staticmethod
+    def _write_video_edit_run(connection: sqlite3.Connection, run: VideoEditRun) -> None:
+        connection.execute("""INSERT INTO video_edit_runs(id,task_id,project_id,status,created_at,updated_at,record_json)
+            VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,
+            updated_at=excluded.updated_at,record_json=excluded.record_json""",
+            (run.id, run.task_id, run.project_id, run.status, run.created_at, run.updated_at, run.model_dump_json()))
+
+    def save_video_edit_run(self, run: VideoEditRun) -> None:
+        with self._lock, self._connection() as connection:
+            self._write_video_edit_run(connection, run)
+
+    def get_video_edit_run(self, run_id: str) -> VideoEditRun | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM video_edit_runs WHERE id=?", (run_id,)).fetchone()
+        return VideoEditRun.model_validate_json(row["record_json"]) if row is not None else None
+
+    def get_video_edit_run_for_task(self, task_id: str) -> VideoEditRun | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM video_edit_runs WHERE task_id=?", (task_id,)).fetchone()
+        return VideoEditRun.model_validate_json(row["record_json"]) if row is not None else None
+
+    def list_video_edit_runs(self, project_id: str | None = None) -> list[VideoEditRun]:
+        with self._lock, self._connection() as connection:
+            query = "SELECT record_json FROM video_edit_runs"
+            parameters: tuple[str, ...] = ()
+            if project_id is not None:
+                query += " WHERE project_id=?"
+                parameters = (project_id,)
+            rows = connection.execute(query + " ORDER BY created_at,id", parameters).fetchall()
+        return [VideoEditRun.model_validate_json(row["record_json"]) for row in rows]
+
+    def get_project_transfer(self, transfer_id: str) -> StudioProjectTransfer | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM studio_project_transfers WHERE id=?", (transfer_id,)).fetchone()
+        return StudioProjectTransfer.model_validate_json(row["record_json"]) if row is not None else None
+
+    def save_project_transfer(self, record: StudioProjectTransfer) -> None:
+        payload = record.model_dump(mode="json")
+        # Internal cleanup paths persist in SQLite but never appear in API models.
+        payload.update(input_path=record.input_path, working_path=record.working_path)
+        with self._lock, self._connection() as connection:
+            connection.execute("""INSERT INTO studio_project_transfers(id,project_id,operation,status,created_at,updated_at,record_json)
+                VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,
+                status=excluded.status,updated_at=excluded.updated_at,record_json=excluded.record_json""",
+                (record.id,record.project_id,record.operation,record.status,record.created_at,record.updated_at,
+                 json.dumps(payload, ensure_ascii=False)))
+
+    def list_project_transfers(self, *, limit: int = 20, before: tuple[str, str] | None = None,
+                              statuses: Sequence[str] | None = None) -> list[StudioProjectTransfer]:
+        clauses: list[str] = []
+        parameters: list[str | int] = []
+        if before is not None:
+            clauses.append("(created_at,id) < (?,?)")
+            parameters.extend(before)
+        if statuses is not None:
+            if not statuses:
+                return []
+            clauses.append("status IN (" + ",".join("?" for _ in statuses) + ")")
+            parameters.extend(statuses)
+        query = "SELECT record_json FROM studio_project_transfers"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        parameters.append(max(1, limit))
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(query + " ORDER BY created_at DESC,id DESC LIMIT ?", parameters).fetchall()
+        return [StudioProjectTransfer.model_validate_json(row["record_json"]) for row in rows]
+
+    def get_studio_export(self, project_id: str, export_id: str) -> StudioExport | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM studio_exports WHERE project_id=? AND id=?",
+                (project_id, export_id)).fetchone()
+            return StudioExport.model_validate_json(row["record_json"]) if row is not None else None
+
+    def save_studio_export(self, record: StudioExport) -> None:
+        with self._lock, self._connection() as connection:
+            write_record(connection, "studio_exports", record.project_id,
+                cast(dict[str, JsonValue], record.model_dump(mode="json")), replace=True)
+
+    def list_studio_exports(self, project_id: str | None, *, limit: int | None = None,
+                           before: str | None = None, statuses: Sequence[str] | None = None) -> list[StudioExport]:
+        with self._lock, self._connection() as connection:
+            return [StudioExport.model_validate(value) for value in read_records(connection, "studio_exports", project_id,
+                limit=limit, before=before, statuses=statuses)]
+
+    def get_studio_change(self, project_id: str, change_id: str) -> StudioChangeSet | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM studio_changes WHERE project_id=? AND id=?",
+                (project_id, change_id)).fetchone()
+            return StudioChangeSet.model_validate_json(row["record_json"]) if row is not None else None
+
+    def save_studio_change(self, record: StudioChangeSet) -> None:
+        with self._lock, self._connection() as connection:
+            write_record(connection, "studio_changes", record.project_id,
+                cast(dict[str, JsonValue], record.model_dump(mode="json")), replace=True)
+
+    def list_studio_changes(self, project_id: str, *, limit: int | None = None, before: str | None = None,
+                           statuses: Sequence[str] | None = None, run_id: str | None = None) -> list[StudioChangeSet]:
+        with self._lock, self._connection() as connection:
+            return [StudioChangeSet.model_validate(value) for value in read_records(connection, "studio_changes", project_id,
+                limit=limit, before=before, statuses=statuses, run_id=run_id)]
 
     def append_studio_event(self, project_id: str, kind: str, data: dict[str, JsonValue]) -> StudioEvent:
         now = datetime.now(UTC).isoformat()
@@ -930,9 +1186,10 @@ class ShortDramaRepository:
                         project.name,
                         project.stage.value,
                         project.updated_at,
-                        document.model_dump_json(),
+                        content_json(document),
                     ),
                 )
+                import_document_records(connection, document)
         except sqlite3.IntegrityError:
             return False
         return True
@@ -957,9 +1214,10 @@ class ShortDramaRepository:
                         project.name,
                         project.stage.value,
                         project.updated_at,
-                        document.model_dump_json(),
+                        content_json(document),
                     ),
                 )
+                import_document_records(connection, document)
                 connection.execute(
                     """
                     INSERT INTO planning_runs(id, status, updated_at, record_json)
@@ -976,9 +1234,9 @@ class ShortDramaRepository:
             row = connection.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone()
         return row is not None
 
-    def get_project(self, project_id: str) -> ProjectDocument | None:
+    def get_project(self, project_id: str, *, include_studio_records: bool = True) -> ProjectDocument | None:
         with self._lock, self._connection() as connection:
-            return self._read_effective_project(connection, project_id)
+            return self._read_effective_project(connection, project_id, include_studio_records=include_studio_records)
 
     def list_projects(self) -> list[ProjectDocument]:
         with self._lock, self._connection() as connection:
@@ -1151,7 +1409,7 @@ class ShortDramaRepository:
         """Recover interrupted submits, preserving explicitly unsubmitted H3 inputs."""
 
         recovered = 0
-        with self._lock:
+        with self._lock, self.atomic():
             with self._connection() as connection:
                 rows = connection.execute(
                     "SELECT record_json FROM generation_tasks WHERE status = ?",
@@ -1159,6 +1417,29 @@ class ShortDramaRepository:
                 ).fetchall()
             for row in rows:
                 task = GenerationTask.model_validate_json(cast(str, row["record_json"]))
+                if task.provider == "kling":
+                    edit = self.get_video_edit_run_for_task(task.id)
+                    if edit is not None and edit.status == "PAUSED":
+                        # Imported or explicitly paused work is never resumed by
+                        # generic startup reconciliation.
+                        continue
+                    known_id = task.provider_task_id or (edit.provider_task_id if edit is not None else None)
+                    if known_id is not None:
+                        task.status, task.provider_task_id = TaskStatus.ACKNOWLEDGED, known_id
+                        self.save_task(task)
+                        if edit is not None:
+                            edit.provider_task_id, edit.status = known_id, "RUNNING"
+                            edit.submission_attempt_state = "ACKNOWLEDGED"
+                            self.save_video_edit_run(edit)
+                        recovered += 1
+                        continue
+                    if edit is not None and edit.submission_attempt_state == "PREPARED":
+                        continue
+                    if edit is not None:
+                        edit.status, edit.submission_attempt_state = "SUBMIT_UNKNOWN", "UNKNOWN"
+                        edit.last_error_code = "PROCESS_INTERRUPTED_DURING_SUBMIT"
+                        edit.last_error_message = "提交阶段进程中断，先查询明确的供应商任务，不盲目重发。"
+                        self.save_video_edit_run(edit)
                 if task.provider == "minimax":
                     run = self.get_provider_run(task.id)
                     if run is not None and run.submission_attempt_state == "PREPARED":
@@ -1231,29 +1512,33 @@ class ShortDramaRepository:
 
     def save_take(self, take: Take) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO takes(
-                    id, project_id, shot_id, task_id, candidate_index,
-                    is_selected, freshness, created_at, record_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    is_selected = excluded.is_selected,
-                    freshness = excluded.freshness,
-                    record_json = excluded.record_json
-                """,
-                (
-                    take.id,
-                    take.project_id,
-                    take.shot_id,
-                    take.task_id,
-                    take.candidate_index,
-                    1 if take.is_selected else 0,
-                    take.freshness.value,
-                    take.created_at,
-                    take.model_dump_json(),
-                ),
-            )
+            self._write_take(connection, take)
+
+    @staticmethod
+    def _write_take(connection: sqlite3.Connection, take: Take) -> None:
+        connection.execute(
+            """
+            INSERT INTO takes(
+                id, project_id, shot_id, task_id, candidate_index,
+                is_selected, freshness, created_at, record_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                is_selected = excluded.is_selected,
+                freshness = excluded.freshness,
+                record_json = excluded.record_json
+            """,
+            (
+                take.id,
+                take.project_id,
+                take.shot_id,
+                take.task_id,
+                take.candidate_index,
+                1 if take.is_selected else 0,
+                take.freshness.value,
+                take.created_at,
+                take.model_dump_json(),
+            ),
+        )
 
     def get_take(self, take_id: str) -> Take | None:
         with self._lock, self._connection() as connection:

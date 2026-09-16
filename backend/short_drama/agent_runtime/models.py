@@ -323,8 +323,16 @@ class PlanStep(RuntimeModel):
     production_skill_role: ProductionSkillRole | None = None
     production_prompt_stage: ProductionPromptStage | None = None
     tool_name: str | None = None
-    instructions: str = Field(min_length=1)
-    arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    instructions: str = Field(min_length=1, description=(
+        "本步骤的执行说明。仅 kind=USER_INPUT 时，此字段会原样作为聊天正文展示给用户："
+        "写完整的自然答复或问题，直接称呼用户，包含需要用户查看的实际路径、事实及待回复事项；"
+        "不要写‘向用户说明’‘提供下列’等给 Agent 的执行指令。arguments 不会作为正文展开。"
+        "其他 kind 仍写工具执行或 Worker 交接说明。"
+    ))
+    arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue], description=(
+        "步骤的结构化参数；USER_INPUT 的 arguments 不会作为聊天正文展开，"
+        "需要告知用户的内容须完整写入 instructions。"
+    ))
     depends_on: list[str] = Field(default_factory=list[str])
     artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
 

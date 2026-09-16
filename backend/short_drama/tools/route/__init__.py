@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from pydantic import Field
+
 from short_drama.h3_group_operation import H3GroupOperationRequest, H3GroupOperationResponse
 
 from short_drama.h3_models import (
@@ -107,6 +109,7 @@ class RouteToolService(Protocol):
         self,
         project_id: str,
         task_id: str,
+        *, offset: int = 0, page_size: int = 50, max_pages: int = 10,
     ) -> H3ReconciliationCandidatesResponse: ...
 
     def resolve_h3_submission(
@@ -165,6 +168,9 @@ class RoutePlanGetInput(RouteProjectInput):
 class RouteReconciliationInput(ToolModel):
     project_id: str
     task_id: str
+    offset: int = Field(default=0, ge=0, description="Continue from the previous query.next_offset when the page limit was reached.")
+    page_size: int = Field(default=50, ge=1, le=100)
+    max_pages: int = Field(default=10, ge=1, le=10)
 
 
 class RoutePromptCompileInput(ToolModel):
@@ -546,6 +552,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         result = service.list_h3_reconciliation_candidates_for_task(
             request.project_id,
             request.task_id,
+            offset=request.offset, page_size=request.page_size, max_pages=request.max_pages,
         )
         return ToolExecution(
             output=result,
@@ -561,11 +568,13 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(
         ToolSpec(
             id="route.list_h3_reconciliation",
-            version=2,
+            version=3,
             category=ToolCategory.ROUTE,
             description=(
-                "List remote H3 candidates compatible with one local SUBMIT_UNKNOWN "
-                "task; do not bind automatically when multiple candidates remain."
+                "Read bounded pages of remote H3 candidates compatible with one local SUBMIT_UNKNOWN "
+                "task. Inspect query.stop_reason and continue from next_offset when the page limit is reached. "
+                "No matches never proves no submission; do not automatically bind or resubmit. "
+                "An already known provider_task_id can be queried directly for reconciliation."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=True,
@@ -880,9 +889,16 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(
         ToolSpec(
             id="route.review_h3_take",
-            version=1,
+            version=3,
             category=ToolCategory.ROUTE,
-            description="Record the typed quality review for one generated H3 Take.",
+            description=("Record the typed quality review for one generated H3 Take. Use review_status=PENDING "
+                "for incomplete checks or a conditionally usable result; this preserves an existing usable selection. "
+                "Use REJECTED only for an observed failure that makes the media unacceptable, with classified issues; "
+                "rejection clears selection. PASSED requires hard_gate_passed=true. Missing listening or observation "
+                "is not a rejection or a passed check. To withdraw specific earlier rejection findings after "
+                "reinspection/user clarification, use PENDING with exact retracted_issue_codes and retraction_reason; "
+                "other failures remain and technical errors cannot be withdrawn here. This does not approve or "
+                "select the Take. Existing edit points are not changed by review."),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=RouteReviewTakeInput,

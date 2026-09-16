@@ -170,7 +170,7 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
         assert descriptor.output_schema["type"] == "object"
 
     reconciliation = descriptors["route.list_h3_reconciliation"]
-    assert reconciliation.version == 2
+    assert reconciliation.version == 3
     assert reconciliation.effect == ToolEffect.EXTERNAL
     assert reconciliation.idempotent is True
     assert reconciliation.input_schema["required"] == ["project_id", "task_id"]

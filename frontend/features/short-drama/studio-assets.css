@@ -1,0 +1,11 @@
+.sd-assets-page .sd-page-header { flex-wrap: wrap; }
+.sd-assets-page .sd-page-header > div:first-child { flex: 1 1 240px; min-width: 0; }
+.sd-assets-page .sd-asset-import { flex-wrap: wrap; }
+.sd-assets-page .sd-library-view { flex-wrap: wrap; }
+.sd-assets-page .sd-library-toolbar { flex-wrap: wrap; }
+.sd-assets-page .sd-search { flex: 1 1 180px; min-width: 0; max-width: 280px; }
+.sd-assets-page .sd-asset-grid { grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); }
+.sd-assets-page .sd-asset-detail-body > div { min-width: 0; }
+.sd-assets-page .sd-asset-usage button { overflow-wrap: anywhere; }
+.sd-assets-page .sd-asset-usage button:focus-visible { outline: 2px solid var(--sd-accent-text); outline-offset: 2px; }
+.sd-assets-page .sd-media-use-location { margin-left: auto; font-size: 10px; }

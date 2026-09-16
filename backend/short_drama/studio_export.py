@@ -2,60 +2,240 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
-from threading import Thread
+from threading import Event, Lock, Thread
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import imageio_ffmpeg
+import psutil
 from pydantic import JsonValue
 from short_drama.export_dimensions import source_output_dimensions
 from short_drama.media import probe_media_with_ffmpeg
-from short_drama.studio_editorial import EditorProject, EditorTimeline, validate_editorial
-from short_drama.studio_models import StudioExport, StudioExportRequest
+from short_drama.studio_editorial import EditorProject, EditorTimeline, editorial_clip_enabled, validate_editorial
+from short_drama.studio_models import StudioExport, StudioExportRequest, StudioExports
 from short_drama.studio_service import StudioContentConflict
+from short_drama.studio_records import cursor_for_record
+from short_drama.studio_visual_export import validate_visual_export
+from short_drama.studio_subtitle_fonts import default_subtitle_font_family, resolved_subtitle_family, wrap_subtitle_for_export
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
 
 
+class _ExportCancelled(Exception):
+    pass
+
+
+@dataclass
+class _ExportControl:
+    cancelled: Event = field(default_factory=Event)
+    done: Event = field(default_factory=Event)
+    process_lock: Lock = field(default_factory=Lock)
+    stop_lock: Lock = field(default_factory=Lock)
+    process: subprocess.Popen[str] | None = None
+
+    def check(self) -> None:
+        if self.cancelled.is_set():
+            raise _ExportCancelled()
+
+
+_ACTIVE_LOCK = Lock()
+_ACTIVE: dict[tuple[str, str, str], _ExportControl] = {}
+_TERMINAL = frozenset({"completed", "failed", "cancelled"})
+
+
+def _key(service: ShortDramaService, project_id: str, export_id: str) -> tuple[str, str, str]:
+    return str(service.repository.database_path.resolve()), project_id, export_id
+
+
+def _control(service: ShortDramaService, project_id: str, export_id: str) -> _ExportControl | None:
+    with _ACTIVE_LOCK:
+        return _ACTIVE.get(_key(service, project_id, export_id))
+
+
 def _save(service: ShortDramaService, record: StudioExport) -> None:
-    with service.studio.lock:
-        document = service.repository.get_project(record.project_id)
-        if document is None:
-            raise KeyError(record.project_id)
+    with service.studio.lock, service.repository.atomic():
+        previous = service.repository.get_studio_export(record.project_id, record.id)
+        if previous is not None:
+            if previous.status in _TERMINAL:
+                # A completed export and a confirmed cancellation cannot be
+                # overwritten by a late progress event or competing finish.
+                for name in StudioExport.model_fields:
+                    setattr(record, name, getattr(previous, name))
+                return
+            if previous.status == "cancelling":
+                if record.status == "running":
+                    record.status, record.progress = "cancelling", "正在停止导出"
+                elif record.status == "completed":
+                    # All render processes have finished at this boundary, but
+                    # cancellation acquired the content lock before completion.
+                    record.status, record.progress, record.error = "cancelled", "导出已取消", None
+                    record.video_path = record.clean_video_path = record.srt_path = None
+        record.updated_at = datetime.now(UTC).isoformat()
+        if record.status in _TERMINAL:
+            record.finished_at = record.finished_at or record.updated_at
         value = cast(dict[str, JsonValue], record.model_dump(mode="json"))
-        index = next((i for i, item in enumerate(document.studio_exports) if item.get("id") == record.id), None)
-        if index is None:
-            document.studio_exports.append(value)
-        else:
-            document.studio_exports[index] = value
-        service.repository.save_project(document)
+        service.repository.save_studio_export(record)
         service.repository.append_studio_event(record.project_id, "export.updated", value)
 
 
 def get_export(service: ShortDramaService, project_id: str, export_id: str) -> StudioExport:
-    document = service.get_project(project_id).document
-    value = next((item for item in document.studio_exports if item.get("id") == export_id), None)
+    value = service.repository.get_studio_export(project_id, export_id)
     if value is None:
         raise KeyError(export_id)
-    return StudioExport.model_validate(value)
+    return value
+
+
+def list_exports(service: ShortDramaService, project_id: str, *, limit: int = 20, before: str | None = None) -> StudioExports:
+    size = max(1, min(limit, 100))
+    records = service.repository.list_studio_exports(project_id, limit=size + 1, before=before)
+    shown = records[:size]
+    cursor = cursor_for_record(cast(dict[str, JsonValue], shown[-1].model_dump(mode="json"))) if len(records) > size else None
+    return StudioExports(exports=shown, next_cursor=cursor)
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        parent = psutil.Process(process.pid)
+        children = parent.children(recursive=True)
+    except psutil.NoSuchProcess:
+        return
+    # Each subprocess starts in its own session. Include children such as the
+    # runtime's FFmpeg; never signal the backend or another export's group.
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGTERM)
+        else:
+            for child in children:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    pass
+            process.terminate()
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2)
+    # Process objects retain identity checks if a PID was reused. A child that
+    # ignores SIGTERM must also exit before cancellation is acknowledged.
+    _gone, alive = psutil.wait_procs(children, timeout=2)
+    for child in alive:
+        try:
+            child.kill()
+        except psutil.NoSuchProcess:
+            pass
+    _gone, alive = psutil.wait_procs(alive, timeout=2)
+    for child in alive:
+        try:
+            if child.is_running() and child.status() != psutil.STATUS_ZOMBIE:
+                raise RuntimeError("导出子进程尚未停止，请稍后重试取消。")
+        except psutil.NoSuchProcess:
+            pass
+
+
+def _stop_process(control: _ExportControl) -> None:
+    with control.stop_lock:
+        with control.process_lock:
+            process = control.process
+        if process is not None:
+            _terminate_process(process)
+
+
+def cancel_export(service: ShortDramaService, project_id: str, export_id: str) -> StudioExport:
+    with service.studio.lock:
+        record = get_export(service, project_id, export_id)
+        if record.status in _TERMINAL or (record.status == "cancelling" and not record.error):
+            return record
+        control = _control(service, project_id, export_id)
+        if control is None:
+            record.status, record.progress = "failed", "上次导出已中断"
+            record.error = "未找到仍在执行的本地导出。当前剪辑已保存，可重新导出。"
+            _save(service, record)
+            return record
+        control.cancelled.set()
+        record.status, record.progress, record.error = "cancelling", "正在停止导出", None
+        _save(service, record)
+    # The render thread persists cancelled only after its process actually
+    # exits. Process termination never holds the user's content lock.
+    def stop() -> None:
+        try:
+            _stop_process(control)
+        except Exception as exc:
+            with service.studio.lock:
+                current = get_export(service, project_id, export_id)
+                if current.status == "cancelling":
+                    current.error = f"停止导出遇到问题：{exc}"
+                    _save(service, current)
+
+    Thread(target=stop, daemon=True, name=f"cancel-{export_id}").start()
+    return record
+
+
+def _run_process(control: _ExportControl, args: list[str], *,
+                 on_line: Callable[[str], None] | None = None,
+                 env: dict[str, str] | None = None) -> str:
+    with control.process_lock:
+        control.check()
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, env=env, start_new_session=os.name == "posix")
+        control.process = process
+    logs: list[str] = []
+    try:
+        if process.stdout is None:
+            raise RuntimeError("无法读取本地导出进度。")
+        for line in process.stdout:
+            logs.append(line)
+            if on_line is not None:
+                on_line(line)
+        code = process.wait()
+    finally:
+        if control.cancelled.is_set() or process.poll() is None:
+            _stop_process(control)
+        with control.process_lock:
+            if control.process is process:
+                control.process = None
+        if process.stdout is not None:
+            process.stdout.close()
+    control.check()
+    output = "".join(logs)
+    if code:
+        raise ValueError(output[-1500:] or f"本地导出进程退出：{code}")
+    return output
+
+
+def _probe_export(control: _ExportControl, path: Path) -> dict[str, str]:
+    output = _run_process(control, [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", str(path), "-f", "null", "-"])
+    size = re.search(r"Video:.*?\b(\d{2,5}x\d{2,5})\b", output)
+    fps = re.search(r"\b(\d+(?:\.\d+)?) fps\b", output)
+    duration = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", output)
+    seconds = int(duration[1]) * 3600 + int(duration[2]) * 60 + float(duration[3]) if duration else 0.0
+    return {"size": size[1] if size else "unknown", "fps": fps[1] if fps else "0",
+            "duration": f"{seconds:.3f}", "audio": "present" if "Audio:" in output else "missing"}
 
 
 def inspect_export(service: ShortDramaService, project_id: str, export_id: str | None = None) -> dict[str, JsonValue]:
     """Read and decode the exact editorial export, independently of legacy manifests."""
     document = service.get_project(project_id).document
     if export_id is None:
-        value = next((item for item in reversed(document.studio_exports) if item.get("status") == "completed"), None)
-        if value is None:
+        values = service.repository.list_studio_exports(project_id, limit=1, statuses=["completed"])
+        if not values:
             raise ValueError("本集尚无已完成的剪辑导出。")
-        export_id = str(value["id"])
+        export_id = values[0].id
     record = get_export(service, project_id, export_id)
     files: list[JsonValue] = []
     for label, path in (("subtitled", record.video_path), ("clean", record.clean_video_path)):
@@ -120,15 +300,12 @@ def start_export(service: ShortDramaService, project_id: str, request: StudioExp
         saved = document.editorial_timeline or {}
         if saved.get("revision") != request.expected_revision or not isinstance(saved.get("project"), dict):
             raise StudioContentConflict("请先保存当前剪辑，再导出同一份内容。")
-        project = validate_editorial(service, project_id, cast(dict[str, JsonValue], saved["project"]))
+        project = validate_editorial(service, project_id, cast(dict[str, JsonValue], saved["project"]), purpose="export")
         timeline = next(item for item in project.timelines if item.id == project.activeTimelineId)
-        if not any(clip.type in {"video", "image"} for clip in timeline.clips):
+        output_clips = [clip for clip in timeline.clips if editorial_clip_enabled(timeline, clip)]
+        if not any(clip.type in {"video", "image", "text"} for clip in output_clips):
             raise ValueError("时间线尚无可导出的画面。")
-        for clip in timeline.clips:
-            extra = clip.model_extra or {}
-            transitions = [extra.get(key, {}) for key in ("transitionIn", "transitionOut")]
-            if clip.type in {"text", "adjustment"} or any(isinstance(item, dict) and cast(dict[str, object], item).get("type") not in (None, "none") for item in transitions):
-                raise ValueError("当前导出支持镜头、多轨、透明度、PNG图层、裁切、变速、翻转、声音和字幕。请移除尚未接通的文字层、调整层或转场；画面文字可使用字幕或PNG图版。")
+        validate_visual_export(output_clips)
         aspect_ratio = document.project.aspect_ratio
 
     # Actual file inspection can take time; don't hold the user's content lock.
@@ -143,20 +320,25 @@ def start_export(service: ShortDramaService, project_id: str, request: StudioExp
             raise StudioContentConflict("确认素材尺寸期间剪辑已改变，请导出当前保存的剪辑。")
         if request.width is None and document.project.aspect_ratio != aspect_ratio:
             raise StudioContentConflict("确认素材尺寸期间项目画幅已改变，请按当前画幅重新导出。")
-        for old in document.studio_exports:
-            if old.get("status") == "running":
-                if (old.get("editorial_revision") == request.expected_revision
-                        and old.get("width") == width and old.get("height") == height and old.get("fps") == request.fps):
-                    return StudioExport.model_validate(old)
-                raise StudioContentConflict("另一份内容或尺寸的成片正在导出。完成后可以继续导出当前剪辑。")
+        for old in service.repository.list_studio_exports(project_id, statuses=["running", "cancelling"]):
+            if old.status == "cancelling":
+                raise StudioContentConflict("上一项导出正在停止，停止后可以重新导出。")
+            if (old.editorial_revision == request.expected_revision
+                    and old.width == width and old.height == height and old.fps == request.fps
+                    and old.subtitles == request.subtitles):
+                return old
+            raise StudioContentConflict("另一份内容或尺寸的成片正在导出。完成后可以继续导出当前剪辑。")
         record = StudioExport(id=f"editorial-export-{uuid4().hex[:12]}", project_id=project_id,
             editorial_revision=request.expected_revision, width=width,
-            height=height, fps=request.fps, created_at=datetime.now(UTC).isoformat())
+            height=height, fps=request.fps, subtitles=request.subtitles, created_at=datetime.now(UTC).isoformat())
+        control = _ExportControl()
+        with _ACTIVE_LOCK:
+            _ACTIVE[_key(service, project_id, record.id)] = control
         _save(service, record)
     if background:
-        Thread(target=_render, args=(service, project, request, record), daemon=True, name=record.id).start()
+        Thread(target=_render, args=(service, project, request, record, control), daemon=True, name=record.id).start()
     else:
-        _render(service, project, request, record)
+        _render(service, project, request, record, control)
     return record
 
 
@@ -169,11 +351,15 @@ def _timestamp(seconds: float, *, ass: bool = False) -> str:
 
 def _write_subtitles(timeline: EditorTimeline, folder: Path, width: int, height: int) -> tuple[Path, Path]:
     srt, ass = folder / "subtitles.srt", folder / "subtitles.ass"
+    # Same 1080px reference size as DEFAULT_SUBTITLE_STYLE in the monitor.
+    default_font_size = 56
+    confirmed_font = default_subtitle_font_family()
+    default_font = resolved_subtitle_family(None, confirmed_font)
     srt_lines: list[str] = []
     ass_lines = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 0",
         "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Default,Arial,{32 * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
-        f"Style: Box,Arial,{32 * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,3,4,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
+        f"Style: Default,{default_font},{default_font_size * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
+        f"Style: Box,{default_font},{default_font_size * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,3,4,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
         "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     for cue in timeline.subtitles:
         track = timeline.tracks[cue.trackIndex]
@@ -182,13 +368,12 @@ def _write_subtitles(timeline: EditorTimeline, folder: Path, width: int, height:
         srt_lines.append(f"{len(srt_lines)+1}\n{_timestamp(cue.startTime)} --> {_timestamp(cue.endTime)}\n{cue.text}\n")
         style = {**cast(dict[str, JsonValue], (track.model_extra or {}).get("subtitleStyle", {})), **cue.style}
         alignment = {"top": 8, "center": 5}.get(str(style.get("position")), 2)
-        size_value = style.get("fontSize", 32)
-        size = float(size_value) if isinstance(size_value, (int, float)) else 32
+        size_value = style.get("fontSize", default_font_size)
+        size = float(size_value) if isinstance(size_value, (int, float)) else default_font_size
         color = str(style.get("color", "#FFFFFF")).removeprefix("#")[:6]
         color = color if len(color) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in color) else "FFFFFF"
         bgr = color[4:6] + color[2:4] + color[:2]
-        font = str(style.get("fontFamily", "Arial")).split(",")[0].strip("\"'")
-        if font in {"sans-serif", "system-ui"}: font = "Arial"
+        font = resolved_subtitle_family(style.get("fontFamily"), confirmed_font)
         font = font.replace("{", "").replace("}", "").replace("\\", "")
         background = str(style.get("backgroundColor", "transparent")).removeprefix("#")
         box = len(background) in {6, 8} and all(ch in "0123456789abcdefABCDEF" for ch in background)
@@ -197,7 +382,8 @@ def _write_subtitles(timeline: EditorTimeline, folder: Path, width: int, height:
             bg = background[4:6] + background[2:4] + background[:2]
             alpha = 255 - int(background[6:8], 16) if len(background) == 8 else 0
             extra = f"\\3c&H{bg}&\\3a&H{alpha:02X}&\\bord{4*height/1080:.2f}"
-        text = cue.text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", "\\N")
+        render_text = wrap_subtitle_for_export(cue.text, font, size * height / 1080, width * .9, bold=style.get("fontWeight") == "bold")
+        text = render_text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", "\\N")
         tag = f"{{\\fn{font}{extra}\\an{alignment}\\fs{size * height / 1080:.2f}\\c&H{bgr}&\\b{1 if style.get('fontWeight') == 'bold' else 0}\\i{1 if style.get('italic') else 0}}}"
         style_name = "Box" if box else "Default"
         ass_lines.append(f"Dialogue: 0,{_timestamp(cue.startTime, ass=True)},{_timestamp(cue.endTime, ass=True)},{style_name},,0,0,0,,{tag}{text}")
@@ -206,10 +392,12 @@ def _write_subtitles(timeline: EditorTimeline, folder: Path, width: int, height:
     return srt, ass
 
 
-def _render(service: ShortDramaService, project: EditorProject, request: StudioExportRequest, record: StudioExport) -> None:
+def _render(service: ShortDramaService, project: EditorProject, request: StudioExportRequest,
+            record: StudioExport, control: _ExportControl) -> None:
     folder = service.workspace_root / record.project_id / "editorial-exports" / record.id
-    folder.mkdir(parents=True, exist_ok=True)
     try:
+        control.check()
+        folder.mkdir(parents=True, exist_ok=True)
         node = os.environ.get("STUDIO_NODE_EXECUTABLE") or shutil.which("node")
         runtime = Path(__file__).parent / "runtime" / "studio-export.cjs"
         if not node or not runtime.exists():
@@ -221,24 +409,23 @@ def _render(service: ShortDramaService, project: EditorProject, request: StudioE
             "fps": record.fps, "outputPath": str(clean)}, ensure_ascii=False, indent=2), encoding="utf-8")
         record.input_path = str(input_file)
         _save(service, record)
-        process = subprocess.Popen([node, str(runtime), str(input_file)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, env={**os.environ, "ELECTRON_RUN_AS_NODE": "1"})
         logs: list[str] = []
-        if process.stdout is None:
-            raise RuntimeError("无法读取本地导出进度。")
-        for line in process.stdout:
+
+        def on_line(line: str) -> None:
             logs.append(line)
             try:
                 event: object = json.loads(line)
             except json.JSONDecodeError:
-                continue
+                return
             if isinstance(event, dict) and isinstance(cast(dict[str, object], event).get("progress"), str):
                 record.progress = str(cast(dict[str, object], event)["progress"])
                 _save(service, record)
-        code = process.wait()
-        (folder / "export.log").write_text("".join(logs), encoding="utf-8")
-        if code:
-            raise ValueError("".join(logs)[-1500:])
+        try:
+            _run_process(control, [node, str(runtime), str(input_file)], on_line=on_line,
+                env={**os.environ, "ELECTRON_RUN_AS_NODE": "1"})
+        finally:
+            (folder / "export.log").write_text("".join(logs), encoding="utf-8")
+        control.check()
         timeline = next(item for item in project.timelines if item.id == project.activeTimelineId)
         srt, ass = _write_subtitles(timeline, folder, record.width, record.height)
         final = clean
@@ -247,13 +434,11 @@ def _render(service: ShortDramaService, project: EditorProject, request: StudioE
             _save(service, record)
             final = folder / "film-subtitled.mp4"
             escaped = str(ass).replace("\\", "/").replace(":", "\\:").replace("'", "'\\''")
-            result = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(clean), "-vf", f"ass='{escaped}'", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", str(final)], capture_output=True, text=True)
-            if result.returncode:
-                raise ValueError(result.stderr[-1500:])
+            _run_process(control, [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(clean), "-vf", f"ass='{escaped}'", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", str(final)])
         has_solo = any(track.solo for track in timeline.tracks)
         record.duration_seconds = max((clip.startTime + clip.duration for clip in timeline.clips
             if timeline.tracks[clip.trackIndex].enabled and (not has_solo or timeline.tracks[clip.trackIndex].solo)), default=0)
-        technical = probe_media_with_ffmpeg(final)
+        technical = _probe_export(control, final)
         checks = {"duration": abs(float(technical["duration"]) - record.duration_seconds) < max(0.15, 2 / record.fps),
                   "size": technical["size"] == f"{record.width}x{record.height}",
                   "fps": abs(float(technical["fps"]) - record.fps) < 0.02,
@@ -262,18 +447,29 @@ def _render(service: ShortDramaService, project: EditorProject, request: StudioE
         if not all(checks.values()):
             raise ValueError("导出文件检查未通过：" + ", ".join(name for name, passed in checks.items() if not passed))
         record.clean_video_path, record.video_path, record.srt_path = str(clean), str(final), str(srt)
+        control.check()
         record.status, record.progress = "completed", "导出完成"
+    except _ExportCancelled:
+        record.status, record.progress, record.error = "cancelled", "导出已取消", None
+        record.video_path = record.clean_video_path = record.srt_path = None
     except Exception as exc:
         record.status, record.progress, record.error = "failed", "导出未完成", str(exc)
-    _save(service, record)
+    finally:
+        try:
+            _save(service, record)
+        finally:
+            control.done.set()
+            with _ACTIVE_LOCK:
+                key = _key(service, record.project_id, record.id)
+                if _ACTIVE.get(key) is control:
+                    _ACTIVE.pop(key)
 
 
 def recover_interrupted_exports(service: ShortDramaService) -> None:
     """A stopped local render can be retried; never present it as still running."""
-    for document in service.repository.list_projects():
-        for value in document.studio_exports:
-            if value.get("status") == "running":
-                record = StudioExport.model_validate(value)
-                record.status, record.progress = "failed", "上次导出已中断"
-                record.error = "应用在导出完成前退出。当前剪辑已保存，可重新导出。"
-                _save(service, record)
+    for record in service.repository.list_studio_exports(None, statuses=["running", "cancelling"]):
+        if _control(service, record.project_id, record.id) is not None:
+            continue
+        record.status, record.progress = "failed", "上次导出已中断"
+        record.error = "应用在导出完成前退出。当前剪辑已保存，可重新导出。"
+        _save(service, record)

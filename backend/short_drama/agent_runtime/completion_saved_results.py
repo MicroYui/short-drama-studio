@@ -28,6 +28,8 @@ SAVED_RESULT_GUIDANCE = (
     "Runtime attaches their exact saved artifacts, current file/state receipts and applicable saved inspection/use "
     "observations, with original results available to read. Do not recopy those IDs, paths, dimensions or reports "
     "into prose. State your completion decision, additional judgments, limitations and remaining work once; "
+    "Saved editorial revisions are historical sources if another edit advanced the current revision; "
+    "they do not declare that the whole current timeline is unchanged. Use updated_artifacts only for an explicit current-output claim. "
     "keep any task-specific deliverable required by an explicit output schema. Tool success is not goal completion, "
     "quality approval or permission to exceed the user goal. Omit this optional field for analysis without saved outputs."
 )
@@ -65,6 +67,7 @@ def saved_tool_result_index(work: WorkOrder, project_id: str) -> list[JsonValue]
 @dataclass
 class SavedCompletionResults:
     artifact_refs: list[ArtifactRef] = field(default_factory=list[ArtifactRef])
+    current_artifact_refs: list[ArtifactRef] = field(default_factory=list[ArtifactRef])
     receipts: list[dict[str, JsonValue]] = field(default_factory=list[dict[str, JsonValue]])
     snapshots: dict[str, dict[str, JsonValue]] = field(default_factory=dict[str, dict[str, JsonValue]])
 
@@ -86,12 +89,38 @@ def saved_completion_artifact_refs(receipts: Sequence[dict[str, JsonValue]]) -> 
     for receipt in receipts:
         if receipt.get("kind") != "saved_tool_result":
             continue
-        values = receipt.get("artifact_refs")
+        values = receipt.get("current_artifact_refs", receipt.get("artifact_refs"))
         for value in values if isinstance(values, list) else []:
             if isinstance(value, dict):
                 ref = ArtifactRef.model_validate(value)
                 refs[ref.identity()] = ref
     return list(refs.values())
+
+
+def _editorial_source_currentness(document: ProjectDocument, ref: ArtifactRef) -> dict[str, JsonValue]:
+    """A saved mutable timeline revision is a source, not an assertion of current content."""
+    saved = document.editorial_timeline or {}
+    project = saved.get("project")
+    timelines = project.get("timelines") if isinstance(project, dict) else None
+    current_revision = saved.get("revision")
+    if (not isinstance(timelines, list)
+        or not any(isinstance(item, dict) and item.get("id") == ref.artifact_id for item in timelines)
+        or not isinstance(current_revision, int) or isinstance(current_revision, bool)):
+        raise AgentResultContractError(f"{ref.artifact_type}/{ref.artifact_id}: saved source has no current timeline object")
+    if ref.version is not None and ref.version > current_revision:
+        raise AgentResultContractError(
+            f"{ref.artifact_type}/{ref.artifact_id}: saved source claims future revision {ref.version}; current revision is {current_revision}")
+    return {
+        "artifact_ref": ref.model_dump(mode="json"),
+        "source_status": ("CURRENT" if ref.version == current_revision else
+                          "UNKNOWN_REVISION" if ref.version is None else "HISTORICAL_REVISION"),
+        "source_revision": ref.version,
+        "current_revision": current_revision,
+        "current_content_verified": ref.version == current_revision,
+        "details_tool": "timeline.read_editorial",
+        "details_arguments": {"project_id": ref.project_id, "timeline_id": ref.artifact_id},
+        "meaning": "The source preserves the saved operation; a changed global revision alone does not establish whether this selected content changed.",
+    }
 
 
 def prepare_saved_completion_results(
@@ -115,6 +144,7 @@ def prepare_saved_completion_results(
 
     versions = {version.id: (asset, version) for asset in document.assets for version in asset.versions}
     unique: dict[tuple[str, str, str, int | None], ArtifactRef] = {}
+    current: dict[tuple[str, str, str, int | None], ArtifactRef] = {}
 
     def source(turn: SpecialistTurnRecord) -> dict[str, JsonValue]:
         snapshot_id = f"context-completion-tool-{work.id}-{turn.id}"
@@ -129,19 +159,31 @@ def prepare_saved_completion_results(
         if not refs and turn.tool_name not in read_tool_ids:
             raise AgentResultContractError(f"saved_tool_result_sequences/{turn.sequence}: result has no saved artifact references; report its analysis directly")
         canonical: list[ArtifactRef] = []
+        current_refs: list[ArtifactRef] = []
+        currentness: list[JsonValue] = []
         for ref in refs:
             if ref.artifact_type == "asset_version" and ref.version is None and ref.artifact_id in versions:
                 # The UUID names the immutable version. Never substitute current/latest.
                 ref = ref.model_copy(update={"version": versions[ref.artifact_id][1].version})
             canonical.append(ref)
             unique[ref.identity()] = ref
+            if ref.artifact_type == "editorial_timeline":
+                state = _editorial_source_currentness(document, ref)
+                currentness.append(state)
+                if state["source_status"] != "CURRENT":
+                    continue
+            current_refs.append(ref)
+            current[ref.identity()] = ref
         result.receipts.append({"kind": "saved_tool_result", "sequence": turn.sequence,
             "tool_name": turn.tool_name, "status": "SUCCEEDED", "observed_at": turn.updated_at.isoformat(),
             "artifact_refs": [ref.model_dump(mode="json") for ref in canonical], "saved_result": source(turn),
+            "current_artifact_refs": [ref.model_dump(mode="json") for ref in current_refs],
+            **({"artifact_currentness": currentness} if currentness else {}),
             "saved_arguments": arguments_source(turn),
             **({"tool_effect": "READ", "observation_only": True} if turn.tool_name in read_tool_ids else {})})
 
     result.artifact_refs = list(unique.values())
+    result.current_artifact_refs = list(current.values())
     selected_version_ids = {ref.artifact_id for ref in result.artifact_refs if ref.artifact_type == "asset_version"}
     for version_id in sorted(selected_version_ids):
         found = versions.get(version_id)

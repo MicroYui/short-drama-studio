@@ -56,7 +56,8 @@ def test_audio_inspection_uses_saved_trim_speed_reverse_volume_and_subtitles(tmp
     assert report.dialogue_checks[0].script_line_id == line.id
     inspected=report.clip_inspections[0]
     assert inspected.metrics is not None and abs(inspected.metrics.duration_seconds-1.5)<.1
-    assert -27 < inspected.metrics.peak_dbfs < -22
+    # The exporter's mono -> stereo -> inspection-mono conversion is included.
+    assert -28 < inspected.metrics.peak_dbfs < -26
     assert inspected.extracted_audio_path
     with wave.open(inspected.extracted_audio_path,'rb') as wav:
         data=np.frombuffer(wav.readframes(wav.getnframes()),dtype='<i2').astype(np.float64)

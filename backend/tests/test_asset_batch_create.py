@@ -159,6 +159,11 @@ def test_actual_worker_input_keeps_written_brief_and_descriptor_once_per_object(
     handoff = cast(dict[str, JsonValue], state["latest_handoff"])
     assert "output" not in cast(dict[str, JsonValue], handoff["result"])
     assert json.dumps(state, ensure_ascii=False).count(str(definition["descriptor"])) == 1
+    versions = [cast(dict[str, JsonValue], item["state"]) for item in entities if item["kind"] == "asset_version"]
+    current = next(version for version in versions if version["id"] == saved["current_version_id"])
+    assert "descriptor" not in current
+    # The compact input must not rewrite the persisted source result.
+    assert result.output and str(definition["descriptor"]) in json.dumps(result.output, ensure_ascii=False)
 
 
 def test_later_brief_update_replaces_only_that_current_object(

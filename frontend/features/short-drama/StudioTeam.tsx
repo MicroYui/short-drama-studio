@@ -15,6 +15,8 @@ const roles: Record<string, { label: string; Icon: typeof PenLine }> = {
 
 const toolLabels: Record<string, string> = {
   'artifact.read_current': '读取当前正文', 'script.save_scene': '写入完整场次', 'script.plan_scenes': '安排本集场次',
+  'artifact.create_production_spec': '保存制作规格', 'artifact.add_reference_entries': '登记素材引用',
+  'image.create_edit_guide': '标注局部修改',
   'change.propose_text': '准备修改对照', 'change.apply': '更新相关内容', 'change.preview': '判断修改范围',
   'shot.begin_storyboard_draft': '开始设计分镜', 'shot.append_storyboard_ledger_segment': '安排台词与动作',
   'shot.complete_storyboard_ledger': '整理镜头时长', 'shot.append_storyboard_outline_segment': '安排镜头组',
@@ -46,6 +48,8 @@ const toolLabels: Record<string, string> = {
   'route.list_h3_runs': '查看已有视频任务', 'route.get_h3_run': '读取视频生成记录',
   'route.preview_h3_probe': '核对视频输入', 'video.select_take': '采用镜头视频',
   'video.inspect_take': '观察实际视频', 'video.get_take_inspection': '读取视频观察结果',
+  'video.lip_sync': '准备原视频口型修复', 'video.get_lip_sync': '读取口型修复结果',
+  'video.reconcile_lip_sync': '找回原口型任务', 'video.adopt_lip_sync': '采用选区口型画面',
   'route.plan_h3': '选择视频输入与生成方式', 'route.execute_h3_plan': '提交真实视频生成',
   'task.advance': '推进生成任务', 'task.get': '查看生成进度',
   'route.h3_capability_profile': '查看视频生成能力',
@@ -53,6 +57,8 @@ const toolLabels: Record<string, string> = {
 }
 const labelTool = (name: string) => toolLabels[name] || name
 const stringField = (event: StudioEvent, key: string) => typeof event.data[key] === 'string' ? String(event.data[key]) : ''
+// A previous poll deadline can remain in history after the worker is running.
+const isPolling = (worker: StudioWorker) => worker.status === 'NEEDS_ATTENTION' && Boolean(worker.waiting_until) && !worker.waiting_review
 
 export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; events: StudioEvent[]; job: StudioJob }) {
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -67,7 +73,7 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
   const visible = current
     .filter(worker => showCompleted || worker.status !== 'COMPLETED' || latestCompletedByRole.get(worker.skill_role || worker.role)?.id === worker.id)
     .sort((a, b) => Number(a.status === 'COMPLETED') - Number(b.status === 'COMPLETED'))
-  const activeCount = visible.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review && !worker.waiting_until && active).length
+  const activeCount = visible.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review && active).length
   const loaded = events.filter(event => event.kind === 'skills.loaded')
   const methods = [...new Set(loaded.map(event => stringField(event, 'summary')).filter(Boolean))]
   return <section className="sd-team" aria-label="Agent 制作团队">
@@ -79,7 +85,7 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
     <div className="sd-team-workers">{visible.map(worker => {
       const descriptor = roles[worker.skill_role ?? ''] ?? { label: worker.role, Icon: CircleDot }
       const Icon = descriptor.Icon
-      const polling = Boolean(worker.waiting_until) && !worker.waiting_review && !['COMPLETED', 'CANCELLED'].includes(worker.status)
+      const polling = isPolling(worker)
       const review = worker.waiting_review && !['COMPLETED', 'CANCELLED'].includes(worker.status)
       const running = active && worker.status === 'IN_PROGRESS' && !polling && !review
       const done = worker.status === 'COMPLETED'
@@ -96,7 +102,7 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
       const pollSeconds = worker.waiting_until ? Math.max(0, Math.ceil((Date.parse(worker.waiting_until) - now) / 1000)) : 0
       const skills = workerEvents.filter(event => event.kind === 'skills.loaded')
       return <article className={`sd-team-worker ${running ? 'is-running' : ''} ${done ? 'is-done' : ''}`} key={worker.id}>
-        <button className="sd-team-worker-head" aria-expanded={expanded === worker.id} onClick={() => setExpanded(expanded === worker.id ? null : worker.id)}><span className="sd-team-role-icon"><Icon size={16} /></span><strong>{worker.role.trim() || descriptor.label}</strong><small>{running ? <Loader2 size={11} className="sd-spin" /> : done ? <Check size={12} /> : null}{status}</small><ChevronDown size={13} /></button>
+        <button className="sd-team-worker-head" aria-expanded={expanded === worker.id} onClick={() => setExpanded(expanded === worker.id ? null : worker.id)}><span className="sd-team-role-icon"><Icon size={16} /></span><strong title={worker.role.trim() || descriptor.label}>{worker.role.trim() || descriptor.label}</strong><small>{running ? <Loader2 size={11} className="sd-spin" /> : done ? <Check size={12} /> : null}{status}</small><ChevronDown size={13} /></button>
         <p className="sd-team-objective" title={worker.objective}>{detail}</p>
         <div className="sd-team-current"><span className={running ? 'sd-team-activity-dot' : ''} /><span>{review ? '相关内容审阅后继续，无关分工照常推进' : polling ? (pollSeconds ? `下次检查 ${pollSeconds} 秒后` : '准备查收生成结果') : deciding ? '组织内容与下一步' : labelTool(last ? stringField(last, 'tool_name') : worker.latest_tool || '准备任务')}</span><time>{done && worker.completed_artifact_count ? `已登记 ${worker.completed_artifact_count} 项结果` : running && elapsed > 2 ? `${elapsed}s` : `${worker.tool_turns} 次操作`}</time></div>
         {worker.latest_error && <p className="sd-team-error" role="status">{worker.latest_error}</p>}

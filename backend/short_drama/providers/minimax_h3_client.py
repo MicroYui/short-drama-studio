@@ -6,6 +6,7 @@ import base64
 from io import BytesIO
 import math
 import mimetypes
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -28,7 +29,7 @@ from short_drama.h3_models import (
 
 
 # The encoded bytes changed from the previous unadapted Data URI cache.
-H3_LOCAL_INPUT_ENCODING_PROFILE = "acedata-h3-image-padding-v1"
+H3_LOCAL_INPUT_ENCODING_PROFILE = "acedata-h3-image-jpeg95-padding-v2"
 
 
 def h3_image_transport_size(width: int, height: int) -> tuple[int, int]:
@@ -39,10 +40,17 @@ def h3_image_transport_size(width: int, height: int) -> tuple[int, int]:
 def _image_transport_bytes(raw: bytes, mime_type: str) -> tuple[bytes, str]:
     with Image.open(BytesIO(raw)) as source:
         target_size = h3_image_transport_size(source.width, source.height)
-        if target_size == source.size:
-            return raw, mime_type
         has_alpha = "A" in source.getbands() or "transparency" in source.info
         pixels = source.convert("RGBA" if has_alpha else "RGB")
+        if has_alpha and pixels.getchannel("A").getextrema() == (255, 255):
+            has_alpha = False
+            pixels = pixels.convert("RGB")
+        # Large opaque PNG references otherwise make a multi-image request tens
+        # of megabytes. Keep their pixel dimensions and the original local file.
+        compress = (mime_type == "image/png" and len(raw) > 1024 * 1024
+                    and source.mode in {"RGB", "RGBA", "L", "LA"} and not has_alpha)
+        if target_size == source.size and not compress:
+            return raw, mime_type
         if has_alpha:
             color = (0, 0, 0, 0)
         else:
@@ -58,6 +66,15 @@ def _image_transport_bytes(raw: bytes, mime_type: str) -> tuple[bytes, str]:
         offset = ((canvas.width - pixels.width) // 2, (canvas.height - pixels.height) // 2)
         canvas.paste(pixels, offset)
         encoded = BytesIO()
+        if compress:
+            canvas.save(encoded, format="JPEG", quality=95, subsampling=0, optimize=True,
+                        icc_profile=source.info.get("icc_profile"), exif=source.info.get("exif", b""))
+            jpeg = encoded.getvalue()
+            if len(jpeg) < len(raw):
+                return jpeg, "image/jpeg"
+            encoded = BytesIO()
+            if target_size == source.size:
+                return raw, mime_type
         canvas.save(encoded, format="PNG")
         return encoded.getvalue(), "image/png"
 
@@ -115,7 +132,7 @@ class H3Client(Protocol):
 
     def query(self, task_id: str) -> H3RemoteTask: ...
 
-    def list_tasks(self, *, page_size: int = 20) -> list[H3RemoteTask]: ...
+    def list_tasks(self, *, page_size: int = 20, offset: int = 0) -> list[H3RemoteTask]: ...
 
     def cancel_or_delete(self, task_id: str) -> H3DeleteResponse: ...
 
@@ -196,10 +213,31 @@ class MiniMaxH3Client:
                 "AceData MiniMax submission transport outcome is unknown"
             ) from exc
         if response.status_code >= 500:
+            detail = self._submission_error_detail(response)
             raise H3SubmissionUnknown(
                 f"AceData MiniMax submission returned {response.status_code}; outcome is unknown"
+                + (f"; {detail}" if detail else "")
             )
         return response
+
+    def _submission_error_detail(self, response: Response) -> str:
+        try:
+            payload = cast(object, response.json())
+        except ValueError:
+            detail = " ".join(re.sub(r"<[^>]*>", " ", response.text).split())
+        else:
+            details: list[str] = []
+            if isinstance(payload, dict):
+                fields = cast(dict[str, object], payload)
+                error = fields.get("error")
+                if isinstance(error, dict):
+                    error_fields = cast(dict[str, object], error)
+                    details.extend(str(error_fields[key]) for key in ("type", "code", "message") if error_fields.get(key))
+                elif isinstance(error, str):
+                    details.append(error)
+                details.extend(f"{key}={fields[key]}" for key in ("request_id", "trace_id") if fields.get(key))
+            detail = "; ".join(details)
+        return detail.replace(self.api_key, "[redacted]")[:800]
 
     @staticmethod
     def _is_async_unsupported(exc: H3DefiniteRequestError) -> bool:
@@ -217,13 +255,15 @@ class MiniMaxH3Client:
         except (ValueError, ValidationError) as exc:
             raise H3TransientError("AceData MiniMax query response was not valid") from exc
 
-    def list_tasks(self, *, page_size: int = 20) -> list[H3RemoteTask]:
+    def list_tasks(self, *, page_size: int = 20, offset: int = 0) -> list[H3RemoteTask]:
+        if offset < 0:
+            raise ValueError("MiniMax task-list offset must be non-negative")
         response = self._request(
             "POST",
             "/minimax/tasks",
             json_data={
                 "action": "retrieve_batch",
-                "offset": 0,
+                "offset": offset,
                 "limit": max(1, min(page_size, 100)),
             },
         )

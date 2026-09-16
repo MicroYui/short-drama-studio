@@ -3,6 +3,8 @@ import {
   CUT_POINT_TOLERANCE,
   type ToolType,
 } from './video-editor-utils'
+import type { AudioFadeSettings } from '../../lib/audio-envelope'
+import { clipAudioDelegated } from '../../lib/clip-audio-source'
 import {
   DEFAULT_SUBTITLE_STYLE,
   DEFAULT_TRACKS,
@@ -42,7 +44,9 @@ export interface ExportLetterbox {
   opacity: number
 }
 
-export interface ExportClipData {
+export interface ExportClipData extends AudioFadeSettings {
+  sourceType?: string
+  audioDelegated?: boolean
   path: string
   type: string
   startTime: number
@@ -750,11 +754,16 @@ export function selectExportLetterbox(state: EditorState): ExportLetterbox | nul
 
 export function selectExportClipData(state: EditorState): ExportClipData[] {
   const tracks = selectTracks(state)
-  return selectClips(state)
+  const clips = selectClips(state)
+  const assets = selectAssets(state)
+  const solo = tracks.some(track => track.solo)
+  return clips
     .filter(clip => clip.type === 'video' || clip.type === 'image' || clip.type === 'audio')
-    .filter(clip => tracks[clip.trackIndex]?.enabled !== false)
+    .filter(clip => tracks[clip.trackIndex]?.enabled !== false && (!solo || tracks[clip.trackIndex]?.solo))
     .map(clip => ({
       path: selectClipPath(state, clip),
+      sourceType: assets.find(asset => asset.id === clip.assetId)?.type,
+      audioDelegated: clipAudioDelegated(clip, clips, item => selectClipPath(state, item)),
       type: clip.type,
       startTime: clip.startTime,
       duration: clip.duration,
@@ -765,8 +774,12 @@ export function selectExportClipData(state: EditorState): ExportClipData[] {
       flipV: clip.flipV || false,
       opacity: clip.opacity ?? 100,
       trackIndex: clip.trackIndex,
-      muted: clip.muted || false,
+      muted: clip.muted || tracks[clip.trackIndex]?.muted || false,
       volume: clip.volume ?? 1,
+      audioFadeInSeconds: clip.audioFadeInSeconds,
+      audioFadeOutSeconds: clip.audioFadeOutSeconds,
+      audioEnvelopeOffsetSeconds: clip.audioEnvelopeOffsetSeconds,
+      audioEnvelopeDurationSeconds: clip.audioEnvelopeDurationSeconds,
     }))
 }
 

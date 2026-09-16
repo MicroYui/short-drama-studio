@@ -2,8 +2,9 @@ import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { logger } from '../logger'
-import { fileHasAudio } from './audio-probe'
+import { fileMediaStreams } from './audio-probe'
 import type { ExportClip } from './timeline'
+import { clipAudioGain, type AudioFadeSettings } from '../../frontend/lib/audio-envelope'
 
 const SAMPLE_RATE = 48000
 const NUM_CHANNELS = 2
@@ -49,9 +50,9 @@ function extractPcmBuffer(
   })
 }
 
-interface AudioSource {
+interface AudioSource extends AudioFadeSettings {
   filePath: string; trimStart: number; trimEnd: number;
-  timelineStart: number; speed: number; reversed: boolean; volume: number;
+  timelineStart: number; duration: number; speed: number; reversed: boolean; volume: number;
 }
 
 /**
@@ -63,35 +64,29 @@ export async function mixAudioToPcm(
   totalDuration: number,
   ffmpegPath: string,
   strict = false,
-): Promise<{ pcmBuffer: Buffer; sampleRate: number; channels: number }> {
+): Promise<{ pcmBuffer: Buffer; sampleRate: number; channels: number; peakBeforeGain: number; outputGain: number }> {
   // Collect audio sources from ORIGINAL clips
-  const audioProbeCache = new Map<string, boolean>()
+  const audioProbeCache = new Map<string, { audio: boolean; video: boolean }>()
   const audioSources: AudioSource[] = []
 
   for (const c of clips) {
-    if (c.muted || c.volume <= 0) continue
+    if (c.muted || c.volume <= 0 || c.audioDelegated) continue
     const fp = c.path
     if (!fp || !fs.existsSync(fp)) {
       if (strict && (c.type === 'audio' || c.type === 'video')) throw new Error(`声音素材不可读取：${fp}`)
       continue
     }
 
-    if (c.type === 'audio') {
+    if (c.type === 'video' || c.sourceType === 'video') {
+      if (!audioProbeCache.has(fp)) audioProbeCache.set(fp, fileMediaStreams(ffmpegPath, fp))
+      const streams = audioProbeCache.get(fp)!
+      // Only a confirmed video container with no audio is silent. A broken
+      // audio source must still fail strict export instead of disappearing.
+      if (!streams.audio && streams.video) continue
+    }
+    if (c.type === 'audio' || c.type === 'video') {
       audioSources.push({
-        filePath: fp,
-        trimStart: c.trimStart,
-        trimEnd: c.trimStart + c.duration * c.speed,
-        timelineStart: c.startTime,
-        speed: c.speed,
-        reversed: c.reversed,
-        volume: c.volume,
-      })
-    } else if (c.type === 'video') {
-      if (!audioProbeCache.has(fp)) {
-        audioProbeCache.set(fp, fileHasAudio(ffmpegPath, fp))
-      }
-      if (!audioProbeCache.get(fp)) continue
-      audioSources.push({
+        ...c,
         filePath: fp,
         trimStart: c.trimStart,
         trimEnd: c.trimStart + c.duration * c.speed,
@@ -124,7 +119,8 @@ export async function mixAudioToPcm(
         const destIdx = startSample + s
         if (destIdx < 0 || destIdx >= totalSamples) continue
         const value = pcm.readInt16LE(s * BYTES_PER_SAMPLE)
-        mixBuffer[destIdx] += value * src.volume
+        const localTime = Math.floor(s / NUM_CHANNELS) / SAMPLE_RATE
+        mixBuffer[destIdx] += value * clipAudioGain(src, localTime)
       }
       logger.info( `[Export] Audio ${i + 1}: mixed ${numPcmSamples} samples (${(numPcmSamples / SAMPLE_RATE / NUM_CHANNELS).toFixed(2)}s) at offset frame ${startFrame}`)
     } catch (err: any) {
@@ -133,12 +129,22 @@ export async function mixAudioToPcm(
     }
   }
 
-  // Convert Float64 accumulator -> Int16 PCM buffer (with clamp)
+  // Keep normal mixes unchanged. If overlapping tracks exceed full scale,
+  // lower the complete stereo mix uniformly rather than flattening its peaks.
+  let peakBeforeGain = 0
+  for (const sample of mixBuffer) {
+    // Int16 has one extra negative value; an untouched -32768 is valid audio.
+    peakBeforeGain = Math.max(peakBeforeGain, sample >= 0 ? sample / 32767 : -sample / 32768)
+  }
+  // Leave a little room for AAC reconstruction after the PCM mix (about 0.45 dB).
+  const outputGain = peakBeforeGain > 1 ? 0.95 / peakBeforeGain : 1
+  logger.info(`[Export] Audio peak=${peakBeforeGain.toFixed(6)} outputGain=${outputGain.toFixed(6)}`)
+  // The clamp below only guards numerical rounding after uniform attenuation.
   const outputPcm = Buffer.alloc(totalFrames * BYTES_PER_FRAME)
   for (let s = 0; s < totalSamples; s++) {
-    const clamped = Math.max(-32768, Math.min(32767, Math.round(mixBuffer[s])))
+    const clamped = Math.max(-32768, Math.min(32767, Math.round(mixBuffer[s] * outputGain)))
     outputPcm.writeInt16LE(clamped, s * BYTES_PER_SAMPLE)
   }
 
-  return { pcmBuffer: outputPcm, sampleRate: SAMPLE_RATE, channels: NUM_CHANNELS }
+  return { pcmBuffer: outputPcm, sampleRate: SAMPLE_RATE, channels: NUM_CHANNELS, peakBeforeGain, outputGain }
 }

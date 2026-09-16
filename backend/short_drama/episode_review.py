@@ -6,12 +6,14 @@ import base64
 import json
 import mimetypes
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from pydantic import Field, JsonValue, model_validator
 
 from short_drama.models import (
     DomainModel,
+    AudioInspectionReport,
     EpisodeReviewDimension,
     EpisodeReviewFinding,
     ProjectDocument,
@@ -24,6 +26,7 @@ from short_drama.models import (
     Take,
     TimelineManifest,
     VideoInspectionReport,
+    VideoEditorialUse,
 )
 from short_drama.production_profiles import (
     ProductionPromptStage,
@@ -80,9 +83,16 @@ def review_scene(
     latest_inspection_by_take: dict[str, VideoInspectionReport],
     client: LanguageProviderClient,
     editorial_project: dict[str, JsonValue] | None = None,
+    video_inspections: list[VideoInspectionReport] | None = None,
+    audio_inspections: list[AudioInspectionReport] | None = None,
 ) -> SceneEpisodeReview:
+    from short_drama.observation_sources import audio_report_evidence, video_evidence_for_use
+    from short_drama.studio_editorial import EditorProject
+
     shot_ids = [shot.id for shot in shots]
-    clip_by_shot = {item.shot_id: item for item in manifest.video_clips}
+    editor = EditorProject.model_validate(editorial_project) if editorial_project else None
+    timeline = next((item for item in editor.timelines if item.id == editor.activeTimelineId), None) if editor else None
+    editor_clips = {item.id: item for item in timeline.clips} if timeline else {}
     line_by_id = {
         line.id: line
         for script in document.script_versions
@@ -94,22 +104,38 @@ def review_scene(
     shot_evidence: list[dict[str, object]] = []
     inspection_ids: list[str] = []
     for shot in shots:
-        clip = clip_by_shot.get(shot.id)
-        if clip is None:
+        if not any(item.shot_id == shot.id for item in manifest.video_clips):
             raise ValueError(f"Current manifest has no video clip for {shot.id}")
+    for shot, clip in ((shot, clip) for shot in shots for clip in manifest.video_clips if clip.shot_id == shot.id):
         take = takes_by_id.get(clip.take_id)
         if take is None:
             raise ValueError(f"Current manifest references missing Take {clip.take_id}")
-        inspection = latest_inspection_by_take.get(take.id)
-        if inspection is not None:
-            inspection_ids.append(inspection.id)
-            if len(image_urls) < 12:
-                image_urls.append(_image_data_url(Path(inspection.contact_sheet_path)))
+        edited = editor_clips.get(clip.id)
+        source_end = clip.source_in_seconds + clip.duration_seconds * (edited.speed if edited else 1)
+        evidence = video_evidence_for_use(document, take,
+            video_inspections if video_inspections is not None else list(latest_inspection_by_take.values()),
+            takes_by_id, clip.source_in_seconds, source_end,
+            VideoEditorialUse(timeline_id=timeline.id, clip_id=clip.id, shot_id=shot.id, take_id=take.id,
+                media_path=take.media_path, source_in_seconds=clip.source_in_seconds, source_out_seconds=source_end,
+                timeline_start_seconds=clip.start_seconds, timeline_end_seconds=clip.start_seconds + clip.duration_seconds,
+                speed=edited.speed, reversed=edited.reversed) if timeline is not None and edited is not None else None)
+        for item in cast(list[dict[str, JsonValue]], evidence["reports"]):
+            if item["source_status"] != "CURRENT":
+                continue
+            inspection_ids.append(str(item["id"]))
+            path_value = item.get("contact_sheet_path")
+            if len(image_urls) < 12 and isinstance(path_value, str) and Path(path_value).is_file():
+                image_urls.append(_image_data_url(Path(path_value)))
                 image_map.append(
                     {
                         "index": len(image_urls),
                         "shot_id": shot.id,
                         "take_id": take.id,
+                        "clip_id": clip.id,
+                        "inspection_id": item["id"],
+                        "observed_source_in_seconds": item["observed_source_in_seconds"],
+                        "observed_source_out_seconds": item["observed_source_out_seconds"],
+                        "review_focus": item["review_focus"],
                         "role": "CHRONOLOGICAL_TAKE_CONTACT_SHEET",
                     }
                 )
@@ -132,22 +158,10 @@ def review_scene(
                     for line_id in shot.dialogue_line_ids
                     if line_id in line_by_id
                 ],
-                "video_inspection": (
-                    {
-                        "id": inspection.id,
-                        "semantic_status": inspection.semantic_status.value,
-                        "observations": [
-                            item.model_dump(mode="json")
-                            for item in inspection.observations
-                        ],
-                        "issues": [
-                            item.model_dump(mode="json") for item in inspection.issues
-                        ],
-                        "summary": inspection.summary,
-                    }
-                    if inspection is not None
-                    else None
-                ),
+                "video_inspections": evidence,
+                "audio_inspections": [audio_report_evidence(document, report, shot_id=shot.id, take_id=take.id,
+                    timeline_start=clip.start_seconds, timeline_end=clip.start_seconds + clip.duration_seconds)
+                    for report in (audio_inspections or []) if any(item.take_id == take.id for item in report.clip_inspections)],
             }
         )
 
@@ -159,6 +173,9 @@ def review_scene(
     )
     instructions = (
         "你是当前视频制作媒介中的场景级成片审校 Agent。"
+        "video_inspections 中每份报告保留 source_status、实际源时段和 review_focus；"
+        "历史/范围外报告不作当前证据，局部关注不能推广到未观察范围。"
+        "audio_inspections 仅提供当前适用的实际信号/ASR/声线观察，不代表唇音同步或听过全部表演。"
         f"{skill_prompt.text} 只返回 JSON，并严格匹配 SceneReviewAgentOutput。请基于已经剪成的"
         "场景进行审校，使用当前采用的场景意图、按时间顺序排列的 ShotPlan、已选 Take、时间线片段"
         "以及已持久化的视频观察。先陈述证据，再作推断。不要给场景打分，不要要求固定的节拍"

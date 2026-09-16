@@ -29,7 +29,7 @@ export function StudioChangeReview({ projectId, changes, onChanged, onClose, onE
   }
   return <div className="sd-modal-backdrop sd-review-backdrop" onClick={onClose}>
     <section className="sd-change-review" role="dialog" aria-modal="true" aria-label="审阅 Agent 修改" onClick={event => event.stopPropagation()}>
-      <header><span className="sd-review-symbol"><GitCompareArrows size={22} /></span><div><h2>{pending ? `${pending} 处修改，等你决定。` : '修改已处理。'}</h2><p>{pending ? '逐项对照。接受的内容会立即保存。' : '已接受的内容已保存，Agent 将按原目标继续。'}</p></div><button className="sd-icon" aria-label="关闭修改审阅" onClick={onClose}><X size={20} /></button></header>
+      <header><span className="sd-review-symbol"><GitCompareArrows size={22} /></span><div><h2>{pending ? `${pending} 处修改，等你决定。` : '修改已处理。'}</h2><p>{pending ? '逐项对照。接受的内容会立即保存。' : '你的选择已保存，已接受的修改已写入当前作品。'}</p></div><button className="sd-icon" aria-label="关闭修改审阅" onClick={onClose}><X size={20} /></button></header>
       <div className="sd-review-scroll">{changes.map(change => <section className="sd-change-set" key={change.id}>
         <div className="sd-change-set-title"><h3>{change.title}</h3>{change.summary && <p>{change.summary}</p>}</div>
         {change.items.map((item, index) => { const range = changedText(item.before, item.after); return <article className={`sd-change-item sd-change-${item.status}`} key={item.id} aria-label={item.title}>

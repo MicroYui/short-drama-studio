@@ -818,7 +818,7 @@ def test_azure_transparent_background_is_rejected_before_provider_call(
     assert fake.calls == []
 
 
-def test_h3_resolves_only_the_current_approved_asset_version(tmp_path: Path) -> None:
+def test_h3_resolves_explicit_available_draft_and_approved_asset_versions(tmp_path: Path) -> None:
     fake = FakeImageProvider()
     service = _service(tmp_path, fake)
     project = service.initialize_fixture()
@@ -838,15 +838,16 @@ def test_h3_resolves_only_the_current_approved_asset_version(tmp_path: Path) -> 
         asset_version_id=imported.version.id,
     )
 
-    with pytest.raises(WorkflowConflictError, match="is not approved"):
-        service.preview_h3_probe(
-            project.document.project.id,
-            H3ProbeRequest(
-                shot_id=shot_id,
-                route=VideoGenerationRoute.FRAME_FIRST,
-                media_inputs=[linked_input],
-            ),
-        )
+    draft_preview = service.preview_h3_probe(
+        project.document.project.id,
+        H3ProbeRequest(shot_id=shot_id, route=VideoGenerationRoute.FRAME_FIRST, media_inputs=[linked_input]),
+    )
+    assert imported.version.approval_status.value == "DRAFT"
+    assert draft_preview.request.content[1].image_url is not None
+    assert imported.version.local_path is not None
+    assert draft_preview.request.content[1].image_url.url == f"local-upload://{Path(imported.version.local_path).name}"
+    # Preview uses the explicitly selected usable file; it does not manufacture a review.
+    assert _fixture_asset(service, asset.id).versions[-1].approval_status.value == "DRAFT"
 
     service.review_asset_version(
         asset.project_id,

@@ -81,8 +81,10 @@ def create_short_drama_app(auth_token: str) -> FastAPI:
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from short_drama.studio_export import recover_interrupted_exports
         from short_drama.studio_comfy import recover_interrupted_workflows
+        from short_drama.studio_project_transfers import recover_interrupted_project_transfers
         recover_interrupted_exports(SERVICE)
         recover_interrupted_workflows(SERVICE)
+        recover_interrupted_project_transfers(SERVICE)
         SERVICE.studio_runtime.resume_after_restart()
         yield
         SERVICE.team_executor.shutdown()

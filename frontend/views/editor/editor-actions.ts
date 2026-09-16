@@ -1,6 +1,7 @@
 import type { SetStateAction } from 'react'
 import type { ParsedTimeline } from '../../lib/timeline-import'
 import type { SrtCue } from '../../lib/srt'
+import { sliceClipAudioEnvelope } from '../../lib/audio-envelope'
 import type {
   Asset,
   AssetBins,
@@ -561,10 +562,18 @@ function replaceActiveTimeline(state: EditorState, updater: (timeline: Timeline)
   return updateEditorModel(state, editorModel => withActiveTimeline(editorModel, updater))
 }
 
+function reanchorEditedAudioEnvelope(previous: TimelineClip | undefined, next: TimelineClip): TimelineClip {
+  if (!previous || previous.audioEnvelopeDurationSeconds == null) return next
+  // A subsequent trim/retime intentionally gives a split fragment new edges.
+  // Start its fades at those edges instead of retaining a stale original span.
+  if (previous.duration === next.duration && previous.trimStart === next.trimStart && previous.speed === next.speed) return next
+  return { ...next, audioEnvelopeOffsetSeconds: undefined, audioEnvelopeDurationSeconds: undefined }
+}
+
 function mapClips(state: EditorState, mapper: (clip: TimelineClip) => TimelineClip): EditorState {
   return replaceActiveTimeline(state, timeline => ({
     ...timeline,
-    clips: timeline.clips.map(mapper),
+    clips: timeline.clips.map(clip => reanchorEditedAudioEnvelope(clip, mapper(clip))),
   }))
 }
 
@@ -593,10 +602,13 @@ export function replaceActiveTimelineDocument(
 }
 
 export function setTimelineClips(state: EditorState, value: SetStateAction<TimelineClip[]>): EditorState {
-  return replaceActiveTimeline(state, timeline => ({
-    ...timeline,
-    clips: applyStateAction(value, timeline.clips),
-  }))
+  return replaceActiveTimeline(state, timeline => {
+    const previous = new Map(timeline.clips.map(clip => [clip.id, clip]))
+    return {
+      ...timeline,
+      clips: applyStateAction(value, timeline.clips).map(clip => reanchorEditedAudioEnvelope(previous.get(clip.id), clip)),
+    }
+  })
 }
 
 export function setTimelineTracks(state: EditorState, value: SetStateAction<Track[]>): EditorState {
@@ -1081,15 +1093,17 @@ export function splitClipsAtTime(state: EditorState, clipIds: string[], time: nu
 
       const firstHalf: TimelineClip = {
         ...clip,
+        ...sliceClipAudioEnvelope(clip, 0),
         duration: splitPoint,
-        trimEnd: clip.trimEnd + (clip.duration - splitPoint),
+        trimEnd: clip.trimEnd + (clip.duration - splitPoint) * clip.speed,
       }
       const secondHalf: TimelineClip = {
         ...clip,
+        ...sliceClipAudioEnvelope(clip, splitPoint),
         id: secondHalfId,
         startTime: clip.startTime + splitPoint,
         duration: clip.duration - splitPoint,
-        trimStart: clip.trimStart + splitPoint,
+        trimStart: clip.trimStart + splitPoint * clip.speed,
       }
 
       newClips = newClips.map(candidate => candidate.id === splitId ? firstHalf : candidate).concat(secondHalf)
@@ -1112,16 +1126,18 @@ export function splitClipsAtTime(state: EditorState, clipIds: string[], time: nu
 
         const linkedFirstHalf: TimelineClip = {
           ...linkedClip,
+          ...sliceClipAudioEnvelope(linkedClip, 0),
           duration: linkedSplitPoint,
-          trimEnd: linkedClip.trimEnd + (linkedClip.duration - linkedSplitPoint),
+          trimEnd: linkedClip.trimEnd + (linkedClip.duration - linkedSplitPoint) * linkedClip.speed,
           linkedClipIds: [firstHalfId],
         }
         const linkedSecondHalf: TimelineClip = {
           ...linkedClip,
+          ...sliceClipAudioEnvelope(linkedClip, linkedSplitPoint),
           id: linkedSecondId,
           startTime: linkedClip.startTime + linkedSplitPoint,
           duration: linkedClip.duration - linkedSplitPoint,
-          trimStart: linkedClip.trimStart + linkedSplitPoint,
+          trimStart: linkedClip.trimStart + linkedSplitPoint * linkedClip.speed,
           linkedClipIds: [secondHalfId],
         }
 

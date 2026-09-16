@@ -62,10 +62,10 @@ def registry(version: int = 1) -> ToolRegistry:
     return tools
 
 
-def runtime_work(path: Path) -> tuple[AgentRuntimeStore, WorkOrder, ContextPack]:
+def runtime_work(path: Path, *, project_id: str = "project-test") -> tuple[AgentRuntimeStore, WorkOrder, ContextPack]:
     store = AgentRuntimeStore(path)
     runtime = AgentRuntime(store)
-    run = runtime.create_run(project_id="project-test", objective="Review the selected shot.", root_agent="leader")
+    run = runtime.create_run(project_id=project_id, objective="Review the selected shot.", root_agent="leader")
     work = runtime.create_work_order(run.id, sender="leader", recipient_role="director",
         objective="Review the selected shot.", why_now="Current task",
         production_skill_role=ProductionSkillRole.DIRECTOR,

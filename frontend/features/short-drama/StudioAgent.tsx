@@ -82,8 +82,8 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
   const lastContext = [...jobEvents].reverse().find(event => event.kind === 'context.prepared')
   const estimatedTokens = Number(lastContext?.data.estimated_input_tokens ?? 0)
   const liveWorkers = workers.filter(worker => worker.run_id === job?.run_id && !['COMPLETED', 'CANCELLED'].includes(worker.status))
-  const runningWorkers = liveWorkers.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review && !worker.waiting_until)
-  const waitingWorkers = liveWorkers.filter(worker => worker.waiting_until && !worker.waiting_review)
+  const runningWorkers = liveWorkers.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review)
+  const waitingWorkers = liveWorkers.filter(worker => worker.status === 'NEEDS_ATTENTION' && worker.waiting_until && !worker.waiting_review)
   const reviewWorkers = liveWorkers.filter(worker => worker.waiting_review)
   const currentAction = job?.status === 'retrying' ? '连接暂时中断，已完成的内容已保存，正在继续同一任务。' : runningWorkers.length > 1 ? `${runningWorkers.length} 项分工正在并行推进` : runningWorkers[0]?.latest_reason || runningWorkers[0]?.objective || (waitingWorkers.length ? `${waitingWorkers.length} 项分工等待生成结果，完成后自动继续` : reviewWorkers.length ? `${reviewWorkers.length} 项相关分工等待修改审阅` : '') || (lastTask ? actionLabel(lastTask) : '梳理当前目标和已有内容')
   useEffect(() => { if (suggested !== null) { if (suggested) setText(previous => previous.trim() && previous.trim() !== suggested.trim() ? `${previous}\n\n${suggested}` : suggested); textarea.current?.focus(); clearSuggested() } }, [suggested, clearSuggested])
@@ -111,7 +111,6 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
         {(job.pending_messages ?? []).length > 0 && <small>已收到你的新要求，当前步骤结束后处理。</small>}
         <StudioMediaTasks events={jobEvents} />
         <StudioTeam workers={workers} events={jobEvents} job={job} />
-        {pendingChanges > 0 && <button className="sd-review-callout" onClick={onReview}><span><strong>{pendingChanges} 处修改等待审阅</strong><small>查看前后对照，逐项接受</small></span><ChevronDown size={17} /></button>}
         <details className="sd-task-detail"><summary>制作任务 <ChevronDown size={13} /></summary>{tasks.slice(-9).map(event => <div key={event.id}><span className={textField(event, 'status') === 'FAILED' ? 'sd-danger-dot' : 'sd-task-dot'} /><p>{actionLabel(event)}<small>{taskStatus(event, Boolean(active))}</small></p></div>)}
           <section className="sd-context-detail" aria-label="上下文管理"><div><span>上下文上限</span><strong>{tokenLabel(contextWindow)} tokens</strong></div>{lastContext && <><div><span>当前请求估算</span><strong>{tokenLabel(estimatedTokens)}</strong></div><progress value={estimatedTokens} max={contextWindow} aria-label="当前请求的上下文用量" /><small>另预留 {tokenLabel(Number(lastContext.data.reserved_output_tokens ?? 0))} 用于输出与推理</small>{Number(lastContext.data.offloaded_blocks ?? 0) > 0 && <p>已整理上下文：{tokenLabel(Number(lastContext.data.original_input_tokens ?? 0))} → {tokenLabel(estimatedTokens)}。完整结果已保存，可按需读取。</p>}</>}<small>接近 200k 时整理；实际用量见模型记录。</small></section>
           {lastModel && <div className="sd-model-detail"><p>{textField(lastModel, 'model')} · {textField(lastModel, 'reasoning_effort')}</p><small>输入 {String(lastModel.data.input_tokens ?? '未返回')} tokens · 输出 {String(lastModel.data.output_tokens ?? '未返回')} tokens · {Number(lastModel.data.elapsed_seconds ?? 0).toFixed(1)} 秒</small></div>}
@@ -119,6 +118,7 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
         <StudioGenerationDraft events={jobEvents} job={job} />
         <div className="sd-job-controls">{active ? <button onClick={() => void StudioApi.control(job.id, 'pause').then(onSent).catch(onError)} disabled={job.status === 'pausing'}><Pause size={13} />暂停</button> : job.status !== 'completed' ? <button onClick={() => void StudioApi.control(job.id, 'resume').then(onSent).catch(onError)}><Play size={13} />继续</button> : null}<button onClick={() => void StudioApi.downloadTrace(projectId).catch(onError)}><Download size={13} />制作记录</button></div>
       </div>}
+      {pendingChanges > 0 && <button className="sd-review-callout" onClick={onReview}><span><strong>{pendingChanges} 处修改等待审阅</strong><small>查看前后对照，逐项接受</small></span><ChevronDown size={17} /></button>}
     </div>
     <div className="sd-agent-compose"><div className="sd-scope"><span>作用范围</span><strong>{prepareScope ? '剪辑中的当前选择' : scope.label}</strong>{!prepareScope && scope.kind !== 'episode' && <button className="sd-icon" aria-label="回到当前集范围" onClick={() => setScope({ kind: 'episode', label: '当前集' })}><X size={12} /></button>}</div><textarea ref={textarea} aria-label="给制作助手发送要求" placeholder={active ? '补充要求，或指出需要修改的地方…' : '描述你的想法，或者想修改什么…'} value={text} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send() } }} /><div className="sd-compose-footer"><span>⌘ Enter 发送</span><button className="sd-send" aria-label="发送给 Agent" disabled={!text.trim() || sending} onClick={() => void send()}>{sending ? <Loader2 size={16} className="sd-spin" /> : <ArrowUp size={17} />}</button></div></div>
     <footer className="sd-agent-footer">内容保存在本机 · 可随时编辑</footer>

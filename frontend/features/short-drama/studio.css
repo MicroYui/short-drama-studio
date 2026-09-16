@@ -109,7 +109,6 @@
 .sd-shot-waiting .sd-video-placeholder strong { font-size: 13px; }
 @media(max-width: 800px) { .sd-current-shot-preview { height: 310px; } }
 
-.sd-shot-detail[aria-busy=true], .sd-editor-modal[aria-busy=true] { pointer-events: none; }
 
 .sd-notice-toast { background: var(--sd-accent-soft); color: var(--sd-muted); border-color: var(--sd-border); }
 

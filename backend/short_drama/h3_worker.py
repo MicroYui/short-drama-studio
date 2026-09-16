@@ -7,6 +7,7 @@ import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from short_drama.asset_reference_truth import (
     AssetReferenceTruthError,
@@ -16,6 +17,8 @@ from short_drama.h3_models import (
     H3DeleteResponse,
     H3MediaInput,
     H3ProviderRun,
+    H3ReconciliationCandidatesResponse,
+    H3ReconciliationQuery,
     H3RemoteStatus,
     H3RemoteTask,
     H3UploadedInput,
@@ -42,6 +45,7 @@ from short_drama.providers.h3_config import H3ProviderConfigStore
 from short_drama.providers.minimax_h3_client import (
     H3_LOCAL_INPUT_ENCODING_PROFILE,
     H3Client,
+    H3ClientError,
     H3DefiniteRequestError,
     H3SubmissionUnknown,
     H3TransientError,
@@ -85,6 +89,7 @@ class PersistentH3Worker:
         self.ingestor = H3MediaIngestor()
         self._advance_locks_guard = threading.Lock()
         self._advance_locks: dict[str, threading.Lock] = {}
+        self._state_locks: dict[str, threading.Lock] = {}
 
     def advance(self, task_id: str) -> GenerationTask:
         initial = self._require_h3_task(task_id)
@@ -136,27 +141,48 @@ class PersistentH3Worker:
                 self._advance_locks[request_fingerprint] = lock
             return lock
 
+    def _state_lock(self, request_fingerprint: str) -> threading.Lock:
+        # Unlike the per-request advance lane, this protects only short local
+        # transitions. Cancellation must not wait for reference preparation.
+        with self._advance_locks_guard:
+            return self._state_locks.setdefault(request_fingerprint, threading.Lock())
+
     def cancel(self, task_id: str) -> GenerationTask:
-        task = self._require_h3_task(task_id)
-        now = utc_now()
-        if task.status == TaskStatus.QUEUED:
-            task.status = TaskStatus.CANCELLED
-            task.error_code = "CANCELLED_BY_USER"
-            task.error_message = "尚未提交到 MiniMax 的本地任务已取消。"
-            task.finished_at = now
-            task.updated_at = now
-            self.repository.save_task(task)
-            self._set_evidence_status(task.id, EvidenceStatus.CANCELLED)
+        initial = self._require_h3_task(task_id)
+        with self._state_lock(initial.request_fingerprint):
+            task = self._require_h3_task(task_id)
+            if task.status == TaskStatus.CANCELLED:
+                return task
+            prepared = (task.status == TaskStatus.SUBMITTING
+                        and self._require_run(task.id).submission_attempt_state == "PREPARED")
+            if task.status == TaskStatus.QUEUED or prepared:
+                now = utc_now()
+                task.status = TaskStatus.CANCELLED
+                task.error_code = "CANCELLED_BY_USER"
+                task.error_message = "尚未提交到 MiniMax 的本地任务已取消。"
+                task.finished_at = now
+                task.updated_at = now
+                self.repository.save_task(task)
+                self._set_evidence_status(task.id, EvidenceStatus.CANCELLED)
+                return task
+            if task.status in {TaskStatus.SUBMITTING, TaskStatus.SUBMIT_UNKNOWN}:
+                raise InvalidTaskTransition(
+                    "H3 submit outcome must be reconciled before cancellation"
+                )
+        # Remote polling and cancellation share the advance lane so a response
+        # obtained before cancellation cannot overwrite the confirmed result.
+        with self._advance_lock(initial.request_fingerprint):
+            return self._cancel_remote(self._require_h3_task(task_id))
+
+    def _cancel_remote(self, task: GenerationTask) -> GenerationTask:
+        if task.status == TaskStatus.CANCELLED:
             return task
-        if task.status in {TaskStatus.SUBMITTING, TaskStatus.SUBMIT_UNKNOWN}:
-            raise InvalidTaskTransition(
-                "H3 submit outcome must be reconciled before cancellation"
-            )
         if task.status == TaskStatus.RUNNING:
             raise InvalidTaskTransition("MiniMax does not allow cancelling a running H3 task")
         if task.status != TaskStatus.ACKNOWLEDGED or task.provider_task_id is None:
             raise InvalidTaskTransition(f"Task {task.id} cannot be cancelled from {task.status.value}")
 
+        now = utc_now()
         client = self._client()
         remote = client.query(task.provider_task_id)
         run = self._require_run(task.id)
@@ -237,22 +263,69 @@ class PersistentH3Worker:
         self.repository.save_provider_run(run)
         return self._download_success(task, run, remote)
 
-    def list_reconciliation_candidates(self) -> list[H3RemoteTask]:
-        return self._client().list_tasks(page_size=50)
+    def list_reconciliation_candidates(
+        self, *, offset: int = 0, page_size: int = 50, max_pages: int = 10,
+    ) -> H3ReconciliationCandidatesResponse:
+        if offset < 0 or not 1 <= page_size <= 100 or not 1 <= max_pages <= 10:
+            raise InvalidTaskTransition("H3 candidate query needs offset >= 0, page_size 1–100 and max_pages 1–10")
+        client = self._client()
+        seen: dict[str, H3RemoteTask] = {}
+        current_offset, scanned = offset, 0
+        reason: Literal["empty_page", "repeated_page", "page_limit"] = "page_limit"
+        pages = 0
+        for _ in range(max_pages):
+            try:
+                page = client.list_tasks(page_size=page_size, offset=current_offset)
+            except H3ClientError as exc:
+                raise H3ClientError(
+                    f"H3 candidate query failed at offset {current_offset} after {pages} completed pages "
+                    f"and {scanned} returned tasks (start_offset={offset}, page_size={page_size}). "
+                    "The local submission remains unknown; this is not evidence that no task was created. "
+                    f"{exc}"
+                ) from exc
+            pages += 1
+            if not page:
+                reason = "empty_page"
+                break
+            scanned += len(page)
+            current_offset += len(page)
+            new_ids = {remote.id for remote in page} - seen.keys()
+            for remote in page:
+                seen[remote.id] = remote
+            if not new_ids:
+                reason = "repeated_page"
+                break
+        messages = {
+            "empty_page": "本次范围读取至供应商返回空页。",
+            "repeated_page": "供应商返回的整页任务均已读取，分页未取得新任务，已停止。",
+            "page_limit": "已达到本次分页上限，可从 next_offset 继续查询。",
+        }
+        query = H3ReconciliationQuery(
+            start_offset=offset, next_offset=current_offset if reason == "page_limit" else None,
+            page_size=page_size, max_pages=max_pages, pages_scanned=pages,
+            tasks_scanned=scanned, unique_tasks_scanned=len(seen),
+            stop_reason=reason,
+            note=messages[reason] + "列表可能随供应商任务变化；未找到候选不代表未提交，"
+            "不会自动重发。已有 provider_task_id 时可直接查询并对账。",
+        )
+        return H3ReconciliationCandidatesResponse(tasks=list(seen.values()), query=query)
 
     def list_reconciliation_candidates_for_task(
         self,
         task_id: str,
-    ) -> list[H3RemoteTask]:
+        *, offset: int = 0, page_size: int = 50, max_pages: int = 10,
+    ) -> H3ReconciliationCandidatesResponse:
         task = self._require_h3_task(task_id)
         if task.status != TaskStatus.SUBMIT_UNKNOWN:
             raise InvalidTaskTransition(f"Task {task.id} is not waiting for reconciliation")
         run = self._require_run(task.id)
-        return [
+        result = self.list_reconciliation_candidates(offset=offset, page_size=page_size, max_pages=max_pages)
+        result.tasks = [
             remote
-            for remote in self.list_reconciliation_candidates()
+            for remote in result.tasks
             if self._reconciliation_mismatch_reason(task, run, remote) is None
         ]
+        return result
 
     @staticmethod
     def _reconciliation_mismatch_reason(
@@ -458,13 +531,11 @@ class PersistentH3Worker:
         run = self._require_run(task.id)
         stale_reason = self.input_staleness_reason(task, run)
         if stale_reason is not None:
-            return self._mark_failed(
-                task,
-                run,
-                "H3_INPUTS_STALE",
-                stale_reason,
-                utc_now(),
-            )
+            with self._state_lock(task.request_fingerprint):
+                task = self._require_h3_task(task.id)
+                if task.status != TaskStatus.QUEUED:
+                    return task
+                return self._mark_failed(task, run, "H3_INPUTS_STALE", stale_reason, utc_now())
         client = self._client()
         uploaded_inputs: list[H3UploadedInput] = []
 
@@ -488,18 +559,22 @@ class PersistentH3Worker:
             media_inputs=run.media_inputs,
             resolve_url=resolve_url,
         )
-        now = utc_now()
-        run.request = request
-        run.submission_attempt_state = "PREPARED"
-        run.uploaded_inputs = uploaded_inputs
-        run.last_error_code = None
-        run.last_error_message = None
-        run.updated_at = now
-        self.repository.save_provider_run(run)
-        task.status = TaskStatus.SUBMITTING
-        task.updated_at = now
-        self.repository.save_task(task)
-        return task
+        with self._state_lock(task.request_fingerprint):
+            task = self._require_h3_task(task.id)
+            if task.status != TaskStatus.QUEUED:
+                return task
+            now = utc_now()
+            run.request = request
+            run.submission_attempt_state = "PREPARED"
+            run.uploaded_inputs = uploaded_inputs
+            run.last_error_code = None
+            run.last_error_message = None
+            run.updated_at = now
+            self.repository.save_provider_run(run)
+            task.status = TaskStatus.SUBMITTING
+            task.updated_at = now
+            self.repository.save_task(task)
+            return task
 
     def _submit(self, task: GenerationTask) -> GenerationTask:
         run = self._require_run(task.id)
@@ -510,32 +585,38 @@ class PersistentH3Worker:
             task.request_fingerprint
         )
         if existing_provider_task_id is not None:
-            task.provider_task_id = existing_provider_task_id
-            task.status = TaskStatus.ACKNOWLEDGED
-            task.submitted_at = task.submitted_at or now
-            task.error_code = None
-            task.error_message = None
-            task.updated_at = now
-            run.last_error_code = None
-            run.last_error_message = None
-            run.updated_at = now
-            self.repository.save_provider_run(run)
-            self.repository.save_task(task)
-            self._set_evidence_status(task.id, EvidenceStatus.AWAITING_OUTPUT)
-            return task
+            with self._state_lock(task.request_fingerprint):
+                task = self._require_h3_task(task.id)
+                if task.status != TaskStatus.SUBMITTING:
+                    return task
+                task.provider_task_id = existing_provider_task_id
+                task.status = TaskStatus.ACKNOWLEDGED
+                task.submitted_at = task.submitted_at or now
+                task.error_code = None
+                task.error_message = None
+                task.updated_at = now
+                run.last_error_code = None
+                run.last_error_message = None
+                run.updated_at = now
+                self.repository.save_provider_run(run)
+                self.repository.save_task(task)
+                self._set_evidence_status(task.id, EvidenceStatus.AWAITING_OUTPUT)
+                return task
         stale_reason = self.input_staleness_reason(task, run)
         if stale_reason is not None:
-            return self._mark_failed(
-                task,
-                run,
-                "H3_INPUTS_STALE",
-                stale_reason,
-                now,
-            )
+            with self._state_lock(task.request_fingerprint):
+                task = self._require_h3_task(task.id)
+                if task.status != TaskStatus.SUBMITTING:
+                    return task
+                return self._mark_failed(task, run, "H3_INPUTS_STALE", stale_reason, now)
         client = self._client()
-        run.submission_attempt_state = "STARTED"
-        run.updated_at = now
-        self.repository.save_provider_run(run)
+        with self._state_lock(task.request_fingerprint):
+            task = self._require_h3_task(task.id)
+            if task.status != TaskStatus.SUBMITTING:
+                return task
+            run.submission_attempt_state = "STARTED"
+            run.updated_at = now
+            self.repository.save_provider_run(run)
         try:
             provider_task_id = client.submit(run.request)
         except H3DefiniteRequestError as exc:

@@ -49,6 +49,12 @@ def test_post_director_loads_editing_not_storyboard_responsibility(method_id: st
     assert "## 表演设计" not in prompt
     assert "不通过视频串联保持连续性" not in prompt
     assert "你负责把当前采用的文本意图转成" not in prompt
+    assert "当前新视频与视频返工只用 MiniMax H3" in prompt
+    assert "route.prepare_h3_group" in prompt and "revision_instructions" in prompt
+    assert "source_take_id" in prompt and "不是原视频局部重绘" in prompt
+    assert "保留当前人工剪点和未选内容" in prompt
+    for removed_tool in ("video.lip_sync", "video.adopt_lip_sync", "video.reconcile_lip_sync"):
+        assert removed_tool not in prompt
     for stale_runtime in ("hub_canvas_write_node", "execution_locks", "runtime_refs", "review.after_execution", "concurrency_limit:"):
         assert stale_runtime not in prompt
 
