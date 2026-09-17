@@ -6,7 +6,7 @@ from enum import StrEnum
 import math
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, Field, ValidationInfo, field_validator, model_validator
+from pydantic import AfterValidator, Field, JsonValue, ValidationInfo, field_validator, model_validator
 
 from short_drama.models import (
     Asset,
@@ -784,17 +784,28 @@ class ImageNotSubmittedResolutionRequest(DomainModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class ImageCachedTokenDetails(DomainModel):
+    image_tokens: int | None = Field(default=None, ge=0, strict=True)
+    text_tokens: int | None = Field(default=None, ge=0, strict=True)
+
+
 class ImageTokenDetails(DomainModel):
-    image_tokens: int = 0
-    text_tokens: int = 0
+    image_tokens: int | None = Field(default=None, ge=0, strict=True)
+    text_tokens: int | None = Field(default=None, ge=0, strict=True)
+    cached_tokens: int | None = Field(default=None, ge=0, strict=True)
+    cached_tokens_details: ImageCachedTokenDetails | None = None
 
 
 class ImageUsage(DomainModel):
-    input_tokens: int = 0
+    input_tokens: int | None = Field(default=None, ge=0, strict=True)
     input_tokens_details: ImageTokenDetails = Field(default_factory=ImageTokenDetails)
-    output_tokens: int = 0
+    output_tokens: int | None = Field(default=None, ge=0, strict=True)
     output_tokens_details: ImageTokenDetails = Field(default_factory=ImageTokenDetails)
-    total_tokens: int = 0
+    total_tokens: int | None = Field(default=None, ge=0, strict=True)
+    reported_usage: dict[str, JsonValue] | None = Field(default=None, description=(
+        "Provider-reported token counters and modality/cache breakdowns only. "
+        "No inferred zeros or request contents; absent on older records."
+    ))
 
 
 class ImagePricingSnapshot(DomainModel):

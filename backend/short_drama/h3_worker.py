@@ -16,6 +16,7 @@ from short_drama.asset_reference_truth import (
 from short_drama.h3_models import (
     H3DeleteResponse,
     H3MediaInput,
+    H3MediaKind,
     H3ProviderRun,
     H3ReconciliationCandidatesResponse,
     H3ReconciliationQuery,
@@ -50,6 +51,7 @@ from short_drama.providers.minimax_h3_client import (
     H3SubmissionUnknown,
     H3TransientError,
     MiniMaxH3Client,
+    prepare_h3_image_dimensions,
 )
 from short_drama.providers.minimax_h3_compiler import H3CapabilityError, compile_h3_request, validate_h3_audio_durations
 from short_drama.providers.h3_dialogue_spans import assert_complete_dialogue_request
@@ -362,6 +364,8 @@ class PersistentH3Worker:
         document = self.repository.get_project(task.project_id)
         if document is None:
             return "The project document no longer exists"
+        from short_drama.generation_storyboard import generation_document as source_view, generation_revision_matches
+        document = source_view(document)
         revision_by_shot = {item.id: item.revision for item in document.shots}
         expected_revisions = task.input_shot_revisions or {
             task.shot_id: task.input_shot_revision
@@ -377,7 +381,8 @@ class PersistentH3Worker:
         stale_shots = [
             shot_id
             for shot_id, revision in expected_revisions.items()
-            if revision_by_shot[shot_id] != revision
+            if not generation_revision_matches(document, shot_id, revision,
+                task.storyboard_document_id, task.storyboard_version_id, task.clip_group_id)
         ]
         if stale_shots:
             return (
@@ -385,9 +390,15 @@ class PersistentH3Worker:
                 + ", ".join(stale_shots)
             )
         try:
-            assert_complete_dialogue_request(document, [
-                shot for shot in document.shots if shot.id in expected_revisions
-            ])
+            if task.picture_only is not None:
+                from short_drama.h3_picture_source import assert_picture_binding_current
+                if task.picture_only.shot_id != task.shot_id or set(expected_revisions) != {task.shot_id}:
+                    return "PICTURE_ONLY task must cover its one bound shot"
+                assert_picture_binding_current(document, task.picture_only, store=self.repository)
+            else:
+                assert_complete_dialogue_request(document, [
+                    shot for shot in document.shots if shot.id in expected_revisions
+                ])
         except ValueError as exc:
             return str(exc)
         if task.input_script_version_id != document.project.current_script_version_id:
@@ -423,7 +434,7 @@ class PersistentH3Worker:
         pinned_storyboard_reason = self._pinned_document_staleness_reason(
             document=document,
             label="storyboard",
-            project_document_id=document.storyboard_document_id,
+            project_document_id=(task.storyboard_document_id if generation_plan is not None else document.storyboard_document_id),
             task_document_id=task.storyboard_document_id,
             task_version_id=task.storyboard_version_id,
             require_current=generation_plan is None,
@@ -441,6 +452,12 @@ class PersistentH3Worker:
         if pinned_generation_plan_reason is not None:
             return pinned_generation_plan_reason
         if generation_plan is not None and task.generation_unit_id is not None:
+            if (generation_plan.storyboard_document_id != task.storyboard_document_id
+                    or generation_plan.storyboard_version_id != task.storyboard_version_id):
+                return "The H3 task no longer matches its GenerationPlan source"
+            unit = next((item for item in generation_plan.units if item.id == task.generation_unit_id), None)
+            if unit is None or unit.shot_windows != task.shot_windows or unit.clip_group_id != task.clip_group_id:
+                return "The H3 task no longer matches its GenerationPlan unit windows"
             try:
                 validate_generation_units_current(document, generation_plan, [task.generation_unit_id])
             except ValueError as exc:
@@ -546,7 +563,7 @@ class PersistentH3Worker:
                 return f"mm_file://{media.source.file_id}"
             if media.source.local_path is None:
                 raise ValueError("H3 media source is empty")
-            uploaded = self._upload_local_input(client, media)
+            uploaded = self._upload_local_input(client, media, project_id=task.project_id)
             uploaded_inputs.append(uploaded)
             return uploaded.provider_file_id
 
@@ -916,7 +933,7 @@ class PersistentH3Worker:
             else Freshness.STALE
         )
 
-    def _upload_local_input(self, client: H3Client, media: H3MediaInput) -> H3UploadedInput:
+    def _upload_local_input(self, client: H3Client, media: H3MediaInput, *, project_id: str) -> H3UploadedInput:
         assert media.source.local_path is not None
         path = Path(media.source.local_path).expanduser().resolve()
         stat = path.stat()
@@ -927,12 +944,21 @@ class PersistentH3Worker:
         cached = self.repository.get_provider_upload(cache_key, now)
         if cached is not None:
             return cached.model_copy(update={"role": media.role, "media_kind": media.kind})
-        file_id = client.upload_file(path)
+        upload_path = path
+        if media.kind == H3MediaKind.IMAGE:
+            try:
+                upload_path = prepare_h3_image_dimensions(
+                    path, self.workspace_root / project_id / "h3-inputs" / f"{cache_key}.png"
+                )
+            except H3DefiniteRequestError as exc:
+                raise H3CapabilityError(str(exc)) from exc
+        file_id = client.upload_file(upload_path)
         expires_at = (
             datetime.now(UTC) + timedelta(days=6, hours=23)
         ).isoformat(timespec="milliseconds")
         uploaded = H3UploadedInput(
             local_path=str(path),
+            prepared_local_path=str(upload_path) if upload_path != path else None,
             provider_file_id=file_id,
             media_kind=media.kind,
             role=media.role,
@@ -943,6 +969,12 @@ class PersistentH3Worker:
             provider="minimax",
             record=uploaded,
         )
+        if upload_path != path:
+            record_trace("h3.input_prepared", {
+                "project_id": project_id, "source_path": str(path), "prepared_local_path": str(upload_path),
+                "asset_version_id": media.asset_version_id, "role": media.role.value,
+                "operation": "uniform_scale", "encoding_profile": H3_LOCAL_INPUT_ENCODING_PROFILE,
+            })
         return uploaded
 
     def _mark_failed(

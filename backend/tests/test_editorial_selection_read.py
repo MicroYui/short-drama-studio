@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 from pydantic import JsonValue
 
+from short_drama.models import GenerationTask, Take
 from short_drama.service import ShortDramaService
 from short_drama.studio_models import StudioMessage, StudioScope
 from short_drama.studio_runtime import StudioAgentRunner
@@ -143,6 +144,8 @@ def test_legacy_local_read_still_marks_coordinate_origin_before_rows(
     service, pid, one, _two = selected_editor
     value = read(service, pid, shot_id=one, anchor_clip_id="second-use")
     assert value["coordinate_space"] == "SHOT_LOCAL" and value["film_start_seconds"] == 12
+    assert value["is_saved"] is True and value["editorial_is_saved"] is True
+    assert value["content_origin"] == "SAVED_EDITORIAL" and all(row["is_saved"] for row in value["clips"])
     assert value["subtitles"][0]["startTime"] == 1
 
 
@@ -160,6 +163,59 @@ def test_equal_clip_and_subtitle_ids_do_not_mask_scope_mismatch(
     result = service.tool_registry.invoke("timeline.read_editorial", {"project_id": pid,
         "shot_id": one, "anchor_clip_id": "shared", "subtitle_ids": ["shared"], "clip_ids": ["shared"]})
     assert result.error and "subtitle_ids='shared'" in result.error.message and "do not intersect" in result.error.message
+
+
+@pytest.mark.parametrize("scoped", [False, True])
+def test_shared_group_second_shot_maps_selected_objects_without_rewriting_film_rows(
+    selected_editor: tuple[ShortDramaService, str, str, str], scoped: bool,
+) -> None:
+    service, pid, _one, _two = selected_editor
+    case = json.loads((Path(__file__).parent / "fixtures/studio-whole-group-uses.json").read_text())["cases"][0]
+    document = service.get_project(pid).document
+    document.shots = [document.shots[0].model_copy(deep=True, update={"id": identity, "sequence": index + 1})
+                     for index, identity in enumerate(case["expected"])]
+    for row in case["takes"]:
+        take = Take.model_validate({**row, "project_id": pid})
+        service.repository.save_task(GenerationTask.model_validate({
+            "id": take.task_id, "project_id": pid, "shot_id": take.shot_id, "operation": take.operation,
+            "candidate_index": take.candidate_index, "status": "SUCCEEDED", "provider": "mock", "model": "local-fixture",
+            "request_fingerprint": "local-whole-group", "input_script_version_id": document.script_versions[-1].id,
+            "input_bible_version_id": document.bible_versions[-1].id, "requested_duration_seconds": take.duration_seconds,
+            "attempt": 1, "created_at": take.created_at, "updated_at": take.created_at,
+        }))
+        service.repository.save_take(take)
+    timeline = case["timeline"]
+    timeline["subtitles"] = [
+        {"id": "cross-group-window", "text": "保留完整字幕", "startTime": 6.4, "endTime": 7.4,
+         "trackIndex": 0, "style": {"fontSize": 32}},
+        {"id": "outside-second-shot", "text": "第一镜字幕", "startTime": 1, "endTime": 2, "trackIndex": 0},
+    ]
+    document.editorial_timeline = {"revision": 39, "project": {
+        "version": 2, "id": pid, "name": "Shared group", "activeTimelineId": timeline["id"],
+        "assets": case["assets"], "timelines": [timeline],
+    }}
+    service.repository.save_project(document)
+    before = service.get_project(pid)
+    anchor = "clip-shot-yqzyd-01"
+    arguments: dict[str, object] = {"timeline_id": timeline["id"], "clip_ids": [anchor], "subtitle_ids": ["cross-group-window"]}
+    if scoped:
+        arguments.update(shot_id="shot-yqzyd-02", anchor_clip_id=anchor)
+    value = read(service, pid, **arguments)
+    assert value["clips"][0]["start_seconds"] == 0 and value["clips"][0]["end_seconds"] == 12.25
+    assert value["clips"][0]["source_in_seconds"] == 0 and value["clips"][0]["source_shot_id"] == "shot-yqzyd-01"
+    assert value["subtitles"] == [{"id": "cross-group-window", "text": "保留完整字幕", "start_seconds": 6.4,
+                                    "end_seconds": 7.4, "track_index": 0, "style": {"fontSize": 32}}]
+    mappings = {item["shot_id"]: item for item in value["shot_local_mappings"]}
+    assert mappings["shot-yqzyd-02"] == {"shot_id": "shot-yqzyd-02", "anchor_clip_id": anchor,
+        "film_start_seconds": 6.5, "film_end_seconds": 12.25,
+        "subtitles": [{"id": "cross-group-window", "start_seconds": 0, "end_seconds": .9}],
+        "clips": [{"id": anchor, "start_seconds": 0, "end_seconds": 5.75}]}
+    assert set(mappings) == ({"shot-yqzyd-02"} if scoped else {"shot-yqzyd-01", "shot-yqzyd-02"})
+    outside = service.tool_registry.invoke("timeline.read_editorial", {"project_id": pid, "timeline_id": timeline["id"],
+        "shot_id": "shot-yqzyd-02", "anchor_clip_id": anchor, "subtitle_ids": ["outside-second-shot"]})
+    assert outside.error and "do not intersect" in outside.error.message
+    after = service.get_project(pid)
+    assert after.document == before.document and after.takes == before.takes
 
 
 def test_real_runner_first_contract_and_complete_exact_read_need_two_model_calls(tmp_path: Path) -> None:
@@ -183,6 +239,9 @@ def test_real_runner_first_contract_and_complete_exact_read_need_two_model_calls
         assert len(summary) > 1600
         result = json.loads(summary)["content"]
         assert result["coordinate_space"] == "FILM" and result["editorial_revision"] == 38
+        assert result["is_saved"] is True and result["editorial_is_saved"] is True
+        assert result["content_origin"] == "SAVED_EDITORIAL"
+        assert all(row["is_saved"] for row in result["clips"])
         assert [item["id"] for item in result["subtitles"]] == selected
         assert [item["id"] for item in result["clips"]] == selected_clips
         assert len(result["shot_local_mappings"]) == 3

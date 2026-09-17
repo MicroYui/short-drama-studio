@@ -71,4 +71,25 @@ def test_shot_write_returns_saved_preview_and_keeps_unusable_choice_visible(
     # A stale repeat still conflicts instead of saving again to obtain a preview.
     repeated = service.tool_registry.invoke("shot.save_current", request)
     assert repeated.status == ToolCallStatus.FAILED
-    assert service.get_project(project_id).document.shots == after.shots
+    expected_error = (
+        f"镜头 {shot.id} 已更新（请求修订 {shot.revision}，当前修订 {saved.revision}）；"
+        "本次未保存。请读取最新镜头，合并所需修改后重试。"
+    )
+    assert repeated.error is not None
+    assert repeated.error.kind == "StudioContentConflict"
+    assert repeated.error.message == expected_error
+    assert repeated.receipt is None
+    # A different stale write must not discard the latest saved reference either.
+    stale = replacement.model_copy(deep=True, update={"references": []})
+    conflicting = service.tool_registry.invoke("shot.save_current", {
+        "project_id": project_id, "shot_id": shot.id, "request": {
+            "expected_revision": shot.revision, "shot": stale.model_dump(mode="json"),
+        },
+    })
+    assert conflicting.status == ToolCallStatus.FAILED
+    assert conflicting.error is not None
+    assert conflicting.error.kind == "StudioContentConflict"
+    assert conflicting.error.message == expected_error
+    assert service.get_project(project_id).document == after
+    reopened = ShortDramaService(database_path=service.repository.database_path, workspace_root=service.workspace_root)
+    assert reopened.get_project(project_id).document == after

@@ -1,0 +1,2860 @@
+{
+  "source": "Film3 final r5 shape; paths and project/task metadata replaced with local fixture values. No semantic picture-cut assertion.",
+  "cases": [
+    {
+      "name": "film3_actual_r5_shape",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        },
+        {
+          "id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "path": "/fixtures/take-task-bca69b4a8ae94ea2b2822f008930b8f5.mp4",
+          "duration": 8.0,
+          "type": "video"
+        },
+        {
+          "id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+          "path": "/fixtures/take-task-ea231ac3d398444d89d27f0396443ccb.mp4",
+          "duration": 8.0,
+          "type": "video"
+        },
+        {
+          "id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+          "path": "/fixtures/take-task-4faecde5fd5c41059a442a83b90a346c.mp4",
+          "duration": 15.08,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "shot_id": "shot-yqzyd-03",
+          "generation_unit_id": "cg-yqzyd-02",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-03",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 8.0,
+              "duration_seconds": 8.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-03"
+          ],
+          "duration_seconds": 8.0,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "media_path": "/fixtures/take-task-bca69b4a8ae94ea2b2822f008930b8f5.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "take_id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+          "shot_id": "shot-yqzyd-04",
+          "generation_unit_id": "cg-yqzyd-03",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-04",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 7.5,
+              "duration_seconds": 7.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-04"
+          ],
+          "duration_seconds": 8.0,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-ea231ac3d398444d89d27f0396443ccb",
+          "media_path": "/fixtures/take-task-ea231ac3d398444d89d27f0396443ccb.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-ea231ac3d398444d89d27f0396443ccb",
+            "take_id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+          "shot_id": "shot-yqzyd-05",
+          "generation_unit_id": "cg-yqzyd-04",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-05",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 10.5
+            },
+            {
+              "shot_id": "shot-yqzyd-06",
+              "shot_revision": 2,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-05",
+            "shot-yqzyd-06"
+          ],
+          "duration_seconds": 15.08,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-4faecde5fd5c41059a442a83b90a346c",
+          "media_path": "/fixtures/take-task-4faecde5fd5c41059a442a83b90a346c.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "take_id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 12.25,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          },
+          {
+            "id": "clip-shot-yqzyd-03",
+            "assetId": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "type": "video",
+            "startTime": 12.25,
+            "duration": 6.875,
+            "trimStart": 1.125,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-03",
+            "sourceTakeId": "take-task-bca69b4a8ae94ea2b2822f008930b8f5"
+          },
+          {
+            "id": "clip-shot-yqzyd-04",
+            "assetId": "take-task-ea231ac3d398444d89d27f0396443ccb",
+            "type": "video",
+            "startTime": 19.125,
+            "duration": 8.0,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-04",
+            "sourceTakeId": "take-task-ea231ac3d398444d89d27f0396443ccb"
+          },
+          {
+            "id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "assetId": "take-task-4faecde5fd5c41059a442a83b90a346c",
+            "type": "video",
+            "startTime": 27.125,
+            "duration": 14.5,
+            "trimStart": 0.0,
+            "trimEnd": 0.58,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-05",
+            "sourceTakeId": "take-task-4faecde5fd5c41059a442a83b90a346c"
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 6.5
+          }
+        ],
+        "shot-yqzyd-02": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 6.5,
+            "duration_seconds": 5.75
+          }
+        ],
+        "shot-yqzyd-03": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-03",
+            "start_seconds": 12.25,
+            "duration_seconds": 6.875
+          }
+        ],
+        "shot-yqzyd-04": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-04",
+            "start_seconds": 19.125,
+            "duration_seconds": 8
+          }
+        ],
+        "shot-yqzyd-05": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "start_seconds": 27.125,
+            "duration_seconds": 10.5
+          }
+        ],
+        "shot-yqzyd-06": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "start_seconds": 37.625,
+            "duration_seconds": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "explicit_bounds",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 12.25,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "sourceWindowStart": 0,
+            "sourceWindowEnd": 12.25
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 12.25
+          }
+        ],
+        "shot-yqzyd-02": []
+      }
+    },
+    {
+      "name": "partial_group",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 11.25,
+            "trimStart": 1,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 11.25
+          }
+        ],
+        "shot-yqzyd-02": []
+      }
+    },
+    {
+      "name": "path_mismatch",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/other.mp4",
+          "duration": 12.25,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 12.25,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 12.25
+          }
+        ],
+        "shot-yqzyd-02": []
+      }
+    },
+    {
+      "name": "separate_direct_use",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 12.25,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          },
+          {
+            "id": "direct-shot-2",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 20,
+            "duration": 5.75,
+            "trimStart": 6.5,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-02",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 12.25
+          }
+        ],
+        "shot-yqzyd-02": [
+          {
+            "anchor_clip_id": "direct-shot-2",
+            "start_seconds": 20,
+            "duration_seconds": 5.75
+          }
+        ]
+      }
+    },
+    {
+      "name": "speed_reverse",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 3,
+            "duration": 6.125,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 2,
+            "reversed": true,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 5.875,
+            "duration_seconds": 3.25
+          }
+        ],
+        "shot-yqzyd-02": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 3,
+            "duration_seconds": 2.875
+          }
+        ]
+      }
+    },
+    {
+      "name": "repeated_whole_group_after_one_occurrence_edit",
+      "assets": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "duration": 12.25,
+          "type": "video"
+        },
+        {
+          "id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "path": "/fixtures/take-task-bca69b4a8ae94ea2b2822f008930b8f5.mp4",
+          "duration": 8.0,
+          "type": "video"
+        },
+        {
+          "id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+          "path": "/fixtures/take-task-ea231ac3d398444d89d27f0396443ccb.mp4",
+          "duration": 8.0,
+          "type": "video"
+        },
+        {
+          "id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+          "path": "/fixtures/take-task-4faecde5fd5c41059a442a83b90a346c.mp4",
+          "duration": 15.08,
+          "type": "video"
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-42ecff868c184c1187111cf1385afef1",
+          "shot_id": "shot-yqzyd-01",
+          "generation_unit_id": "cg-yqzyd-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-01",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 6.5,
+              "duration_seconds": 6.5
+            },
+            {
+              "shot_id": "shot-yqzyd-02",
+              "shot_revision": 2,
+              "source_in_seconds": 6.5,
+              "source_out_seconds": 12.0,
+              "duration_seconds": 5.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-01",
+            "shot-yqzyd-02"
+          ],
+          "duration_seconds": 12.25,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-42ecff868c184c1187111cf1385afef1",
+          "media_path": "/fixtures/take-task-42ecff868c184c1187111cf1385afef1.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-42ecff868c184c1187111cf1385afef1",
+            "take_id": "take-task-42ecff868c184c1187111cf1385afef1",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "shot_id": "shot-yqzyd-03",
+          "generation_unit_id": "cg-yqzyd-02",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-03",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 8.0,
+              "duration_seconds": 8.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-03"
+          ],
+          "duration_seconds": 8.0,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+          "media_path": "/fixtures/take-task-bca69b4a8ae94ea2b2822f008930b8f5.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "take_id": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+          "shot_id": "shot-yqzyd-04",
+          "generation_unit_id": "cg-yqzyd-03",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-04",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 7.5,
+              "duration_seconds": 7.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-04"
+          ],
+          "duration_seconds": 8.0,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-ea231ac3d398444d89d27f0396443ccb",
+          "media_path": "/fixtures/take-task-ea231ac3d398444d89d27f0396443ccb.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-ea231ac3d398444d89d27f0396443ccb",
+            "take_id": "take-task-ea231ac3d398444d89d27f0396443ccb",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        },
+        {
+          "id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+          "shot_id": "shot-yqzyd-05",
+          "generation_unit_id": "cg-yqzyd-04",
+          "shot_windows": [
+            {
+              "shot_id": "shot-yqzyd-05",
+              "shot_revision": 2,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 10.5
+            },
+            {
+              "shot_id": "shot-yqzyd-06",
+              "shot_revision": 2,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-yqzyd-05",
+            "shot-yqzyd-06"
+          ],
+          "duration_seconds": 15.08,
+          "width": 1344,
+          "height": 768,
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "project_id": "fixture-whole-group",
+          "task_id": "fixture-task-take-task-4faecde5fd5c41059a442a83b90a346c",
+          "media_path": "/fixtures/take-task-4faecde5fd5c41059a442a83b90a346c.mp4",
+          "thumbnail_path": "",
+          "created_at": "2026-09-16T00:00:00Z",
+          "qa_report": {
+            "id": "fixture-qa-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "take_id": "take-task-4faecde5fd5c41059a442a83b90a346c",
+            "status": "PENDING",
+            "hard_gate_passed": true,
+            "score": 4,
+            "issues": [],
+            "checks": [],
+            "created_at": "2026-09-16T00:00:00Z"
+          }
+        }
+      ],
+      "timeline": {
+        "id": "fixture-edit",
+        "name": "Whole group",
+        "tracks": [
+          {
+            "id": "video",
+            "name": "Video",
+            "kind": "video"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-shot-yqzyd-01",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 12.25,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1"
+          },
+          {
+            "id": "clip-shot-yqzyd-03",
+            "assetId": "take-task-bca69b4a8ae94ea2b2822f008930b8f5",
+            "type": "video",
+            "startTime": 12.25,
+            "duration": 6.875,
+            "trimStart": 1.125,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-03",
+            "sourceTakeId": "take-task-bca69b4a8ae94ea2b2822f008930b8f5"
+          },
+          {
+            "id": "clip-shot-yqzyd-04",
+            "assetId": "take-task-ea231ac3d398444d89d27f0396443ccb",
+            "type": "video",
+            "startTime": 19.125,
+            "duration": 8.0,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-04",
+            "sourceTakeId": "take-task-ea231ac3d398444d89d27f0396443ccb"
+          },
+          {
+            "id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "assetId": "take-task-4faecde5fd5c41059a442a83b90a346c",
+            "type": "video",
+            "startTime": 27.125,
+            "duration": 14.5,
+            "trimStart": 0.0,
+            "trimEnd": 0.58,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-05",
+            "sourceTakeId": "take-task-4faecde5fd5c41059a442a83b90a346c"
+          },
+          {
+            "id": "second-whole-group-retained-1",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 43,
+            "duration": 6.5,
+            "trimStart": 0.0,
+            "trimEnd": 5.75,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-01",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "sourceWindowStart": 0,
+            "sourceWindowEnd": 6.5
+          },
+          {
+            "id": "second-whole-group",
+            "assetId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "type": "video",
+            "startTime": 49.5,
+            "duration": 5.75,
+            "trimStart": 6.5,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": true,
+            "volume": 1.0,
+            "trackIndex": 0,
+            "sourceShotId": "shot-yqzyd-02",
+            "sourceTakeId": "take-task-42ecff868c184c1187111cf1385afef1",
+            "sourceWindowStart": 6.5,
+            "sourceWindowEnd": 12.25
+          }
+        ],
+        "subtitles": []
+      },
+      "expected": {
+        "shot-yqzyd-01": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 0,
+            "duration_seconds": 6.5
+          },
+          {
+            "anchor_clip_id": "second-whole-group-retained-1",
+            "start_seconds": 43,
+            "duration_seconds": 6.5
+          }
+        ],
+        "shot-yqzyd-02": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-01",
+            "start_seconds": 6.5,
+            "duration_seconds": 5.75
+          },
+          {
+            "anchor_clip_id": "second-whole-group",
+            "start_seconds": 49.5,
+            "duration_seconds": 5.75
+          }
+        ],
+        "shot-yqzyd-03": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-03",
+            "start_seconds": 12.25,
+            "duration_seconds": 6.875
+          }
+        ],
+        "shot-yqzyd-04": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-04",
+            "start_seconds": 19.125,
+            "duration_seconds": 8
+          }
+        ],
+        "shot-yqzyd-05": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "start_seconds": 27.125,
+            "duration_seconds": 10.5
+          }
+        ],
+        "shot-yqzyd-06": [
+          {
+            "anchor_clip_id": "clip-shot-yqzyd-05-take-task-4faecde5fd5c41059a442a83b90a346c",
+            "start_seconds": 37.625,
+            "duration_seconds": 4
+          }
+        ]
+      }
+    },
+    {
+      "assets": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "type": "video",
+          "duration": 9.42,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 02",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "type": "video",
+          "duration": 5.17,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 03",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "type": "video",
+          "duration": 15.08,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 06",
+          "createdAt": 1789626738261
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-01",
+          "task_id": "task-1f7f494b880344c0896f549f43d1830b",
+          "candidate_index": 2,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-01",
+          "clip_group_id": "clip-group-umbrella-01",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-01",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-02",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 8.5,
+              "duration_seconds": 3.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-01",
+            "shot-umbrella-02"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 9.42,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-1f7f494b880344c0896f549f43d1830b",
+            "take_id": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "音频仅有信号测量；ASR资源缺失，中文对白、发声者及实际听审尚未验证，不是已证实的错误。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员组内外观一致，但母图在视频检查输入中不可辨读，面部母图比对保持未知，不是已证实的换脸。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=9.420s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "画面观察来源0–9.42秒，最后实际图像PTS9.291667。唯一深蓝收拢伞从顾客侧原架提起、其他挂位空，未见额外相似行动者；顾客右手握伞、左手持黑色手机，准备购买的视觉意图可读。组内宽转近切镜仅定位于(4.750,5.125]秒。末态8.5秒及9.291667秒均女左男右，顾客相向未转门、右伞左手机，店员提醒臂已放下，门在画右后方，原架最近实见于男顾客画左下方。店员实际站在台端外侧；5.833333秒短触伞布但未握柄接管，顾客持物链不断。此两项偏离导演调度，不损害本组误认及反应的核心视觉用途，不据此再生成；下一组必须按实际边界核对当前来源，不能默写台内、悬手或从未碰伞。男顾客面部衣装湿肩、女店员组内身份衣装、主伞外观和空间光色在已见帧相容；女店员面部母图比对仍UNKNOWN。原声信号检查覆盖0–9.42秒：可解码、有非静音信号、无削波，峰值-3.106dBFS；不是听审。此前原生ASR因openai/whisper-small资源不完整不可执行，此修复候选的中文逐字对白、发声者、声线、雨声及音画同步均未验证，不因信号检查通过而判通过。实际9.42秒较8.5秒设计多0.92秒，剪辑出点须后续结合实际听审确定。PENDING表示条件可用与检查未完，不是拒绝，也不代表全组或全片通过。",
+            "reviewed_at": "2026-09-17T05:34:35.863+00:00",
+            "created_at": "2026-09-17T05:29:56.163+00:00"
+          },
+          "created_at": "2026-09-17T05:29:56.163+00:00"
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-03",
+          "task_id": "task-642459bc993043a1b3c07e10803553c2",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-4e2315c94c07",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-fa15aa9e3ea5",
+          "generation_unit_id": "clip-group-umbrella-02",
+          "clip_group_id": "clip-group-umbrella-02",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-02",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-03",
+              "shot_revision": 3,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-03"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 5.17,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "STALE",
+          "qa_report": {
+            "id": "qa-take-task-642459bc993043a1b3c07e10803553c2",
+            "take_id": "take-task-642459bc993043a1b3c07e10803553c2",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "ASR仅识别“抱歉”约1.74–4.30秒；保存对白“啊，抱歉。”中的“啊”、实际发声者、语气、音色、环境声及同步未听审。保留完整0–5.17秒原声，不能据此判漏字或逐字通过。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员与已采用前组可见身份衣装相容，但母版在检查输入中不可辨读，独立面部母版比对仍未知；没有已证实的身份漂移。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              },
+              {
+                "code": "NEXT_GROUP_RACK_PROP_CHAIN_CONFLICT",
+                "severity": "MEDIUM",
+                "message": "本镜单伞放回台端低矩形架；门口采用片段开头前景为高立柱横臂架、3把相似深蓝伞，结构和数量有实际差异。运动方向可接，但后续从何处取回同一原伞尚未解决。该问题交门口组负责人，不据此否定本镜已有归还过程或修改他组采用。",
+                "repair_layer": "NEXT_GROUP_OWNER",
+                "category": "PROP_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=5.170s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件可用，拟采用镜头3现有真实MiniMax-H3片段。生成时来源为分镜第4版、镜头修订3；现已保存第5版、镜头修订4，局部接受实际支撑方式及并行动作，不改写历史生成来源，不重新入队。源文件5.17秒；全源抽样实际截至5.125秒，另有2.25–4.25秒归位密采，实际截至4.166667秒，包含3.708333秒原分辨率分离详帧。静态抽样不等于逐帧动态或听审通过。\n视觉证据：开头女左男右、顾客右手伞左手手机，店员在台端前侧且手已放低。男顾客短黑发、面部衣装和湿肩与母版及前组相容；女店员与前组面貌、低马尾、米色上衣和深绿围裙相容，但女母版独立面部比对未完成。全段唯一深蓝收拢长伞、黑J柄与主伞参考相容，未见换色、展开或复制。约1.5秒后主动下移放伞，3.0秒仍握柄；密采3.5秒见手柄间隙，3.708333秒高清明确分离，随后单伞独自稳定留架至已见末端。可见先定位、再撤手、持续留架支持架体已承托；具体受力点和重量转移瞬间未知，不宣称J柄钩挂。约2.5秒左手携手机移向衣袋，袋口穿入瞬间局部遮挡；至4.75秒双手无物、背向机位往画右后方入口走。收手机与放伞局部重叠不损害归还和空手离台因果。\n原架依据：前组0–3秒抽样实见至2.875秒，也是台端顾客侧低矩形金属架、唯一伞竖置、J柄高于顶栏，未见钩挂。与本镜架体类型、基本位置、伞数量及放回区域相容，精确格位编号未知。旧检查所列PROP_SUPPORT_CONTACT_MISMATCH对应导演自定挂钩方式；结合原架实际初态和最新保存调度，不再作为本镜不可用缺陷，未抹去旧报告观察。\n入镜依据：前组另查8.5–9.42秒尾段，实际截至9.375秒，仍相向、右伞左手机，店员未接管，没有已归还或转门状态；不要用全源检查中旧8.10/8.45名义边界代替这项新增观察。建议前组画声保完整0–9.42秒，再接本镜0秒；9.42是媒体终点，不是抽帧PTS或听审核准尾音点。\n出镜依据：本镜4.75–5.0秒空手朝画右后方入口走，门口采用片段0–2.5秒实见至2.333333秒同向行走，运动方向可接。但门口前景为高立柱横臂架并有3把相似深蓝伞，与本镜低架单伞存在真实结构和数量差异，同一原伞的后续取出来源尚未解决，交门口负责人；本镜不增伞换架，也不宣布跨组道具链通过。\n原声：TAKE范围ASR覆盖0–5.17秒，识别“抱歉”，字符近似时间“抱”1.74–3.34、“歉”3.34–4.30。当前保存对白仍为“啊，抱歉。”；未识别“啊”不等于已证实漏字。全源信号可解码、非静音、无削波；实际发声者、语气自然度、音色、逐字内容、环境声和音画同步均未听审。建议本镜画面源0–5.0秒，原声暂保完整0–5.17秒；若5秒切画面，尾部0.17秒可延续至下镜，但须后期核对实际混音，不能把4.30秒ASR终点当作安全声音出点。所有区间均为TAKE_SOURCE建议，未建立或保存正式时间线、字幕或FILM落位。PENDING表示条件可用和检查未完，不是拒绝，也不是全片通过。",
+            "reviewed_at": "2026-09-17T06:23:09.371+00:00",
+            "created_at": "2026-09-17T06:10:46.801+00:00"
+          },
+          "created_at": "2026-09-17T06:10:46.801+00:00"
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-04",
+          "task_id": "task-5ac81027515a4ebfaea0ef3047faa650",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-03",
+          "clip_group_id": "clip-group-umbrella-03",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-03",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-04",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-05",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 5.5
+            },
+            {
+              "shot_id": "shot-umbrella-06",
+              "shot_revision": 1,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-04",
+            "shot-umbrella-05",
+            "shot-umbrella-06"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 15.08,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "PREVIOUS_RACK_PROVENANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "前景高架取伞有可见过程，但此前实际归还边界尚未比较，无法确认原架上的同一把伞；不得据静态母版断言通过或换伞。",
+                "repair_layer": "REVIEW",
+                "category": "PROP_CONTINUITY"
+              },
+              {
+                "code": "CLERK_RAIN_EXPOSURE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "交接末端两人头顶伞面投影重叠，棚沿多在近景外，女子外肩实际受雨关系未知；续接时须建立可见遮肩变化而非重复交接。",
+                "repair_layer": "CONTINUATION",
+                "category": "SPATIAL_CONTINUITY"
+              },
+              {
+                "code": "AUDIO_PERFORMANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "仅有TAKE范围ASR和信号检查，未完成语义听审、发声者及口型核对。",
+                "repair_layer": "REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=15.080s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件性可用，准备沿用并以实际交接尾部续接镜头7–8。已有观察覆盖0–15.0秒抽样及交接密采：女子从前景高架取下深蓝收拢伞，6.5–7.917秒横伸后展开；13.833秒男子合握，14.333–14.417秒女子完全分离，14.5–14.75秒男子独持稳定，女左靠店、男右靠街。展开更像棚下靠门而非棚外，未见撞棚证据，属于非用户硬性调度差异，不据此拒绝。末端女外肩是否越棚受雨未知，不能称偏伞前状态已经成立。前景高架有多把同类伞，未取得上一组归还实际边界，原架同一伞的跨镜来源待负责人合并核对。组内人物衣装、湿肩和主伞主要外观连续，女性参考脸貌未完成独立核对，细部伞骨及按钮未知。原片TAKE转录为“等等先拿着用吧”，可解码、无削波；ASR时间近似，语义听审、发声者及口型同步尚未核实，不作为声音通过。正式剪辑需使用实际切点，计划窗口不是精确切点；交接建议保留至14.75秒附近。未建立时间线。",
+            "reviewed_at": "2026-09-17T05:33:13.991+00:00",
+            "created_at": "2026-09-17T05:24:00.157+00:00"
+          },
+          "created_at": "2026-09-17T05:24:00.157+00:00"
+        }
+      ],
+      "timeline": {
+        "id": "edit-project-c4013371db86",
+        "name": "Snapshot: saved G1 and trimmed G3",
+        "tracks": [
+          {
+            "id": "video-1",
+            "name": "镜头",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "video-2",
+            "name": "画面补充",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default"
+          },
+          {
+            "id": "audio-1",
+            "name": "声音",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "audio",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "subtitles",
+            "name": "字幕",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "subtitle"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-ready-opening-01-02",
+            "assetId": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 9.42,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+              "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+              "type": "video",
+              "duration": 9.42,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 02",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-01",
+            "sourceTakeId": "take-task-1f7f494b880344c0896f549f43d1830b"
+          },
+          {
+            "id": "clip-ready-return-03",
+            "assetId": "take-task-642459bc993043a1b3c07e10803553c2",
+            "type": "video",
+            "startTime": 9.42,
+            "duration": 5.17,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-642459bc993043a1b3c07e10803553c2",
+              "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+              "type": "video",
+              "duration": 5.17,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 03",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-03",
+            "sourceTakeId": "take-task-642459bc993043a1b3c07e10803553c2"
+          },
+          {
+            "id": "clip-ready-doorway-04-06",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "video",
+            "startTime": 14.59,
+            "duration": 10.205,
+            "trimStart": 4.875,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": true,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650"
+          },
+          {
+            "id": "audio-ready-doorway-native-jcut",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "audio",
+            "startTime": 13.715,
+            "duration": 11.08,
+            "trimStart": 4.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 2,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650"
+          }
+        ],
+        "subtitles": [],
+        "createdAt": 1789626738261
+      },
+      "name": "daily_umbrella_trimmed_undeclared",
+      "expected": {
+        "shot-umbrella-01": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 0.0,
+            "duration_seconds": 5.0
+          }
+        ],
+        "shot-umbrella-02": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 5.0,
+            "duration_seconds": 4.42
+          }
+        ],
+        "shot-umbrella-03": [
+          {
+            "anchor_clip_id": "clip-ready-return-03",
+            "start_seconds": 9.42,
+            "duration_seconds": 5.17
+          }
+        ],
+        "shot-umbrella-04": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 14.59,
+            "duration_seconds": 10.205000000000002
+          }
+        ],
+        "shot-umbrella-05": [],
+        "shot-umbrella-06": []
+      }
+    },
+    {
+      "assets": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "type": "video",
+          "duration": 9.42,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 02",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "type": "video",
+          "duration": 5.17,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 03",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "type": "video",
+          "duration": 15.08,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 06",
+          "createdAt": 1789626738261
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-01",
+          "task_id": "task-1f7f494b880344c0896f549f43d1830b",
+          "candidate_index": 2,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-01",
+          "clip_group_id": "clip-group-umbrella-01",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-01",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-02",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 8.5,
+              "duration_seconds": 3.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-01",
+            "shot-umbrella-02"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 9.42,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-1f7f494b880344c0896f549f43d1830b",
+            "take_id": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "音频仅有信号测量；ASR资源缺失，中文对白、发声者及实际听审尚未验证，不是已证实的错误。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员组内外观一致，但母图在视频检查输入中不可辨读，面部母图比对保持未知，不是已证实的换脸。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=9.420s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "画面观察来源0–9.42秒，最后实际图像PTS9.291667。唯一深蓝收拢伞从顾客侧原架提起、其他挂位空，未见额外相似行动者；顾客右手握伞、左手持黑色手机，准备购买的视觉意图可读。组内宽转近切镜仅定位于(4.750,5.125]秒。末态8.5秒及9.291667秒均女左男右，顾客相向未转门、右伞左手机，店员提醒臂已放下，门在画右后方，原架最近实见于男顾客画左下方。店员实际站在台端外侧；5.833333秒短触伞布但未握柄接管，顾客持物链不断。此两项偏离导演调度，不损害本组误认及反应的核心视觉用途，不据此再生成；下一组必须按实际边界核对当前来源，不能默写台内、悬手或从未碰伞。男顾客面部衣装湿肩、女店员组内身份衣装、主伞外观和空间光色在已见帧相容；女店员面部母图比对仍UNKNOWN。原声信号检查覆盖0–9.42秒：可解码、有非静音信号、无削波，峰值-3.106dBFS；不是听审。此前原生ASR因openai/whisper-small资源不完整不可执行，此修复候选的中文逐字对白、发声者、声线、雨声及音画同步均未验证，不因信号检查通过而判通过。实际9.42秒较8.5秒设计多0.92秒，剪辑出点须后续结合实际听审确定。PENDING表示条件可用与检查未完，不是拒绝，也不代表全组或全片通过。",
+            "reviewed_at": "2026-09-17T05:34:35.863+00:00",
+            "created_at": "2026-09-17T05:29:56.163+00:00"
+          },
+          "created_at": "2026-09-17T05:29:56.163+00:00"
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-03",
+          "task_id": "task-642459bc993043a1b3c07e10803553c2",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-4e2315c94c07",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-fa15aa9e3ea5",
+          "generation_unit_id": "clip-group-umbrella-02",
+          "clip_group_id": "clip-group-umbrella-02",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-02",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-03",
+              "shot_revision": 3,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-03"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 5.17,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "STALE",
+          "qa_report": {
+            "id": "qa-take-task-642459bc993043a1b3c07e10803553c2",
+            "take_id": "take-task-642459bc993043a1b3c07e10803553c2",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "ASR仅识别“抱歉”约1.74–4.30秒；保存对白“啊，抱歉。”中的“啊”、实际发声者、语气、音色、环境声及同步未听审。保留完整0–5.17秒原声，不能据此判漏字或逐字通过。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员与已采用前组可见身份衣装相容，但母版在检查输入中不可辨读，独立面部母版比对仍未知；没有已证实的身份漂移。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              },
+              {
+                "code": "NEXT_GROUP_RACK_PROP_CHAIN_CONFLICT",
+                "severity": "MEDIUM",
+                "message": "本镜单伞放回台端低矩形架；门口采用片段开头前景为高立柱横臂架、3把相似深蓝伞，结构和数量有实际差异。运动方向可接，但后续从何处取回同一原伞尚未解决。该问题交门口组负责人，不据此否定本镜已有归还过程或修改他组采用。",
+                "repair_layer": "NEXT_GROUP_OWNER",
+                "category": "PROP_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=5.170s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件可用，拟采用镜头3现有真实MiniMax-H3片段。生成时来源为分镜第4版、镜头修订3；现已保存第5版、镜头修订4，局部接受实际支撑方式及并行动作，不改写历史生成来源，不重新入队。源文件5.17秒；全源抽样实际截至5.125秒，另有2.25–4.25秒归位密采，实际截至4.166667秒，包含3.708333秒原分辨率分离详帧。静态抽样不等于逐帧动态或听审通过。\n视觉证据：开头女左男右、顾客右手伞左手手机，店员在台端前侧且手已放低。男顾客短黑发、面部衣装和湿肩与母版及前组相容；女店员与前组面貌、低马尾、米色上衣和深绿围裙相容，但女母版独立面部比对未完成。全段唯一深蓝收拢长伞、黑J柄与主伞参考相容，未见换色、展开或复制。约1.5秒后主动下移放伞，3.0秒仍握柄；密采3.5秒见手柄间隙，3.708333秒高清明确分离，随后单伞独自稳定留架至已见末端。可见先定位、再撤手、持续留架支持架体已承托；具体受力点和重量转移瞬间未知，不宣称J柄钩挂。约2.5秒左手携手机移向衣袋，袋口穿入瞬间局部遮挡；至4.75秒双手无物、背向机位往画右后方入口走。收手机与放伞局部重叠不损害归还和空手离台因果。\n原架依据：前组0–3秒抽样实见至2.875秒，也是台端顾客侧低矩形金属架、唯一伞竖置、J柄高于顶栏，未见钩挂。与本镜架体类型、基本位置、伞数量及放回区域相容，精确格位编号未知。旧检查所列PROP_SUPPORT_CONTACT_MISMATCH对应导演自定挂钩方式；结合原架实际初态和最新保存调度，不再作为本镜不可用缺陷，未抹去旧报告观察。\n入镜依据：前组另查8.5–9.42秒尾段，实际截至9.375秒，仍相向、右伞左手机，店员未接管，没有已归还或转门状态；不要用全源检查中旧8.10/8.45名义边界代替这项新增观察。建议前组画声保完整0–9.42秒，再接本镜0秒；9.42是媒体终点，不是抽帧PTS或听审核准尾音点。\n出镜依据：本镜4.75–5.0秒空手朝画右后方入口走，门口采用片段0–2.5秒实见至2.333333秒同向行走，运动方向可接。但门口前景为高立柱横臂架并有3把相似深蓝伞，与本镜低架单伞存在真实结构和数量差异，同一原伞的后续取出来源尚未解决，交门口负责人；本镜不增伞换架，也不宣布跨组道具链通过。\n原声：TAKE范围ASR覆盖0–5.17秒，识别“抱歉”，字符近似时间“抱”1.74–3.34、“歉”3.34–4.30。当前保存对白仍为“啊，抱歉。”；未识别“啊”不等于已证实漏字。全源信号可解码、非静音、无削波；实际发声者、语气自然度、音色、逐字内容、环境声和音画同步均未听审。建议本镜画面源0–5.0秒，原声暂保完整0–5.17秒；若5秒切画面，尾部0.17秒可延续至下镜，但须后期核对实际混音，不能把4.30秒ASR终点当作安全声音出点。所有区间均为TAKE_SOURCE建议，未建立或保存正式时间线、字幕或FILM落位。PENDING表示条件可用和检查未完，不是拒绝，也不是全片通过。",
+            "reviewed_at": "2026-09-17T06:23:09.371+00:00",
+            "created_at": "2026-09-17T06:10:46.801+00:00"
+          },
+          "created_at": "2026-09-17T06:10:46.801+00:00"
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-04",
+          "task_id": "task-5ac81027515a4ebfaea0ef3047faa650",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-03",
+          "clip_group_id": "clip-group-umbrella-03",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-03",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-04",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-05",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 5.5
+            },
+            {
+              "shot_id": "shot-umbrella-06",
+              "shot_revision": 1,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-04",
+            "shot-umbrella-05",
+            "shot-umbrella-06"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 15.08,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "PREVIOUS_RACK_PROVENANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "前景高架取伞有可见过程，但此前实际归还边界尚未比较，无法确认原架上的同一把伞；不得据静态母版断言通过或换伞。",
+                "repair_layer": "REVIEW",
+                "category": "PROP_CONTINUITY"
+              },
+              {
+                "code": "CLERK_RAIN_EXPOSURE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "交接末端两人头顶伞面投影重叠，棚沿多在近景外，女子外肩实际受雨关系未知；续接时须建立可见遮肩变化而非重复交接。",
+                "repair_layer": "CONTINUATION",
+                "category": "SPATIAL_CONTINUITY"
+              },
+              {
+                "code": "AUDIO_PERFORMANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "仅有TAKE范围ASR和信号检查，未完成语义听审、发声者及口型核对。",
+                "repair_layer": "REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=15.080s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件性可用，准备沿用并以实际交接尾部续接镜头7–8。已有观察覆盖0–15.0秒抽样及交接密采：女子从前景高架取下深蓝收拢伞，6.5–7.917秒横伸后展开；13.833秒男子合握，14.333–14.417秒女子完全分离，14.5–14.75秒男子独持稳定，女左靠店、男右靠街。展开更像棚下靠门而非棚外，未见撞棚证据，属于非用户硬性调度差异，不据此拒绝。末端女外肩是否越棚受雨未知，不能称偏伞前状态已经成立。前景高架有多把同类伞，未取得上一组归还实际边界，原架同一伞的跨镜来源待负责人合并核对。组内人物衣装、湿肩和主伞主要外观连续，女性参考脸貌未完成独立核对，细部伞骨及按钮未知。原片TAKE转录为“等等先拿着用吧”，可解码、无削波；ASR时间近似，语义听审、发声者及口型同步尚未核实，不作为声音通过。正式剪辑需使用实际切点，计划窗口不是精确切点；交接建议保留至14.75秒附近。未建立时间线。",
+            "reviewed_at": "2026-09-17T05:33:13.991+00:00",
+            "created_at": "2026-09-17T05:24:00.157+00:00"
+          },
+          "created_at": "2026-09-17T05:24:00.157+00:00"
+        }
+      ],
+      "timeline": {
+        "id": "edit-project-c4013371db86",
+        "name": "Snapshot: saved G1 and trimmed G3",
+        "tracks": [
+          {
+            "id": "video-1",
+            "name": "镜头",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "video-2",
+            "name": "画面补充",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default"
+          },
+          {
+            "id": "audio-1",
+            "name": "声音",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "audio",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "subtitles",
+            "name": "字幕",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "subtitle"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-ready-opening-01-02",
+            "assetId": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 9.42,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+              "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+              "type": "video",
+              "duration": 9.42,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 02",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-01",
+            "sourceTakeId": "take-task-1f7f494b880344c0896f549f43d1830b"
+          },
+          {
+            "id": "clip-ready-return-03",
+            "assetId": "take-task-642459bc993043a1b3c07e10803553c2",
+            "type": "video",
+            "startTime": 9.42,
+            "duration": 5.17,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-642459bc993043a1b3c07e10803553c2",
+              "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+              "type": "video",
+              "duration": 5.17,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 03",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-03",
+            "sourceTakeId": "take-task-642459bc993043a1b3c07e10803553c2"
+          },
+          {
+            "id": "clip-ready-doorway-04-06",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "video",
+            "startTime": 14.59,
+            "duration": 10.205,
+            "trimStart": 4.875,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": true,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "sourceShotIds": [
+              "shot-umbrella-04",
+              "shot-umbrella-05",
+              "shot-umbrella-06"
+            ]
+          },
+          {
+            "id": "audio-ready-doorway-native-jcut",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "audio",
+            "startTime": 13.715,
+            "duration": 11.08,
+            "trimStart": 4.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 2,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650"
+          }
+        ],
+        "subtitles": [],
+        "createdAt": 1789626738261
+      },
+      "name": "daily_umbrella_trimmed_declared",
+      "expected": {
+        "shot-umbrella-01": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 0.0,
+            "duration_seconds": 5.0
+          }
+        ],
+        "shot-umbrella-02": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 5.0,
+            "duration_seconds": 4.42
+          }
+        ],
+        "shot-umbrella-03": [
+          {
+            "anchor_clip_id": "clip-ready-return-03",
+            "start_seconds": 9.42,
+            "duration_seconds": 5.17
+          }
+        ],
+        "shot-umbrella-04": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 14.59,
+            "duration_seconds": 0.125
+          }
+        ],
+        "shot-umbrella-05": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 14.715,
+            "duration_seconds": 5.5
+          }
+        ],
+        "shot-umbrella-06": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 20.215,
+            "duration_seconds": 4.580000000000002
+          }
+        ]
+      }
+    },
+    {
+      "assets": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "type": "video",
+          "duration": 9.42,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 02",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "type": "video",
+          "duration": 5.17,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 03",
+          "createdAt": 1789626738261
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "type": "video",
+          "duration": 15.08,
+          "resolution": "1344×768",
+          "width": 1344,
+          "height": 768,
+          "prompt": "镜头 06",
+          "createdAt": 1789626738261
+        }
+      ],
+      "takes": [
+        {
+          "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-01",
+          "task_id": "task-1f7f494b880344c0896f549f43d1830b",
+          "candidate_index": 2,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-01",
+          "clip_group_id": "clip-group-umbrella-01",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-01",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-01",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-02",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 8.5,
+              "duration_seconds": 3.5
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-01",
+            "shot-umbrella-02"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 9.42,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-1f7f494b880344c0896f549f43d1830b",
+            "take_id": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "音频仅有信号测量；ASR资源缺失，中文对白、发声者及实际听审尚未验证，不是已证实的错误。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员组内外观一致，但母图在视频检查输入中不可辨读，面部母图比对保持未知，不是已证实的换脸。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=9.420s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "画面观察来源0–9.42秒，最后实际图像PTS9.291667。唯一深蓝收拢伞从顾客侧原架提起、其他挂位空，未见额外相似行动者；顾客右手握伞、左手持黑色手机，准备购买的视觉意图可读。组内宽转近切镜仅定位于(4.750,5.125]秒。末态8.5秒及9.291667秒均女左男右，顾客相向未转门、右伞左手机，店员提醒臂已放下，门在画右后方，原架最近实见于男顾客画左下方。店员实际站在台端外侧；5.833333秒短触伞布但未握柄接管，顾客持物链不断。此两项偏离导演调度，不损害本组误认及反应的核心视觉用途，不据此再生成；下一组必须按实际边界核对当前来源，不能默写台内、悬手或从未碰伞。男顾客面部衣装湿肩、女店员组内身份衣装、主伞外观和空间光色在已见帧相容；女店员面部母图比对仍UNKNOWN。原声信号检查覆盖0–9.42秒：可解码、有非静音信号、无削波，峰值-3.106dBFS；不是听审。此前原生ASR因openai/whisper-small资源不完整不可执行，此修复候选的中文逐字对白、发声者、声线、雨声及音画同步均未验证，不因信号检查通过而判通过。实际9.42秒较8.5秒设计多0.92秒，剪辑出点须后续结合实际听审确定。PENDING表示条件可用与检查未完，不是拒绝，也不代表全组或全片通过。",
+            "reviewed_at": "2026-09-17T05:34:35.863+00:00",
+            "created_at": "2026-09-17T05:29:56.163+00:00"
+          },
+          "created_at": "2026-09-17T05:29:56.163+00:00"
+        },
+        {
+          "id": "take-task-642459bc993043a1b3c07e10803553c2",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-03",
+          "task_id": "task-642459bc993043a1b3c07e10803553c2",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-4e2315c94c07",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-fa15aa9e3ea5",
+          "generation_unit_id": "clip-group-umbrella-02",
+          "clip_group_id": "clip-group-umbrella-02",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-02",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-03",
+              "shot_revision": 3,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-03"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 5.17,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "STALE",
+          "qa_report": {
+            "id": "qa-take-task-642459bc993043a1b3c07e10803553c2",
+            "take_id": "take-task-642459bc993043a1b3c07e10803553c2",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "DIALOGUE_REVIEW_INCOMPLETE",
+                "severity": "LOW",
+                "message": "ASR仅识别“抱歉”约1.74–4.30秒；保存对白“啊，抱歉。”中的“啊”、实际发声者、语气、音色、环境声及同步未听审。保留完整0–5.17秒原声，不能据此判漏字或逐字通过。",
+                "repair_layer": "AUDIO_REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              },
+              {
+                "code": "CLERK_FACE_COMPARISON_INCOMPLETE",
+                "severity": "LOW",
+                "message": "女店员与已采用前组可见身份衣装相容，但母版在检查输入中不可辨读，独立面部母版比对仍未知；没有已证实的身份漂移。",
+                "repair_layer": "VISUAL_REVIEW",
+                "category": "IDENTITY_CONTINUITY"
+              },
+              {
+                "code": "NEXT_GROUP_RACK_PROP_CHAIN_CONFLICT",
+                "severity": "MEDIUM",
+                "message": "本镜单伞放回台端低矩形架；门口采用片段开头前景为高立柱横臂架、3把相似深蓝伞，结构和数量有实际差异。运动方向可接，但后续从何处取回同一原伞尚未解决。该问题交门口组负责人，不据此否定本镜已有归还过程或修改他组采用。",
+                "repair_layer": "NEXT_GROUP_OWNER",
+                "category": "PROP_CONTINUITY"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=5.170s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件可用，拟采用镜头3现有真实MiniMax-H3片段。生成时来源为分镜第4版、镜头修订3；现已保存第5版、镜头修订4，局部接受实际支撑方式及并行动作，不改写历史生成来源，不重新入队。源文件5.17秒；全源抽样实际截至5.125秒，另有2.25–4.25秒归位密采，实际截至4.166667秒，包含3.708333秒原分辨率分离详帧。静态抽样不等于逐帧动态或听审通过。\n视觉证据：开头女左男右、顾客右手伞左手手机，店员在台端前侧且手已放低。男顾客短黑发、面部衣装和湿肩与母版及前组相容；女店员与前组面貌、低马尾、米色上衣和深绿围裙相容，但女母版独立面部比对未完成。全段唯一深蓝收拢长伞、黑J柄与主伞参考相容，未见换色、展开或复制。约1.5秒后主动下移放伞，3.0秒仍握柄；密采3.5秒见手柄间隙，3.708333秒高清明确分离，随后单伞独自稳定留架至已见末端。可见先定位、再撤手、持续留架支持架体已承托；具体受力点和重量转移瞬间未知，不宣称J柄钩挂。约2.5秒左手携手机移向衣袋，袋口穿入瞬间局部遮挡；至4.75秒双手无物、背向机位往画右后方入口走。收手机与放伞局部重叠不损害归还和空手离台因果。\n原架依据：前组0–3秒抽样实见至2.875秒，也是台端顾客侧低矩形金属架、唯一伞竖置、J柄高于顶栏，未见钩挂。与本镜架体类型、基本位置、伞数量及放回区域相容，精确格位编号未知。旧检查所列PROP_SUPPORT_CONTACT_MISMATCH对应导演自定挂钩方式；结合原架实际初态和最新保存调度，不再作为本镜不可用缺陷，未抹去旧报告观察。\n入镜依据：前组另查8.5–9.42秒尾段，实际截至9.375秒，仍相向、右伞左手机，店员未接管，没有已归还或转门状态；不要用全源检查中旧8.10/8.45名义边界代替这项新增观察。建议前组画声保完整0–9.42秒，再接本镜0秒；9.42是媒体终点，不是抽帧PTS或听审核准尾音点。\n出镜依据：本镜4.75–5.0秒空手朝画右后方入口走，门口采用片段0–2.5秒实见至2.333333秒同向行走，运动方向可接。但门口前景为高立柱横臂架并有3把相似深蓝伞，与本镜低架单伞存在真实结构和数量差异，同一原伞的后续取出来源尚未解决，交门口负责人；本镜不增伞换架，也不宣布跨组道具链通过。\n原声：TAKE范围ASR覆盖0–5.17秒，识别“抱歉”，字符近似时间“抱”1.74–3.34、“歉”3.34–4.30。当前保存对白仍为“啊，抱歉。”；未识别“啊”不等于已证实漏字。全源信号可解码、非静音、无削波；实际发声者、语气自然度、音色、逐字内容、环境声和音画同步均未听审。建议本镜画面源0–5.0秒，原声暂保完整0–5.17秒；若5秒切画面，尾部0.17秒可延续至下镜，但须后期核对实际混音，不能把4.30秒ASR终点当作安全声音出点。所有区间均为TAKE_SOURCE建议，未建立或保存正式时间线、字幕或FILM落位。PENDING表示条件可用和检查未完，不是拒绝，也不是全片通过。",
+            "reviewed_at": "2026-09-17T06:23:09.371+00:00",
+            "created_at": "2026-09-17T06:10:46.801+00:00"
+          },
+          "created_at": "2026-09-17T06:10:46.801+00:00"
+        },
+        {
+          "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "project_id": "fixture-trimmed-umbrella",
+          "shot_id": "shot-umbrella-04",
+          "task_id": "task-5ac81027515a4ebfaea0ef3047faa650",
+          "candidate_index": 1,
+          "operation": "GENERATE",
+          "provider": "minimax",
+          "model": "MiniMax-H3",
+          "route": "REFERENCE",
+          "storyboard_document_id": "production-document-44b1cc71c1a4",
+          "storyboard_version_id": "production-document-version-ad9789e83d4e",
+          "generation_plan_document_id": "production-document-57b76752f5bc",
+          "generation_plan_version_id": "production-document-version-65e52953c22e",
+          "generation_unit_id": "clip-group-umbrella-03",
+          "clip_group_id": "clip-group-umbrella-03",
+          "output_slot_id": "video.generation-unit.clip-group-umbrella-03",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-04",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-05",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 5.5
+            },
+            {
+              "shot_id": "shot-umbrella-06",
+              "shot_revision": 1,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "selected_shot_ids": [
+            "shot-umbrella-04",
+            "shot-umbrella-06"
+          ],
+          "media_path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+          "thumbnail_path": "/fixture/umbrella/thumbnail.jpg",
+          "duration_seconds": 15.08,
+          "width": 1344,
+          "height": 768,
+          "availability": "AVAILABLE",
+          "qa_status": "PENDING",
+          "is_selected": true,
+          "freshness": "CURRENT",
+          "qa_report": {
+            "id": "qa-take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "status": "PENDING",
+            "hard_gate_passed": false,
+            "score": 3.8,
+            "issues": [
+              {
+                "code": "PREVIOUS_RACK_PROVENANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "前景高架取伞有可见过程，但此前实际归还边界尚未比较，无法确认原架上的同一把伞；不得据静态母版断言通过或换伞。",
+                "repair_layer": "REVIEW",
+                "category": "PROP_CONTINUITY"
+              },
+              {
+                "code": "CLERK_RAIN_EXPOSURE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "交接末端两人头顶伞面投影重叠，棚沿多在近景外，女子外肩实际受雨关系未知；续接时须建立可见遮肩变化而非重复交接。",
+                "repair_layer": "CONTINUATION",
+                "category": "SPATIAL_CONTINUITY"
+              },
+              {
+                "code": "AUDIO_PERFORMANCE_UNVERIFIED",
+                "severity": "INFO",
+                "message": "仅有TAKE范围ASR和信号检查，未完成语义听审、发声者及口型核对。",
+                "repair_layer": "REVIEW",
+                "category": "DIALOGUE_AUDIO"
+              }
+            ],
+            "checks": [
+              "source=1344x768",
+              "aspect=16:9 (saved provider request)",
+              "resolution=768P; exact pixel mapping=UNVERIFIED (provider does not specify it)",
+              "duration=15.080s",
+              "fps=24.000",
+              "audio=present",
+              "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑"
+            ],
+            "reviewer_notes": "条件性可用，准备沿用并以实际交接尾部续接镜头7–8。已有观察覆盖0–15.0秒抽样及交接密采：女子从前景高架取下深蓝收拢伞，6.5–7.917秒横伸后展开；13.833秒男子合握，14.333–14.417秒女子完全分离，14.5–14.75秒男子独持稳定，女左靠店、男右靠街。展开更像棚下靠门而非棚外，未见撞棚证据，属于非用户硬性调度差异，不据此拒绝。末端女外肩是否越棚受雨未知，不能称偏伞前状态已经成立。前景高架有多把同类伞，未取得上一组归还实际边界，原架同一伞的跨镜来源待负责人合并核对。组内人物衣装、湿肩和主伞主要外观连续，女性参考脸貌未完成独立核对，细部伞骨及按钮未知。原片TAKE转录为“等等先拿着用吧”，可解码、无削波；ASR时间近似，语义听审、发声者及口型同步尚未核实，不作为声音通过。正式剪辑需使用实际切点，计划窗口不是精确切点；交接建议保留至14.75秒附近。未建立时间线。",
+            "reviewed_at": "2026-09-17T05:33:13.991+00:00",
+            "created_at": "2026-09-17T05:24:00.157+00:00"
+          },
+          "created_at": "2026-09-17T05:24:00.157+00:00"
+        }
+      ],
+      "timeline": {
+        "id": "edit-project-c4013371db86",
+        "name": "Snapshot: saved G1 and trimmed G3",
+        "tracks": [
+          {
+            "id": "video-1",
+            "name": "镜头",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "video-2",
+            "name": "画面补充",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "default"
+          },
+          {
+            "id": "audio-1",
+            "name": "声音",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "audio",
+            "type": "default",
+            "sourcePatched": true
+          },
+          {
+            "id": "subtitles",
+            "name": "字幕",
+            "muted": false,
+            "locked": false,
+            "enabled": true,
+            "solo": false,
+            "kind": "video",
+            "type": "subtitle"
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-ready-opening-01-02",
+            "assetId": "take-task-1f7f494b880344c0896f549f43d1830b",
+            "type": "video",
+            "startTime": 0.0,
+            "duration": 9.42,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-1f7f494b880344c0896f549f43d1830b",
+              "path": "/fixture/umbrella/clip-group-umbrella-01.mp4",
+              "type": "video",
+              "duration": 9.42,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 02",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-01",
+            "sourceTakeId": "take-task-1f7f494b880344c0896f549f43d1830b"
+          },
+          {
+            "id": "clip-ready-return-03",
+            "assetId": "take-task-642459bc993043a1b3c07e10803553c2",
+            "type": "video",
+            "startTime": 9.42,
+            "duration": 5.17,
+            "trimStart": 0.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-642459bc993043a1b3c07e10803553c2",
+              "path": "/fixture/umbrella/clip-group-umbrella-02.mp4",
+              "type": "video",
+              "duration": 5.17,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 03",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-03",
+            "sourceTakeId": "take-task-642459bc993043a1b3c07e10803553c2"
+          },
+          {
+            "id": "clip-ready-doorway-04-06",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "video",
+            "startTime": 14.59,
+            "duration": 10.205,
+            "trimStart": 4.875,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": true,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 0,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "sourceShotIds": [
+              "shot-umbrella-04",
+              "shot-umbrella-05",
+              "shot-umbrella-06"
+            ]
+          },
+          {
+            "id": "audio-ready-doorway-native-jcut",
+            "assetId": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "type": "audio",
+            "startTime": 13.715,
+            "duration": 11.08,
+            "trimStart": 4.0,
+            "trimEnd": 0.0,
+            "speed": 1.0,
+            "reversed": false,
+            "muted": false,
+            "volume": 1.0,
+            "audioFadeInSeconds": 0.0,
+            "audioFadeOutSeconds": 0.0,
+            "audioEnvelopeOffsetSeconds": null,
+            "audioEnvelopeDurationSeconds": null,
+            "trackIndex": 2,
+            "opacity": 100.0,
+            "flipH": false,
+            "flipV": false,
+            "asset": {
+              "id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+              "path": "/fixture/umbrella/clip-group-umbrella-03.mp4",
+              "type": "video",
+              "duration": 15.08,
+              "resolution": "1344×768",
+              "width": 1344,
+              "height": 768,
+              "prompt": "镜头 06",
+              "createdAt": 1789626738261
+            },
+            "sourceShotId": "shot-umbrella-04",
+            "sourceTakeId": "take-task-5ac81027515a4ebfaea0ef3047faa650"
+          }
+        ],
+        "subtitles": [],
+        "createdAt": 1789626738261
+      },
+      "name": "declared_trimmed_group_after_other_occurrence_replacement",
+      "expected": {
+        "shot-umbrella-01": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 0.0,
+            "duration_seconds": 5.0
+          }
+        ],
+        "shot-umbrella-02": [
+          {
+            "anchor_clip_id": "clip-ready-opening-01-02",
+            "start_seconds": 5.0,
+            "duration_seconds": 4.42
+          }
+        ],
+        "shot-umbrella-03": [
+          {
+            "anchor_clip_id": "clip-ready-return-03",
+            "start_seconds": 9.42,
+            "duration_seconds": 5.17
+          }
+        ],
+        "shot-umbrella-04": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 14.59,
+            "duration_seconds": 0.125
+          }
+        ],
+        "shot-umbrella-05": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 14.715,
+            "duration_seconds": 5.5
+          }
+        ],
+        "shot-umbrella-06": [
+          {
+            "anchor_clip_id": "clip-ready-doorway-04-06",
+            "start_seconds": 20.215,
+            "duration_seconds": 4.580000000000002
+          }
+        ]
+      },
+      "description": "The same persisted explicit relation survives a global selected_shot_ids change caused by replacing another occurrence; actual select/split/copy is covered in test_trimmed_group_shot_editorial.py."
+    }
+  ]
+}

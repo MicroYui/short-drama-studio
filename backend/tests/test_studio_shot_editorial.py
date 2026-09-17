@@ -21,6 +21,7 @@ from short_drama.studio_export import start_export
 from short_drama.studio_media import import_studio_media, select_imported_video
 from short_drama.studio_models import EditorialClipChange, StudioEditorialEdit, StudioShotMediaSelect, StudioTimelineSave, StudioExportRequest
 from short_drama.studio_shot_editorial import read_shot_editorial, save_shot_editorial
+from short_drama.tools.contracts import ToolCallStatus
 
 
 def as_json(editor: EditorProject) -> dict[str, JsonValue]:
@@ -177,6 +178,83 @@ def test_returned_video_can_be_trimmed_before_adoption_without_changing_the_film
     assert len(full.clips) == 1 and full.clips[0].duration == 2
     assert (full.clips[0].model_extra or {}).get("sourceShotId") == ids[1]
     assert service.get_project(pid).document.shots == aggregate.document.shots
+
+
+@pytest.mark.parametrize("saved_episode", [False, True])
+def test_tool_distinguishes_unadopted_candidate_from_saved_episode_and_after_local_save(
+    episode: tuple[ShortDramaService, str, list[str]], saved_episode: bool,
+) -> None:
+    service, pid, ids = episode
+    aggregate = service.get_project(pid)
+    editor = EditorProject.model_validate(read_editorial(service, pid).project)
+    timeline = editor.timelines[0]
+    target_ids = {clip.id for clip in timeline.clips if (clip.model_extra or {}).get("sourceShotId") == ids[1]}
+    timeline.clips = [clip for clip in timeline.clips if clip.id not in target_ids]
+    timeline.subtitles = [cue for cue in timeline.subtitles if cue.id != "cue-1"]
+    aggregate.document.editorial_timeline = {"revision": 5, "project": as_json(editor)} if saved_episode else None
+    aggregate.document.manifests = []
+    aggregate.document.project.current_manifest_id = None
+    service.repository.save_project(aggregate.document)
+    for take in aggregate.takes:
+        if take.shot_id == ids[1]:
+            take.is_selected = False
+            take.selected_shot_ids = []
+            service.repository.save_take(take)
+    before = service.get_project(pid)
+
+    result = service.tool_registry.invoke("timeline.read_editorial", {
+        "project_id": pid, "shot_id": ids[1], "include_project": True})
+    assert result.status == ToolCallStatus.SUCCEEDED and result.output is not None, result.error
+    content = cast(dict[str, JsonValue], result.output["content"])
+    assert content["editorial_revision"] == (5 if saved_episode else 0)
+    assert content["editorial_is_saved"] is saved_episode
+    assert content["is_saved"] is False and content["content_origin"] == "CANDIDATE_PREVIEW"
+    scope = cast(dict[str, JsonValue], content["shot_scope"])
+    assert scope["anchor_clip_id"] is None and scope["occurrences"] == [] and scope["duration_seconds"] == 0
+    rows = cast(list[dict[str, JsonValue]], content["clips"])
+    assert len(rows) == 1 and rows[0]["is_saved"] is False
+    assert "不能用于本集精确 clip_ids 查询" in str(content["read_notice"])
+    candidate_id = rows[0]["id"]
+    exact = service.tool_registry.invoke("timeline.read_editorial", {
+        "project_id": pid, "timeline_id": timeline.id, "clip_ids": [candidate_id]})
+    assert exact.status == ToolCallStatus.FAILED and exact.error is not None
+    assert "Unknown current objects" in exact.error.message and str(candidate_id) in exact.error.message
+    after_reads = service.get_project(pid)
+    assert after_reads.document == before.document and after_reads.takes == before.takes
+
+    # Saving the same local candidate adopts it into the real episode. The next
+    # read must use actual saved rows rather than a persistent preview flag.
+    local = EditorProject.model_validate(content["project"])
+    save_shot_editorial(service, pid, ids[1], StudioTimelineSave(
+        expected_revision=5 if saved_episode else 0, timeline={"project": as_json(local)}))
+    for arguments in ({"shot_id": ids[1]}, {"timeline_id": timeline.id, "clip_ids": [candidate_id]}, {}):
+        saved = service.tool_registry.invoke("timeline.read_editorial", {"project_id": pid, **arguments})
+        assert saved.status == ToolCallStatus.SUCCEEDED and saved.output is not None, saved.error
+        value = cast(dict[str, JsonValue], saved.output["content"])
+        assert value["is_saved"] is True and value["editorial_is_saved"] is True
+        assert value["content_origin"] == "SAVED_EDITORIAL"
+        assert all(row["is_saved"] is True for row in cast(list[dict[str, JsonValue]], value["clips"]))
+        assert "read_notice" not in value
+
+
+def test_tool_unsaved_selected_projection_does_not_claim_persisted_editorial(
+    episode: tuple[ShortDramaService, str, list[str]],
+) -> None:
+    service, pid, ids = episode
+    document = service.get_project(pid).document
+    document.editorial_timeline = None
+    service.repository.save_project(document)
+    film = EditorProject.model_validate(read_editorial(service, pid).project)
+    first_id = film.timelines[0].clips[0].id
+    for arguments in ({}, {"shot_id": ids[0]}, {"clip_ids": [first_id]}):
+        result = service.tool_registry.invoke("timeline.read_editorial", {"project_id": pid, **arguments})
+        assert result.status == ToolCallStatus.SUCCEEDED and result.output is not None, result.error
+        value = cast(dict[str, JsonValue], result.output["content"])
+        assert value["editorial_revision"] == 0
+        assert value["is_saved"] is False and value["editorial_is_saved"] is False
+        assert value["content_origin"] == "CANDIDATE_PREVIEW"
+        assert all(row["is_saved"] is False for row in cast(list[dict[str, JsonValue]], value["clips"]))
+    assert service.get_project(pid).document == document
 
 
 def test_select_group_candidate_changes_only_current_requested_shot(episode: tuple[ShortDramaService, str, list[str]]) -> None:

@@ -6,6 +6,7 @@ import { StudioApi } from './studio-api'
 import { StudioTeam } from './StudioTeam'
 import { StudioGenerationDraft } from './StudioGenerationDraft'
 import { StudioMediaTasks } from './StudioMediaTasks'
+import { isWorkerWaitingForGeneration } from './studio-worker-status'
 
 const statusLabels: Record<StudioJob['status'], string> = { queued: '准备开始', running: '正在制作', retrying: '正在恢复连接', pausing: '完成当前步骤后暂停', paused: '已暂停', waiting_user: '等待你的补充', completed: '已完成', failed: '需要处理后继续' }
 
@@ -33,19 +34,22 @@ function taskStatus(event: StudioEvent, active: boolean): string {
   return active ? '执行中' : '未记录完成结果'
 }
 function ChatText({ text, projectId, onError }: { text: string; projectId: string; onError: (error: unknown) => void }) {
-  const parts: ReactNode[] = []
-  let end = 0
-  for (const match of text.matchAll(/\[([^\]]+)\]\(([^)\n]+)\)|\*\*([^*]+)\*\*/g)) {
-    parts.push(text.slice(end, match.index))
-    if (match[3]) parts.push(<strong key={match.index}>{match[3]}</strong>)
-    else {
-      const href = match[2].replace(/^<|>$/g, '')
-      parts.push(href.startsWith('/') ? <button key={match.index} className="sd-chat-link" onClick={() => void StudioApi.downloadMedia(projectId, href, href.split('/').at(-1) || '制作文件').catch(onError)}>{match[1]} <Download size={12} /></button> : /^https?:\/\//.test(href) ? <a key={match.index} className="sd-chat-link" href={href} target="_blank" rel="noreferrer">{match[1]}</a> : match[0])
+  const inline = (value: string): ReactNode[] => {
+    const parts: ReactNode[] = []
+    let end = 0
+    for (const match of value.matchAll(/\[([^\]]+)\]\(([^)\n]+)\)|\*\*([^*]+)\*\*/g)) {
+      parts.push(value.slice(end, match.index))
+      if (match[3]) parts.push(<strong key={match.index}>{inline(match[3])}</strong>)
+      else {
+        const href = match[2].trim().replace(/^<|>$/g, '').trim()
+        parts.push(href.startsWith('/') ? <button key={match.index} className="sd-chat-link" onClick={() => void StudioApi.downloadMedia(projectId, href, href.split('/').at(-1) || '制作文件').catch(onError)}>{match[1]} <Download size={12} /></button> : /^https?:\/\//.test(href) ? <a key={match.index} className="sd-chat-link" href={href} target="_blank" rel="noreferrer">{match[1]}</a> : match[0])
+      }
+      end = (match.index ?? 0) + match[0].length
     }
-    end = (match.index ?? 0) + match[0].length
+    parts.push(value.slice(end))
+    return parts
   }
-  parts.push(text.slice(end))
-  return <p>{parts}</p>
+  return <p>{inline(text)}</p>
 }
 function actionLabel(event: StudioEvent): string {
   const summary = textField(event, 'input_summary') || textField(event, 'output_summary')
@@ -83,7 +87,7 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
   const estimatedTokens = Number(lastContext?.data.estimated_input_tokens ?? 0)
   const liveWorkers = workers.filter(worker => worker.run_id === job?.run_id && !['COMPLETED', 'CANCELLED'].includes(worker.status))
   const runningWorkers = liveWorkers.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review)
-  const waitingWorkers = liveWorkers.filter(worker => worker.status === 'NEEDS_ATTENTION' && worker.waiting_until && !worker.waiting_review)
+  const waitingWorkers = liveWorkers.filter(isWorkerWaitingForGeneration)
   const reviewWorkers = liveWorkers.filter(worker => worker.waiting_review)
   const currentAction = job?.status === 'retrying' ? '连接暂时中断，已完成的内容已保存，正在继续同一任务。' : runningWorkers.length > 1 ? `${runningWorkers.length} 项分工正在并行推进` : runningWorkers[0]?.latest_reason || runningWorkers[0]?.objective || (waitingWorkers.length ? `${waitingWorkers.length} 项分工等待生成结果，完成后自动继续` : reviewWorkers.length ? `${reviewWorkers.length} 项相关分工等待修改审阅` : '') || (lastTask ? actionLabel(lastTask) : '梳理当前目标和已有内容')
   useEffect(() => { if (suggested !== null) { if (suggested) setText(previous => previous.trim() && previous.trim() !== suggested.trim() ? `${previous}\n\n${suggested}` : suggested); textarea.current?.focus(); clearSuggested() } }, [suggested, clearSuggested])

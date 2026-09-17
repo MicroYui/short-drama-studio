@@ -64,6 +64,19 @@ def take_selection_receipt(
             sounds.append(actual)
     state.update(timeline_id=timeline.id, adopted_clips=[clip_state(clip) for clip in videos],
         linked_native_audio_clips=sounds)
+    if request.audio_policy == "KEEP_CURRENT_AUDIO":
+        from short_drama.studio_audio_selection import clip_audio_delegated
+        solo = any(track.solo for track in timeline.tracks)
+        retained: list[JsonValue] = []
+        for clip in timeline.clips:
+            track = timeline.tracks[clip.trackIndex]
+            if (clip.type not in {"audio", "video"} or clip.muted or clip.volume == 0 or not track.enabled
+                    or track.muted or solo and not track.solo or clip_audio_delegated(clip, timeline.clips, assets)):
+                continue
+            if any(clip.startTime < video.startTime + video.duration and clip.startTime + clip.duration > video.startTime for video in videos):
+                retained.append(clip_state(clip))
+        state["audio_policy"] = request.audio_policy
+        state["current_audio_clips_in_target"] = retained
     # These are actual current uses, not a changed-ID claim: a repeated
     # adoption can legitimately return the same revision without writing.
     return ToolWriteReceipt(artifact_refs=list(refs), current_state=state)

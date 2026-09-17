@@ -1,19 +1,22 @@
 """Adopt generated media into the user's current edit without rebuilding it."""
 from __future__ import annotations
 
-from typing import cast
+from typing import Literal, cast
+from uuid import uuid4
 
 from pydantic import JsonValue
 
 from short_drama.models import ProjectDocument, Take
-from short_drama.studio_editorial import EditorAsset, EditorClip, EditorProject
-from short_drama.studio_shot_editorial import editorial_shot_windows
+from short_drama.studio_editorial import EditorAsset, EditorClip, EditorProject, clip_media_source
+from short_drama.studio_shot_editorial import editorial_shot_windows, materialize_shared_shot
+from short_drama.studio_audio_selection import clip_audio_delegated
 
 
 def adopt_take_in_editorial(
     document: ProjectDocument, takes: list[Take], take: Take, shot_ids: list[str],
     *, clip_ids: list[str] | None = None,
     source_in_seconds: float | None = None, source_out_seconds: float | None = None,
+    audio_policy: Literal["REPLACE_LINKED_AUDIO", "KEEP_CURRENT_AUDIO"] = "REPLACE_LINKED_AUDIO",
 ) -> list[str]:
     explicit_source = source_in_seconds is not None and source_out_seconds is not None
     if explicit_source and source_out_seconds is not None and source_out_seconds > take.duration_seconds + 0.001:
@@ -32,11 +35,19 @@ def adopt_take_in_editorial(
     timeline = next(item for item in editor.timelines if item.id == editor.activeTimelineId)
     by_id = {item.id: item for item in takes}
     selected_clips = set(clip_ids or [])
-    if selected_clips - {item.id for item in timeline.clips if item.type == "video" and (item.model_extra or {}).get("sourceShotId") in shot_ids}:
+    visible_ids = {clip.id for shot_id in shot_ids
+                   for window in editorial_shot_windows(timeline, shot_id, assets=editor.assets, takes=takes)
+                   for clip in window.clips}
+    if selected_clips - visible_ids:
         raise ValueError("采用位置不属于这些镜头，请读取当前剪辑并传入对应 clip_ids。")
     assets: dict[str, EditorAsset] = {}
     adopted_shot_ids: list[str] = []
     updated_clip_ids: set[str] = set()
+    retained_audio: list[EditorClip] = []
+
+    def source_path(clip: EditorClip) -> str | None:
+        current = next((item for item in editor.assets if item.id == clip.assetId), None) or clip.asset
+        return clip_media_source(current, clip)[0] if current else None
 
     def asset(media_type: str) -> EditorAsset:
         asset_id = take.id if media_type == "video" else f"{take.id}-native-audio"
@@ -50,7 +61,7 @@ def adopt_take_in_editorial(
 
     for shot_id in shot_ids:
         shot = next(item for item in document.shots if item.id == shot_id)
-        windows = editorial_shot_windows(timeline, shot_id)
+        windows = editorial_shot_windows(timeline, shot_id, assets=editor.assets, takes=takes)
         if len(windows) > 1 and not selected_clips:
             options = ", ".join(item.clips[0].id for item in windows)
             raise ValueError(f"镜头 {shot_id} 有多处采用，请用 clip_ids 明确这次更换的位置：{options}")
@@ -58,6 +69,10 @@ def adopt_take_in_editorial(
             windows = [item for item in windows if any(clip.id in selected_clips for clip in item.clips)]
             if not windows:
                 continue
+        materialize_shared_shot(timeline, editor.assets, takes, shot_id, clip_ids=selected_clips)
+        windows = editorial_shot_windows(timeline, shot_id)
+        if selected_clips:
+            windows = [window for window in windows if any(clip.id in selected_clips for clip in window.clips)]
         adopted_shot_ids.append(shot_id)
         new_window = next((item for item in take.shot_windows if item.shot_id == shot_id), None)
         new_in = new_window.source_in_seconds if new_window else 0.0
@@ -89,7 +104,7 @@ def adopt_take_in_editorial(
         for window in windows:
             videos = [clip for clip in window.clips if not selected_clips or clip.id in selected_clips]
             origins = {(str((clip.model_extra or {}).get("sourceTakeId", "")),
-                        clip.asset.path if clip.asset else clip.assetId) for clip in videos}
+                        source_path(clip)) for clip in videos}
             if len(origins) > 1:
                 raise ValueError(f"镜头 {shot_id} 的位置混用了多个源素材，不能自动把裁切映射到候选 {take.id}；请先明确该位置要保留的源区间。")
             for video in videos:
@@ -97,8 +112,7 @@ def adopt_take_in_editorial(
                     raise ValueError(f"所选源区间长 {new_duration:.3f}s，必须等于片段 {video.id} 的采用时长 {video.duration:.3f}s × 速度 {video.speed:g}；本次采用不会改变成片剪点。")
                 source_shift = new_in - video.trimStart
                 old_take = by_id.get(str((video.model_extra or {}).get("sourceTakeId", "")))
-                existing_asset = video.asset or next((item for item in editor.assets if item.id == video.assetId), None)
-                same_source = old_take is not None and old_take.id == take.id and existing_asset is not None and existing_asset.path == take.media_path
+                same_source = old_take is not None and old_take.id == take.id and source_path(video) == take.media_path
                 old_window = next((item for item in old_take.shot_windows if item.shot_id == shot_id), None) if old_take else None
                 old_in = float((video.model_extra or {}).get("sourceWindowStart",
                     old_window.source_in_seconds if old_window else 0.0))
@@ -107,8 +121,9 @@ def adopt_take_in_editorial(
                     if clip.id in updated_clip_ids:
                         continue
                     linked_back = cast(list[str], (clip.model_extra or {}).get("linkedClipIds", []))
-                    clip_asset = clip.asset or next((item for item in editor.assets if item.id == clip.assetId), None)
-                    native_audio = clip.type == "audio" and (clip.id in linked or video.id in linked_back) and old_take is not None and clip_asset is not None and clip_asset.path == old_take.media_path
+                    native_audio = clip.type == "audio" and (clip.id in linked or video.id in linked_back) and old_take is not None and source_path(clip) == old_take.media_path
+                    if native_audio and audio_policy == "KEEP_CURRENT_AUDIO":
+                        continue
                     if clip.id != video.id and not native_audio:
                         continue
                     if native_audio and selected_clips and (not same_source or (explicit_source and abs(source_shift) > 0.000001)):
@@ -140,15 +155,33 @@ def adopt_take_in_editorial(
                         if relative_in < -0.01 or relative_in + clip.duration * clip.speed > new_duration + 0.04:
                             raise ValueError(f"候选 {take.id} 在镜头 {shot_id} 的可用区间 {new_in:.3f}–{new_in + new_duration:.3f}s 无法覆盖片段 {clip.id} 已有裁切；先调整该片段或选更长候选。")
                         selected_in = new_in + max(0.0, relative_in)
+                    if clip.type == "video" and audio_policy == "KEEP_CURRENT_AUDIO":
+                        # Keep the old native source, with its old trim, rate,
+                        # reversal and gain envelope. Do not ask H3 to preserve PCM.
+                        if not clip.muted and not clip_audio_delegated(clip, timeline.clips,
+                                {item.id: item for item in editor.assets}):
+                            sound = clip.model_copy(deep=True, update={"id": f"retained-audio-{uuid4().hex[:12]}", "type": "audio"})
+                            track = timeline.tracks[clip.trackIndex].model_copy(deep=True, update={
+                                "id": f"retained-audio-track-{uuid4().hex[:12]}", "kind": "audio", "name": "保留原声"})
+                            sound.trackIndex = len(timeline.tracks)
+                            timeline.tracks.append(track)
+                            assert sound.model_extra is not None and clip.model_extra is not None
+                            sound.model_extra["linkedClipIds"] = [clip.id]
+                            clip.model_extra["linkedClipIds"] = [*linked, sound.id]
+                            retained_audio.append(sound)
+                        clip.muted = True
                     media = asset(clip.type)
                     clip.assetId, clip.asset = media.id, media
                     clip.trimStart = max(0.0, selected_in)
                     clip.trimEnd = max(0.0, take.duration_seconds - clip.trimStart - clip.duration * clip.speed)
                     assert clip.model_extra is not None
+                    clip.model_extra.pop("takeIndex", None)
+                    clip.model_extra.pop("sourceShotIds", None)
                     clip.model_extra["sourceTakeId"] = take.id
                     clip.model_extra["sourceWindowStart"] = new_in
                     clip.model_extra["sourceWindowEnd"] = new_in + new_duration
                     updated_clip_ids.add(clip.id)
+    timeline.clips.extend(retained_audio)
     for media in assets.values():
         editor.assets = [item for item in editor.assets if item.id != media.id]
         editor.assets.append(media)

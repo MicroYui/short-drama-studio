@@ -355,17 +355,20 @@ def _write_subtitles(timeline: EditorTimeline, folder: Path, width: int, height:
     default_font_size = 56
     confirmed_font = default_subtitle_font_family()
     default_font = resolved_subtitle_family(None, confirmed_font)
-    srt_lines: list[str] = []
+    has_solo_track = any(track.solo for track in timeline.tracks)
+    visible_cues = [cue for cue in timeline.subtitles if timeline.tracks[cue.trackIndex].enabled
+        and (not has_solo_track or timeline.tracks[cue.trackIndex].solo)]
+    # SRT consumers expect chronological entries. Keep the saved/ASS order for
+    # overlapping captions, whose render order may be intentional.
+    srt_lines = [f"{index}\n{_timestamp(cue.startTime)} --> {_timestamp(cue.endTime)}\n{cue.text}\n"
+        for index, cue in enumerate(sorted(visible_cues, key=lambda cue: cue.startTime), start=1)]
     ass_lines = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 0",
         "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Default,{default_font},{default_font_size * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
         f"Style: Box,{default_font},{default_font_size * height / 1080},&H00FFFFFF,&H00FFFFFF,&H66000000,&H00000000,0,0,0,0,100,100,0,0,3,4,0,2,{width*.05:.0f},{width*.05:.0f},{height/36:.0f},1",
         "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
-    for cue in timeline.subtitles:
+    for cue in visible_cues:
         track = timeline.tracks[cue.trackIndex]
-        if not track.enabled or (any(item.solo for item in timeline.tracks) and not track.solo):
-            continue
-        srt_lines.append(f"{len(srt_lines)+1}\n{_timestamp(cue.startTime)} --> {_timestamp(cue.endTime)}\n{cue.text}\n")
         style = {**cast(dict[str, JsonValue], (track.model_extra or {}).get("subtitleStyle", {})), **cue.style}
         alignment = {"top": 8, "center": 5}.get(str(style.get("position")), 2)
         size_value = style.get("fontSize", default_font_size)

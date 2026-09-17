@@ -2889,14 +2889,21 @@ class AssetWorkbench:
             raise ValueError("Provider output has invalid dimensions")
         return width, height
 
-    def _cost_record(self, usage: ImageUsage) -> ImageCostRecord:
+    def _cost_record(self, usage: ImageUsage | None) -> ImageCostRecord | None:
+        if usage is None:
+            return None
+        image_input = usage.input_tokens_details.image_tokens
+        text_input = usage.input_tokens_details.text_tokens
+        image_output = usage.output_tokens_details.image_tokens
+        if image_input is None or text_input is None or image_output is None:
+            return None
         pricing = self.config_store.pricing_snapshot()
         estimated = (
-            usage.input_tokens_details.image_tokens * pricing.image_input
-            + usage.input_tokens_details.text_tokens * pricing.text_input
-            + usage.output_tokens_details.image_tokens * pricing.image_output
+            image_input * pricing.image_input
+            + text_input * pricing.text_input
+            + image_output * pricing.image_output
         ) / 1_000_000
-        if usage.output_tokens_details.image_tokens == 0 and usage.output_tokens:
+        if image_output == 0 and usage.output_tokens:
             estimated += usage.output_tokens * pricing.image_output / 1_000_000
         return ImageCostRecord(
             estimated_amount=round(estimated, 8),

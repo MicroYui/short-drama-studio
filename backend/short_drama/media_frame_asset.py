@@ -5,25 +5,25 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import json
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 from threading import RLock
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-import imageio_ffmpeg
 from PIL import Image
 from pydantic import Field, JsonValue, model_validator
 
 from short_drama.h3_models import H3MediaInput, H3MediaKind, H3MediaRole, H3MediaSource
 from short_drama.image_models import ImageReferenceInput
+from short_drama.media import MediaGenerationError
 from short_drama.models import (
     ApprovalStatus, Asset, AssetKind, AssetMediaType, AssetSourceRecord, AssetVersion,
     DomainModel, Freshness, ImageReferenceRole, OriginType, ProjectDocument, Take,
 )
 from short_drama.studio_editorial import EditorProject, read_editorial, require_unambiguous_editorial_ids
 from short_drama.studio_trace import record_trace
+from short_drama.video_detail import _decode_last_frame, extract_detail_frames  # pyright: ignore[reportPrivateUsage]
 from short_drama.video_inspection import VideoInspector
 
 if TYPE_CHECKING:
@@ -118,22 +118,23 @@ def _source_window(service: ShortDramaService, project_id: str, take: Take,
     return start, end, start + request.time_seconds, timeline_id, scope
 
 
-def _extract_png(path: Path, destination: Path, *, timestamp: float, end: float) -> float:
-    # Decode the exact source timeline and preserve its pixels. showinfo supplies
-    # the selected frame's actual PTS; requested time is not mislabeled as PTS.
+def _extract_png(path: Path, destination: Path, *, take_id: str, timestamp: float,
+                 start: float, end: float, fps: float) -> float:
+    # An average frame rate cannot locate a VFR endpoint or an audio-only tail.
+    # Share inspection's full-resolution decoder, bounded to this adopted use.
     try:
-        result = subprocess.run([
-            imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "info", "-y",
-            "-i", str(path), "-an", "-vf", f"select=gte(t\\,{timestamp:.9f}),showinfo",
-            "-frames:v", "1", "-fps_mode", "vfr", str(destination),
-        ], capture_output=True, text=True, timeout=60, check=False)
+        if timestamp >= end - 1e-8:
+            _, actual = _decode_last_frame(path, destination, start=start, end=end, max_dimension=None)
+        else:
+            sample = extract_detail_frames(source=path, take_id=take_id, output_dir=destination.parent,
+                times=[timestamp], start=start, end=end, source_fps=fps, max_dimension=None)[0]
+            actual = sample.timestamp_seconds
+            Path(sample.image_path).replace(destination)
     except subprocess.TimeoutExpired as exc:
         raise ValueError("Source frame decoding exceeded 60 seconds") from exc
-    match = re.search(r"\bn:\s*0\s+pts:.*?\bpts_time:([\d.eE+-]+)", result.stderr)
-    if result.returncode or not destination.is_file() or match is None:
-        raise ValueError("Could not extract a decoded frame from the requested source interval")
-    actual = float(match.group(1))
-    if actual >= end - 1e-7:
+    except MediaGenerationError as exc:
+        raise ValueError("Could not extract a decoded frame from the requested source interval") from exc
+    if not start <= actual < end:
         raise ValueError("The decoded frame falls outside the selected source interval")
     return actual
 
@@ -164,8 +165,9 @@ def extract_take_frame(service: ShortDramaService, project_id: str,
     if end > probe.duration_seconds + 0.05 or start >= end:
         raise ValueError("The selected source window exceeds the actual readable video")
     end = min(end, probe.duration_seconds)
-    # Endpoints are exclusive in media. Choose the last frame within the window.
-    target = max(start, min(target, end - 1.0 / probe.fps))
+    # Keep endpoint intent; the decoder, not duration minus average FPS, finds
+    # the last real frame. A reversed clip's local end maps to its source start.
+    target = max(start, min(target, end))
     file_state = {"path": str(path), "size": path.stat().st_size, "modified_ns": path.stat().st_mtime_ns}
     recipe = json.dumps({"operation": "video.extract_frame", "take_id": take.id,
         "file": file_state, "target": target, "source_window": [start, end], "scope": scope,
@@ -181,7 +183,8 @@ def extract_take_frame(service: ShortDramaService, project_id: str,
         return _response(project_id, cached[0], cached[1], request, start, end, cached[2], timeline_id, True)
     with tempfile.TemporaryDirectory(prefix="studio-take-frame-") as temporary:
         temporary_frame = Path(temporary) / "frame.png"
-        actual = _extract_png(path, temporary_frame, timestamp=target, end=end)
+        actual = _extract_png(path, temporary_frame, take_id=take.id, timestamp=target,
+                              start=start, end=end, fps=probe.fps)
         with Image.open(temporary_frame) as pixels:
             width, height = pixels.size
         with mutation_lock:

@@ -268,6 +268,73 @@ def test_local_url_import_version_lineage_and_approval(tmp_path: Path) -> None:
     assert rejected.asset.approved_version_id is None
 
 
+@pytest.mark.parametrize("usage", [None, ImageUsage(input_tokens=150, output_tokens=1000)])
+def test_image_usage_missing_details_survives_sqlite_without_zero_cost(
+    tmp_path: Path, usage: ImageUsage | None,
+) -> None:
+    class UsageProvider(FakeImageProvider):
+        def create(self, request, inputs: list[ImageProviderInput]) -> ImageProviderResult:
+            return super().create(request, inputs).model_copy(update={"usage": usage})
+
+    fake = UsageProvider()
+    service = _service(tmp_path, fake)
+    asset = _fixture_asset(service, "asset-linxia")
+    task = service.enqueue_image_task(asset.project_id, asset.id, ImageTaskCreateRequest(
+        operation=ImageOperation.GENERATE, prompt="角色参考图", descriptor="用量未完整提供",
+    )).task
+    service.advance_image_task(task.id)
+    completed = service.advance_image_task(task.id).task
+    assert completed.status == ImageTaskStatus.SUCCEEDED
+    assert completed.usage == usage
+    assert completed.cost is None
+    reopened = _service(tmp_path, fake)
+    saved = reopened.repository.get_image_task(task.id)
+    assert saved is not None
+    assert saved.usage == usage
+    assert saved.cost is None
+    assert len(fake.calls) == 1
+
+
+def test_cached_image_usage_persists_without_changing_existing_price_formula(tmp_path: Path) -> None:
+    from short_drama.image_models import ImageCachedTokenDetails
+    from short_drama.studio_trace import production_trace
+    from short_drama.studio_trace_export import export_studio_trace
+    from zipfile import ZipFile
+    import json
+
+    class CachedUsageProvider(FakeImageProvider):
+        def create(self, request, inputs: list[ImageProviderInput]) -> ImageProviderResult:
+            result = super().create(request, inputs)
+            assert result.usage is not None
+            result.usage.input_tokens_details.cached_tokens = 30
+            result.usage.input_tokens_details.cached_tokens_details = ImageCachedTokenDetails(
+                image_tokens=20, text_tokens=10,
+            )
+            return result
+
+    fake = CachedUsageProvider()
+    service = _service(tmp_path, fake)
+    asset = _fixture_asset(service, "asset-linxia")
+    with production_trace(service.workspace_root / asset.project_id / "studio-trace" / "usage",
+                          lambda kind, data: service.repository.append_studio_event(asset.project_id, kind, data)):
+        task = service.enqueue_image_task(asset.project_id, asset.id, ImageTaskCreateRequest(
+            operation=ImageOperation.GENERATE, prompt="角色参考图", descriptor="真实缓存用量",
+        )).task
+        service.advance_image_task(task.id)
+        completed = service.advance_image_task(task.id).task
+    assert completed.cost is not None
+    assert completed.cost.estimated_amount == 0.03105
+    saved = service.repository.get_image_task(task.id)
+    assert saved is not None and saved.usage is not None
+    assert saved.usage.input_tokens_details.cached_tokens_details == ImageCachedTokenDetails(image_tokens=20, text_tokens=10)
+    with ZipFile(export_studio_trace(service, asset.project_id)) as archive:
+        record = json.loads(archive.read(f"providers/image/{task.id}.json"))
+        assert record["usage"]["input_tokens_details"]["cached_tokens_details"] == {"image_tokens": 20, "text_tokens": 10}
+        events = [json.loads(line) for line in archive.read("conversation.jsonl").decode().splitlines()]
+        last = [e["data"] for e in events if e["kind"] == "provider.image_generation"][-1]
+        assert last["usage"]["input_tokens_details"]["cached_tokens"] == 30
+
+
 def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
     fake = FakeImageProvider()
     service = _service(tmp_path, fake)

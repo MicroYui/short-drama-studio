@@ -118,6 +118,19 @@ def previous_adopted_media_boundary(
     if not Path(take.media_path).is_file():
         boundary["status"] = "ADOPTED_MEDIA_FILE_MISSING"
         return boundary
+    from short_drama.media_frame_asset import TakeFrameAssetRequest
+
+    # Local duration is independent of absolute FILM placement. The extraction
+    # tool resolves this use again and returns the real decoded frame's PTS.
+    boundary["extract_frame_request"] = {
+        "project_id": document.project.id,
+        "request": TakeFrameAssetRequest(
+            take_id=take.id, clip_id=previous.clip_id, timeline_id=previous.timeline_id,
+            time_seconds=(source_end - source_start) / previous.speed,
+            description=("Optional actual adopted endpoint for a continuity reference: inspect its visible "
+                         "state before selecting or deriving a composition; do not inherit source defects."),
+        ).model_dump(mode="json", exclude_none=True),
+    }
     if audio_inspections:
         from short_drama.observation_sources import boundary_audio_evidence
         boundary.update(boundary_audio_evidence(document, previous, audio_inspections))

@@ -86,7 +86,14 @@ def write_studio_trace(service: ShortDramaService, project_id: str, destination:
         "editorial_revision": (project.document.editorial_timeline or {}).get("revision", 0),
         "studio_exports": [item for item in project.document.studio_exports],
         "workflows": [{key: item.get(key) for key in ("id", "name", "status", "prompt_id", "output_asset_ids", "error", "created_at")} for item in project.document.comfy_workflows],
-        "language_calls": [{key: call.get(key) for key in ("call_id", "model", "reasoning_effort", "input_tokens", "output_tokens", "total_tokens", "elapsed_seconds", "time_to_first_token_seconds")} for call in calls],
+        "language_calls": [{key: call.get(key) for key in (
+            "call_id", "model", "response_model", "reasoning_effort", "service_tier",
+            "usage_available", "input_tokens", "output_tokens", "total_tokens",
+            "cached_input_tokens", "cache_write_tokens", "reasoning_tokens",
+            "input_tokens_details", "output_tokens_details", "usage",
+            "success", "completion_type", "elapsed_seconds",
+            "time_to_first_token_seconds", "time_to_first_text_delta_seconds",
+        )} for call in calls],
         "source_note": "本包记录本项目当前内容、实际动作与已关联的原始来源。用户补图、确认、开发修复和恢复以实际记录为准；缺失的历史用量不是 0，不补写未发生的制作过程。"}
     archive.writestr("production-summary.json", json.dumps(shareable_trace(summary), ensure_ascii=False, indent=2))
     media: list[JsonValue] = [{"asset_id": asset.id, "name": asset.name, "version_id": version.id, "description": version.descriptor,

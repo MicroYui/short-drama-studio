@@ -9,7 +9,7 @@ from pydantic import Field, JsonValue, model_validator
 from short_drama.h3_models import H3MediaInput
 from short_drama.production_contracts import ClipGroup
 from short_drama.language_defaults import LANGUAGE_MODEL, LANGUAGE_REASONING_EFFORT
-from short_drama.models import DomainModel, VideoGenerationRoute
+from short_drama.models import DomainModel, H3PictureOnlyTarget, VideoGenerationRoute
 
 
 class LanguageProviderConfigUpdate(DomainModel):
@@ -77,6 +77,7 @@ class H3GenerationUnitContextResponse(DomainModel):
 
 
 class LanguagePromptCompileRequest(DomainModel):
+    picture_only: H3PictureOnlyTarget | None = None
     resolution: str | None = None
     aspect_ratio: str | None = None
     shot_id: str | None = Field(default=None, min_length=1)
@@ -85,7 +86,10 @@ class LanguagePromptCompileRequest(DomainModel):
     generation_unit_id: str | None = Field(default=None, min_length=1)
     method_skill_ids: SkillIds = Field(default_factory=list[str])
     route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
-    duration_seconds: int | None = Field(default=None, ge=4, le=15)
+    duration_seconds: int | None = Field(
+        default=None, ge=4, le=15,
+        description="For a generation-unit target, omit to use ceil(unit.requested_duration_seconds), or pass that exact value. This field does not add source handles or change the saved unit. Save any intended shot/group timing change first, then prepare from that current source. A single-shot target uses its own duration rules.",
+    )
     source_prompt: str | None = Field(
         default=None, max_length=32000,
         description="Optional complete prior draft to revise. Drafts may exceed the final H3 limit; only a validated output can be saved for execution.",
@@ -102,6 +106,8 @@ class LanguagePromptCompileRequest(DomainModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> LanguagePromptCompileRequest:
+        if self.picture_only is not None and self.shot_id is None:
+            raise ValueError("PICTURE_ONLY compiles one saved shot occurrence")
         unit_target = (
             self.generation_plan_document_id,
             self.generation_plan_version_id,

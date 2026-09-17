@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 from short_drama.video_edit_models import LipSyncResponse
 
@@ -42,7 +42,8 @@ class VideoToolService(Protocol):
 
     def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
                     clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None,
-                    source_in_seconds: float | None = None, source_out_seconds: float | None = None) -> ProjectAggregate: ...
+                    source_in_seconds: float | None = None, source_out_seconds: float | None = None,
+                    audio_policy: Literal["REPLACE_LINKED_AUDIO", "KEEP_CURRENT_AUDIO"] = "REPLACE_LINKED_AUDIO") -> ProjectAggregate: ...
 
     def inspect_take_video(
         self,
@@ -198,7 +199,7 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     def select(request: VideoSelectTakeInput) -> ToolExecution[ProjectAggregate]:
         project = service.select_take(request.take_id, shot_ids=request.shot_ids,
             clip_ids=request.clip_ids, expected_editorial_revision=request.expected_editorial_revision,
-            source_in_seconds=request.source_in_seconds, source_out_seconds=request.source_out_seconds)
+            source_in_seconds=request.source_in_seconds, source_out_seconds=request.source_out_seconds, audio_policy=request.audio_policy)
         project_id = project.document.project.id
         refs = (ArtifactRef(project_id=project_id, artifact_type="take", artifact_id=request.take_id),)
         return ToolExecution(
@@ -210,16 +211,20 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     registry.register(
         ToolSpec(
             id="video.select_take",
-            version=2,
+            version=4,
             category=ToolCategory.VIDEO,
             description=("Adopt a usable Take for its shot, or use clip_ids to replace only specific current uses. "
                 "For an observed candidate interval, supply source_in_seconds/source_out_seconds, exactly one clip_id "
                 "and expected_editorial_revision. The source span must equal that clip's duration × speed. "
                 "Preserves film position, duration, user controls, subtitles and unselected uses; replaces only the "
-                "selected video's source and its linked native sound. Align changed dialogue captions separately "
+                "selected video's source and its linked native sound by default. With audio_policy=KEEP_CURRENT_AUDIO, "
+                "retain all current sound locally and mute the new picture; an unsplit native source becomes a linked audio clip. "
+                "PICTURE_ONLY candidates require this policy and their bound target clip. Align changed dialogue captions separately "
                 "with timeline.edit_clips after observing the actual candidate audio. The receipt reports the saved "
                 "editorial revision and actual adopted clip/source intervals and native sound bindings; an unchanged "
-                "revision can acknowledge an already identical adoption. This acknowledges selection, not quality review or export."),
+                "revision can acknowledge an already identical adoption. An observed, usable historical Take may be "
+                "explicitly selected for its current shot: STALE records changed generation inputs, remains historical "
+                "after adoption, and does not itself prohibit reuse. Selection does not establish quality review or export."),
             effect=ToolEffect.WRITE,
             idempotent=True,
             input_model=VideoSelectTakeInput,

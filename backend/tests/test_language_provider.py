@@ -230,12 +230,16 @@ def test_actual_usage_is_captured_after_text_for_both_response_formats(
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER_NAME)
     payload = {
-        "id": "resp-actual", "model": "gpt-6-astra", "status": "completed",
+        "id": "resp-actual", "model": "gpt-6-astra", "status": "completed", "service_tier": "priority",
         "output_text": "完成",
         "usage": {
             "input_tokens": 350, "output_tokens": 520, "total_tokens": 870,
-            "input_tokens_details": {"cached_tokens": 120},
-            "output_tokens_details": {"reasoning_tokens": 500},
+            "input_tokens_details": {"cached_tokens": 120, "cache_write_tokens": 47,
+                "text_tokens": 230, "image_tokens": 120,
+                "cached_tokens_details": {"text_tokens": 80, "image_tokens": 40}},
+            "output_tokens_details": {"reasoning_tokens": 500, "text_tokens": 20},
+            "api_key": "must-not-log-this-key",
+            "debug": {"request_text": "must-not-log-this-prompt"},
         },
     }
     response = FakeResponse(
@@ -261,10 +265,16 @@ def test_actual_usage_is_captured_after_text_for_both_response_formats(
     assert event["response_id"] == "resp-actual"
     assert event["usage_available"] is True
     assert [event[k] for k in ("input_tokens", "output_tokens", "total_tokens", "cached_input_tokens", "reasoning_tokens")] == [350, 520, 870, 120, 500]
+    assert event["service_tier"] == "priority"
+    assert event["cache_write_tokens"] == 47
+    assert event["input_tokens_details"]["cached_tokens_details"] == {"text_tokens": 80, "image_tokens": 40}
+    assert event["usage"] == {key: value for key, value in payload["usage"].items() if key not in {"api_key", "debug"}}
+    assert "must-not-log" not in json.dumps(event)
     assert deltas == (["完成"] if streaming else [])
     request = session.post_calls[0][1]["json"]
     assert request["reasoning"] == {"effort": "xhigh"}
     assert not {"temperature", "top_p", "top_logprobs", "logprobs"}.intersection(request)
+    assert "service_tier" not in request
 
 
 def test_incomplete_json_does_not_publish_partial_text_and_keeps_usage(
@@ -276,7 +286,9 @@ def test_incomplete_json_does_not_publish_partial_text_and_keeps_usage(
         session=FakeSession(FakeResponse(200, {
             "status": "incomplete", "output_text": "{未完成",
             "incomplete_details": {"reason": "max_output_tokens"},
-            "usage": {"input_tokens": 10, "output_tokens": 2200, "total_tokens": 2210},
+            "service_tier": "flex",
+            "usage": {"input_tokens": 10, "output_tokens": 2200, "total_tokens": 2210,
+                "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 7}},
         })),  # type: ignore[arg-type]
     )
     with pytest.raises(LanguageProviderError, match="generation incomplete"):
@@ -284,6 +296,9 @@ def test_incomplete_json_does_not_publish_partial_text_and_keeps_usage(
     event = next(json.loads(r.getMessage()) for r in caplog.records if r.name == LOGGER_NAME)
     assert event["success"] is False
     assert event["output_tokens"] == 2200
+    assert event["service_tier"] == "flex"
+    assert event["cached_input_tokens"] == 0
+    assert event["cache_write_tokens"] == 7
 
 
 def test_language_client_reads_streaming_responses_events() -> None:
@@ -369,12 +384,17 @@ def test_language_client_logs_content_free_stream_metrics(
             "image_count": 0,
             "response_id": None,
             "response_model": None,
+            "service_tier": None,
             "usage_available": False,
             "input_tokens": None,
             "output_tokens": None,
             "total_tokens": None,
             "cached_input_tokens": None,
+            "cache_write_tokens": None,
             "reasoning_tokens": None,
+            "input_tokens_details": None,
+            "output_tokens_details": None,
+            "usage": None,
             "output_characters": 2,
             "provider": "openai_compatible",
             "success": True,

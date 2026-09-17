@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import subprocess
+import tempfile
 import unicodedata
 import wave
 from dataclasses import dataclass
@@ -366,8 +367,8 @@ class AudioInspector:
                 destination=clip_dir / f"{sequence:02d}-{clip_label}.wav",
                 expects_dialogue=any(
                     cue.script_line_id in line_by_id
-                    and cue.start_seconds < clip.start_seconds + clip.duration_seconds
-                    and cue.end_seconds > clip.start_seconds
+                    and cue.start_seconds >= clip.start_seconds - .05
+                    and cue.end_seconds <= clip.start_seconds + clip.duration_seconds + .05
                     for cue in manifest.subtitle_cues
                 ),
             )
@@ -382,18 +383,14 @@ class AudioInspector:
         semantic_failures = 0
         semantic_attempts = 0
         unmapped_cues = 0
+        unresolved_cues = 0
 
         for sequence, cue in enumerate(
             sorted(manifest.subtitle_cues, key=lambda item: item.start_seconds),
             start=1,
         ):
             if cue.script_line_id is None:
-                clip = _clip_for_cue(
-                    manifest.audio_clips,
-                    cue.start_seconds,
-                    cue.end_seconds,
-                )
-                if clip is None:
+                if not _cue_has_timeline_audio(manifest.audio_clips, cue.start_seconds, cue.end_seconds):
                     unmapped_cues += 1
                     issues.append(
                         QaIssue(
@@ -424,16 +421,21 @@ class AudioInspector:
                 continue
             speaker_binding = _speaker_binding(document, line)
             speaker_bindings[line.id] = speaker_binding
-            clip = _clip_for_cue(manifest.audio_clips, cue.start_seconds, cue.end_seconds)
-            if clip is None:
-                unmapped_cues += 1
-                issue = QaIssue(
-                    code="AUDIO_CUE_OUTSIDE_CLIP",
-                    severity="HIGH",
-                    message=f"Subtitle cue {cue.id} is not covered by a timeline audio clip.",
-                    repair_layer="TIMELINE_SUBTITLE",
-                    category=QaFailureCategory.DIALOGUE_AUDIO,
-                )
+            cue_clips = _clips_for_cue(manifest.audio_clips, cue.start_seconds, cue.end_seconds)
+            if not cue_clips:
+                covered = _cue_has_timeline_audio(manifest.audio_clips, cue.start_seconds, cue.end_seconds)
+                if covered:
+                    unresolved_cues += 1
+                    issue = _unresolved_cue_source(cue, manifest.audio_clips)
+                else:
+                    unmapped_cues += 1
+                    issue = QaIssue(
+                        code="AUDIO_CUE_OUTSIDE_CLIP",
+                        severity="HIGH",
+                        message=f"Subtitle cue {cue.id} is not covered by timeline audio intervals.",
+                        repair_layer="TIMELINE_SUBTITLE",
+                        category=QaFailureCategory.DIALOGUE_AUDIO,
+                    )
                 issues.append(issue)
                 dialogue_checks.append(
                     _unavailable_dialogue_check(
@@ -446,11 +448,13 @@ class AudioInspector:
                     )
                 )
                 continue
+            clip = cue_clips[0]
             check, embedding, failure = self._inspect_dialogue(
                 document=document,
                 line=line,
                 cue=cue,
                 clip=clip,
+                cue_clips=cue_clips,
                 destination=dialogue_dir / f"{sequence:02d}-{line.id}.wav",
                 request=request,
                 semantic_service=semantic_service,
@@ -495,6 +499,12 @@ class AudioInspector:
             semantic_status = SemanticReviewStatus.FAILED
             warnings.append(
                 f"{semantic_failures}/{semantic_attempts} dialogue semantic checks failed."
+            )
+        elif unresolved_cues:
+            semantic_status = SemanticReviewStatus.UNAVAILABLE
+            warnings.append(
+                f"{unresolved_cues} dialogue cue(s) have timeline audio coverage but no uniquely "
+                "attributable source chain. Their words, speaker and continuity remain UNKNOWN."
             )
         else:
             semantic_status = SemanticReviewStatus.COMPLETE
@@ -678,6 +688,7 @@ class AudioInspector:
         line: ScriptLine,
         cue: SubtitleCue,
         clip: TimelineAudioClip,
+        cue_clips: list[TimelineAudioClip],
         destination: Path,
         request: AudioInspectionRequest,
         semantic_service: AudioSemanticService | None,
@@ -689,17 +700,21 @@ class AudioInspector:
             cue.start_seconds - clip.start_seconds - request.dialogue_padding_seconds,
         )
         local_end = min(
-            clip.duration_seconds,
+            cue_clips[-1].start_seconds + cue_clips[-1].duration_seconds - clip.start_seconds,
             cue.end_seconds - clip.start_seconds + request.dialogue_padding_seconds,
         )
         duration = max(0.05, local_end - local_start)
         try:
-            extract_audio_window(
-                source=Path(clip.media_path).expanduser().resolve(),
-                destination=destination,
-                start_seconds=clip.source_in_seconds + local_start,
-                duration_seconds=duration,
-            )
+            if len(cue_clips) == 1:
+                extract_audio_window(
+                    source=Path(clip.media_path).expanduser().resolve(),
+                    destination=destination,
+                    start_seconds=clip.source_in_seconds + local_start,
+                    duration_seconds=duration,
+                )
+            else:
+                _extract_joined_cue_audio(cue_clips, destination,
+                    start=clip.start_seconds + local_start, end=clip.start_seconds + local_start + duration)
             segment_metrics = measure_audio_signal(destination)
         except MediaGenerationError as exc:
             issue = QaIssue(
@@ -1091,27 +1106,164 @@ def continuous_audio_groups(clips: list[TimelineAudioClip]) -> list[TimelineAudi
     return groups
 
 
-def _clip_for_cue(
+def _same_cue_source(first: TimelineAudioClip, second: TimelineAudioClip) -> bool:
+    return (
+        Path(first.media_path).expanduser().resolve() == Path(second.media_path).expanduser().resolve()
+        and first.take_id == second.take_id and first.asset_version_id == second.asset_version_id
+        and first.role == second.role and first.gain_db == second.gain_db
+        and abs((first.source_in_seconds - first.start_seconds)
+            - (second.source_in_seconds - second.start_seconds)) < 0.000001
+    )
+
+
+def _complete_cue_sources(
     clips: list[TimelineAudioClip],
     cue_start: float,
     cue_end: float,
-) -> TimelineAudioClip | None:
+) -> list[TimelineAudioClip]:
+    """Return distinct full-coverage sources, not the shortest apparent match."""
     epsilon = 0.05
+    physical_sources: list[list[TimelineAudioClip]] = []
+    for clip in clips:
+        group = next((items for items in physical_sources if _same_cue_source(clip, items[0])), None)
+        if group is None:
+            physical_sources.append([clip])
+        else:
+            group.append(clip)
+    # Look at uncut and continuous-cut representations together. Partition by
+    # physical clock first so another overlapping source cannot interrupt a
+    # valid join merely by appearing between its pieces in FILM order.
+    candidates = list(clips)
+    for group in physical_sources:
+        candidates.extend(continuous_audio_groups([
+            clip.model_copy(update={"media_path": group[0].media_path}) for clip in group
+        ]))
     matches = [
         clip
-        for clip in clips
+        for clip in candidates
         if cue_start >= clip.start_seconds - epsilon
         and cue_end <= clip.start_seconds + clip.duration_seconds + epsilon
     ]
-    if not matches:
-        matches = [
-            clip for clip in continuous_audio_groups(clips)
-            if cue_start >= clip.start_seconds - epsilon
-            and cue_end <= clip.start_seconds + clip.duration_seconds + epsilon
-        ]
-    if not matches:
-        return None
-    return min(matches, key=lambda item: item.duration_seconds)
+    sources: list[TimelineAudioClip] = []
+    for clip in matches:
+        if any(_same_cue_source(clip, saved) for saved in sources):
+            # Another ID or outer trim can represent the same physical samples
+            # at this FILM time. Different rendered files or clocks cannot.
+            continue
+        sources.append(clip)
+    return sources
+
+
+def _cue_has_timeline_audio(
+    clips: list[TimelineAudioClip], cue_start: float, cue_end: float,
+) -> bool:
+    """Check saved interval coverage only, not audibility or dialogue identity.
+
+    File decoding, duration and signal checks remain separate. Overlapping
+    sources cover time but cannot establish which source contains this line.
+    """
+    covered_end: float | None = None
+    for clip in sorted(clips, key=lambda item: item.start_seconds):
+        end = clip.start_seconds + clip.duration_seconds
+        if clip.duration_seconds <= 0 or end <= cue_start:
+            continue
+        if covered_end is None:
+            if clip.start_seconds > cue_start + .05:
+                return False
+        elif clip.start_seconds > covered_end + .001:
+            return False
+        covered_end = max(covered_end if covered_end is not None else cue_start, end)
+        if covered_end >= cue_end - .05:
+            return True
+    return False
+
+
+def _unresolved_cue_source(cue: SubtitleCue, clips: list[TimelineAudioClip]) -> QaIssue:
+    active = sorted((clip for clip in clips if min(cue.end_seconds, clip.start_seconds + clip.duration_seconds)
+        - max(cue.start_seconds, clip.start_seconds) > .001), key=lambda item: item.start_seconds)
+    overlaps = any(min(first.start_seconds + first.duration_seconds, second.start_seconds + second.duration_seconds,
+        cue.end_seconds) - max(first.start_seconds, second.start_seconds, cue.start_seconds) > .001
+        for index, first in enumerate(active) for second in active[index + 1:])
+    detail = "Active audio sources overlap" if overlaps else "Successive audio clips have different or unknown bindings"
+    return QaIssue(
+        code="AUDIO_CUE_SOURCE_UNRESOLVED",
+        severity="UNKNOWN",
+        message=(f"Timeline audio intervals cover subtitle cue {cue.id}, but its dialogue cannot be uniquely "
+            f"attributed to one source chain. {detail}; clip_ids={[clip.id for clip in active]!r}. "
+            "No clip was arbitrarily selected or joined. Words, speaker and continuity remain UNKNOWN; "
+            "per-clip file, duration and signal findings still apply."),
+        repair_layer="AUDIO_SOURCE_OBSERVATION",
+        category=QaFailureCategory.DIALOGUE_AUDIO,
+    )
+
+
+def _clips_for_cue(
+    clips: list[TimelineAudioClip], cue_start: float, cue_end: float,
+) -> list[TimelineAudioClip]:
+    """Find a uniquely attributable chain, including a retained same-source PCM tail.
+
+    Separate files have separate local clocks. They must be decoded and joined
+    in film order, never represented as an extended read from the first file.
+    This permits source extraction only; it does not certify dialogue continuity.
+    """
+    complete = _complete_cue_sources(clips, cue_start, cue_end)
+    if complete:
+        # Do not fall through to the chain search after finding multiple full
+        # sources: it would immediately select its first complete candidate.
+        return complete if len(complete) == 1 else []
+    for first in sorted(clips, key=lambda item: item.duration_seconds):
+        if not (first.start_seconds - .05 <= cue_start < first.start_seconds + first.duration_seconds):
+            continue
+        chain = [first]
+        covered_end = first.start_seconds + first.duration_seconds
+        while covered_end < cue_end - .05:
+            following = [clip for clip in clips if clip.id not in {item.id for item in chain}
+                and clip.duration_seconds > 0
+                and clip.take_id == first.take_id and clip.asset_version_id == first.asset_version_id
+                and clip.role == first.role and clip.gain_db == first.gain_db
+                and abs(clip.start_seconds - covered_end) < .001]
+            if len(following) != 1:
+                break
+            chain.append(following[0])
+            covered_end = following[0].start_seconds + following[0].duration_seconds
+        if covered_end >= cue_end - .05:
+            chain_ids = {item.id for item in chain}
+            if any(clip.id not in chain_ids
+                and clip.take_id == first.take_id and clip.asset_version_id == first.asset_version_id
+                and clip.role == first.role
+                and min(cue_end, clip.start_seconds + clip.duration_seconds)
+                    - max(cue_start, clip.start_seconds) > .001 for clip in clips):
+                # A valid chain plus another active use of this bound voice is
+                # not uniquely attributable. Do not silently omit that mix.
+                continue
+            return chain
+    return []
+
+
+def _extract_joined_cue_audio(
+    clips: list[TimelineAudioClip], destination: Path, *, start: float, end: float,
+) -> None:
+    chunks: list[bytes] = []
+    with tempfile.TemporaryDirectory(prefix="studio-dialogue-pieces-") as temporary:
+        for index, clip in enumerate(clips):
+            piece_start, piece_end = max(start, clip.start_seconds), min(end, clip.start_seconds + clip.duration_seconds)
+            if piece_end <= piece_start:
+                continue
+            path = Path(temporary) / f"{index}.wav"
+            extract_audio_window(source=Path(clip.media_path).expanduser().resolve(), destination=path,
+                start_seconds=clip.source_in_seconds + piece_start - clip.start_seconds,
+                duration_seconds=piece_end - piece_start)
+            with wave.open(str(path), "rb") as wav:
+                if abs(wav.getnframes() / wav.getframerate() - (piece_end - piece_start)) > .001:
+                    raise MediaGenerationError(f"Saved audio clip {clip.id} does not cover its requested dialogue window")
+                chunks.append(wav.readframes(wav.getnframes()))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(destination), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        for chunk in chunks:
+            wav.writeframes(chunk)
 
 
 def _clip_shot_id(clip: TimelineAudioClip) -> str:
@@ -1297,7 +1449,8 @@ def _manifest_technical_checks(
         TechnicalCheck(
             name="subtitle-cues-map-to-audio",
             passed=unmapped_cues == 0,
-            detail=f"unmapped cues={unmapped_cues}",
+            detail=(f"cues without timeline audio coverage or script binding={unmapped_cues}; "
+                "dialogue source attribution is reported separately"),
         ),
         TechnicalCheck(
             name="subtitle-cues-non-overlapping",

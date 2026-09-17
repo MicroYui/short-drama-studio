@@ -13,6 +13,7 @@ from short_drama.models import (
     ExportRecord,
     GenerationTask,
     GenerationUnitShotWindow,
+    H3PictureOnlyBinding,
     ImageReferenceRole,
     ProjectAggregate,
     QaStatus,
@@ -261,6 +262,7 @@ class H3VideoGuide(DomainModel):
 
 
 class H3ShotRoutePlan(DomainModel):
+    picture_only: H3PictureOnlyBinding | None = None
     resolution: str = "768P"
     aspect_ratio: str | None = None
     shot_id: str
@@ -721,6 +723,7 @@ class H3DeleteResponse(DomainModel):
 
 class H3UploadedInput(DomainModel):
     local_path: str
+    prepared_local_path: str | None = None
     provider_file_id: str
     media_kind: H3MediaKind
     role: H3MediaRole

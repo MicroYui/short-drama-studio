@@ -24,7 +24,7 @@ from short_drama.h3_models import H3ContentItem, H3CreateResponse, H3MediaInput,
 from short_drama.language_models import LanguagePromptCompileRequest, LanguagePromptCompileResponse
 from short_drama.models import DomainModel, VideoGenerationRoute
 from short_drama.providers.h3_language_prompt import (
-    build_generation_unit_language_prompt_input, normalize_language_prompt,
+    build_generation_unit_source_input, normalize_language_prompt,
     validate_language_generation_unit_prompt,
 )
 from short_drama.providers.minimax_h3_client import (
@@ -230,6 +230,8 @@ def compile_h3_context_ir(service: ShortDramaService, project_id: str, request: 
     """Alternative group compiler; never call the language compiler before or afterward."""
     from short_drama.service import ProviderOperationError
 
+    if request.picture_only is not None:
+        raise ValueError("PICTURE_ONLY uses the LANGUAGE compiler with its saved picture/audio binding")
     if request.generation_unit_id is None:
         raise ValueError("Official Context IR currently requires a complete generation-unit target")
     # Deliberately reuse the service's canonical compiler checks instead of reimplementing asset/group truth.
@@ -245,9 +247,9 @@ def compile_h3_context_ir(service: ShortDramaService, project_id: str, request: 
     resolution, aspect_ratio = resolve_h3_output_format(route=request.route, resolution=request.resolution or unit.resolution or "768P",
         aspect_ratio=request.aspect_ratio, default_aspect_ratio=spec.aspect_ratio)
     document = h3_prompt_document(document, route=request.route, aspect_ratio=aspect_ratio)
-    _instructions, input_text = build_generation_unit_language_prompt_input(document, unit, shots, route=request.route,
+    input_text = build_generation_unit_source_input(document, unit, shots, route=request.route,
         resolution=resolution, aspect_ratio=aspect_ratio,
-        duration_seconds=duration, production_spec=spec, media_inputs=media, method_skill_ids=request.method_skill_ids,
+        duration_seconds=duration, production_spec=spec, media_inputs=media,
         revision_instructions=request.revision_instructions,
         actual_previous_media_boundary=service._previous_adopted_media_boundary(document, shots[0].id))  # pyright: ignore[reportPrivateUsage]
     facts = cast(dict[str, JsonValue], json.loads(input_text))

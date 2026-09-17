@@ -40,8 +40,10 @@ def read_editorial_selection(
     selected_clips = [clips[identity] for identity in dict.fromkeys(clip_ids)]
     shot_ids = list(dict.fromkeys(identity for clip in timeline.clips
         if clip.type == "video" and isinstance(identity := (clip.model_extra or {}).get("sourceShotId"), str)))
+    takes = service.repository.list_takes(project_id)
+    shot_ids = list(dict.fromkeys([*shot_ids, *(window.shot_id for take in takes for window in take.shot_windows)]))
     windows = [(identity, window) for identity in shot_ids
-               for window in editorial_shot_windows(timeline, identity)]
+               for window in editorial_shot_windows(timeline, identity, assets=editor.assets, takes=takes)]
     if shot_id is not None:
         windows = [(identity, window) for identity, window in windows if identity == shot_id]
         if not windows:
@@ -78,10 +80,12 @@ def read_editorial_selection(
         "timeline_id": target_id, "coordinate_space": "FILM", "selection_only": True,
         "active_timeline_id": editor.activeTimelineId,
         "is_saved": current.revision > 0,
+        "editorial_is_saved": current.revision > 0,
+        "content_origin": "SAVED_EDITORIAL" if current.revision > 0 else "CANDIDATE_PREVIEW",
         "subtitles": [{"id": cue.id, "text": cue.text, "start_seconds": cue.startTime,
                        "end_seconds": cue.endTime, "track_index": cue.trackIndex,
                        "style": cue.style} for cue in selected_cues],
-        "clips": [{"id": clip.id, "asset_id": clip.assetId, "type": clip.type,
+        "clips": [{"id": clip.id, "is_saved": current.revision > 0, "asset_id": clip.assetId, "type": clip.type,
             "start_seconds": clip.startTime, "end_seconds": clip.startTime + clip.duration,
             "source_in_seconds": clip.trimStart, "speed": clip.speed, "reversed": clip.reversed,
             "volume": clip.volume, "muted": clip.muted, "track_index": clip.trackIndex,
@@ -94,5 +98,7 @@ def read_editorial_selection(
         "shot_local_mappings": mappings,
         "mapping_coordinates": "SHOT_LOCAL intersections; add film_start_seconds. Top-level rows retain full FILM boundaries.",
     }
+    if current.revision == 0:
+        content["read_notice"] = "本集尚未保存剪辑，本次对象来自候选预览，不是已保存的成片采用记录；采用并保存后重新读取真实片段 ID。"
     content["edit_arguments"] = {"timeline_id": target_id, "expected_revision": current.revision}
     return content

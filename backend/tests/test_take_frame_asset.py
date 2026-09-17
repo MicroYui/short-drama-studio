@@ -1,12 +1,16 @@
 """Real local decoding, exact adopted-use coordinates and reusable image handoff."""
 
 from pathlib import Path
+import subprocess
+from typing import cast
 
+import imageio_ffmpeg
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
-from PIL import Image
+from PIL import Image, ImageChops
+from pydantic import JsonValue
 
 from _routes.short_drama import router
 from _routes._errors import HTTPError
@@ -16,8 +20,11 @@ from short_drama.image_models import AssetCreateRequest, ImageOperation, ImagePr
 from short_drama.models import AssetKind
 from short_drama.models import ApprovalStatus, EnqueueRequest, GenerationUnitShotWindow, ImageReferenceRole, ProjectDocument, Take
 from short_drama.service import ShortDramaService, WorkflowConflictError
+from short_drama.production_media_context import previous_adopted_media_boundary
+from short_drama.studio_editorial import EditorProject, read_editorial
 from short_drama.tools.contracts import ToolCallStatus
 from tests.test_video_inspection import _render_video
+from tests.test_video_detail import render_tail_source
 
 Source = tuple[ShortDramaService, ProjectDocument, Take]
 
@@ -133,4 +140,105 @@ def test_http_extract_rejects_other_project_take_and_returns_created_asset(sourc
         assert response.json()["source_time_seconds"] == 1
         rejected = client.post(f"/api/short-drama/projects/{document.project.id}/agent-tools/extract-frame",
             json={"take_id": "absent-take", "time_seconds": 1, "description": "Missing source"})
-        assert rejected.status_code == 409, rejected.text
+    assert rejected.status_code == 409, rejected.text
+
+
+def _save_clip_use(service: ShortDramaService, document: ProjectDocument, take: Take, *,
+                   start: float, end: float, reverse: bool) -> EditorProject:
+    editor = EditorProject.model_validate(read_editorial(service, document.project.id).project)
+    timeline = editor.timelines[0]
+    clip = next(item for item in timeline.clips if item.type == "video")
+    clip.startTime, clip.trimStart, clip.duration, clip.speed, clip.reversed = 12, start, (end - start) / 2, 2, reverse
+    document.editorial_timeline = {"revision": 1, "project": editor.model_dump(mode="json")}
+    service.repository.save_project(document)
+    assert (clip.model_extra or {}).get("sourceTakeId") == take.id
+    return editor
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_boundary_offers_exact_optional_tool_arguments_without_film_position_dependency(source: Source, reverse: bool) -> None:
+    service, document, take = source
+    editor = _save_clip_use(service, document, take, start=1, end=3, reverse=reverse)
+    before = service.get_project(document.project.id)
+    boundary = previous_adopted_media_boundary(document, target_shot_id=document.shots[1].id,
+        editorial_project=editor.model_dump(mode="json"), takes=[take], inspections=[])
+    assert boundary is not None and boundary["status"] == "ADOPTED_MEDIA"
+    assert boundary["observation_status"] == "UNKNOWN"
+    args = cast(dict[str, JsonValue], boundary["extract_frame_request"])
+    request = TakeFrameAssetRequest.model_validate(args["request"])
+    assert args["project_id"] == document.project.id
+    assert request.take_id == take.id and request.clip_id == editor.timelines[0].clips[0].id
+    assert request.timeline_id == editor.activeTimelineId and request.time_seconds == 1
+    assert service.get_project(document.project.id) == before  # Reading does not extract or adopt.
+    editor.timelines[0].clips[0].startTime += 17.125
+    moved = previous_adopted_media_boundary(document, target_shot_id=document.shots[1].id,
+        editorial_project=editor.model_dump(mode="json"), takes=[take], inspections=[])
+    assert moved is not None and moved["extract_frame_request"] == args
+    result = service.tool_registry.invoke("video.extract_frame", args)
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    frame = TakeFrameAssetResponse.model_validate(result.output)
+    expected = 1 if reverse else 3 - 1 / 24
+    assert frame.source_time_seconds == pytest.approx(expected, abs=1e-5)
+    assert 1 <= frame.source_time_seconds < 3 and frame.review_status == "NOT_REVIEWED"
+
+
+def _render_sparse_tail(path: Path) -> None:
+    # PTS 0, .2, 1.2, 1.4; the sound continues to 2s. Average FPS is not the tail.
+    result = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=s=768x432:r=5:d=2",
+        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+        "-vf", "select=eq(n\\,0)+eq(n\\,1)+eq(n\\,6)+eq(n\\,7)", "-fps_mode", "vfr",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le", str(path)],
+        capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("sparse,reverse,expected,n", [
+    (False, False, 242 / 24, 242), (False, True, 173 / 24, 173),
+    (True, False, 1.4, 3), (True, True, 1.2, 2),
+])
+def test_adopted_endpoint_uses_actual_in_window_pts_and_full_pixels(
+    source: Source, tmp_path: Path, sparse: bool, reverse: bool, expected: float, n: int,
+) -> None:
+    service, document, take = source
+    path = tmp_path / "tail.mov"
+    (_render_sparse_tail if sparse else render_tail_source)(path)
+    take.media_path, take.duration_seconds, take.shot_windows = str(path), 2 if sparse else 10.13, []
+    service.repository.save_take(take)
+    start, end = (.5, 2.) if sparse else (7.2, 10.13)
+    editor = _save_clip_use(service, document, take, start=start, end=end, reverse=reverse)
+    clip = editor.timelines[0].clips[0]
+    before_stat = path.stat()
+    request = TakeFrameAssetRequest(take_id=take.id, clip_id=clip.id, timeline_id=editor.activeTimelineId,
+        time_seconds=clip.duration, description="Actual adopted endpoint, not an inferred nominal frame")
+    response = service.extract_take_frame(document.project.id, request)
+    assert response.source_time_seconds == pytest.approx(expected, abs=1e-5)
+    assert start <= response.source_time_seconds < end
+    assert response.requested_time_seconds == clip.duration
+    assert (response.width, response.height) == (768, 432)
+    reference = tmp_path / "expected-frame.png"
+    result = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-i", str(path),
+        "-vf", f"select=eq(n\\,{n})", "-frames:v", "1", str(reference)], capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+    with Image.open(reference) as expected_image, Image.open(response.local_path) as actual:
+        assert ImageChops.difference(expected_image.convert("RGB"), actual.convert("RGB")).getbbox() is None
+    assert (path.stat().st_size, path.stat().st_mtime_ns) == (before_stat.st_size, before_stat.st_mtime_ns)
+    repeated = service.extract_take_frame(document.project.id, request)
+    assert repeated.reused and repeated.asset_version_id == response.asset_version_id
+
+
+def test_empty_adopted_tail_does_not_borrow_a_frame_before_its_source_window(source: Source, tmp_path: Path) -> None:
+    service, document, take = source
+    path = tmp_path / "sparse.mov"
+    _render_sparse_tail(path)
+    take.media_path, take.duration_seconds, take.shot_windows = str(path), 2, []
+    service.repository.save_take(take)
+    editor = _save_clip_use(service, document, take, start=1.5, end=2, reverse=False)
+    clip = editor.timelines[0].clips[0]
+    before = service.get_project(document.project.id).document
+    for local_time in (0, clip.duration):
+        with pytest.raises(WorkflowConflictError, match="requested source interval"):
+            service.extract_take_frame(document.project.id, TakeFrameAssetRequest(take_id=take.id,
+                clip_id=clip.id, timeline_id=editor.activeTimelineId, time_seconds=local_time,
+                description="This adopted interval has no decoded video frame"))
+    assert service.get_project(document.project.id).document == before

@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import cast
 from pydantic import JsonValue
+from short_drama.provider_usage import detail_count, first_reported_count, reported_token_usage, token_count
 from short_drama.studio_trace import record_trace
 
 
@@ -14,7 +14,7 @@ LOGGER_NAME = "short_drama.observability"
 
 _logger = logging.getLogger(LOGGER_NAME)
 
-type EventValue = str | int | float | bool | None
+type EventValue = JsonValue
 
 
 def log_event(event_name: str, **fields: EventValue) -> None:
@@ -34,7 +34,7 @@ def log_event(event_name: str, **fields: EventValue) -> None:
             sort_keys=True,
         ),
     )
-    record_trace(event_name, cast(dict[str, JsonValue], payload))
+    record_trace(event_name, payload)
 
 
 def log_provider_task_transition(
@@ -88,18 +88,12 @@ def log_language_generation(
 ) -> None:
     """Log one content-free language generation measurement."""
 
-    raw_usage = response_metadata.get("usage")
-    usage = cast(dict[str, object], raw_usage) if isinstance(raw_usage, dict) else {}
-
-    def token_count(value: object) -> int | None:
-        return value if type(value) is int and value >= 0 else None
-
-    def detail_count(key: str, detail: str) -> int | None:
-        value = usage.get(key)
-        return token_count(cast(dict[str, object], value).get(detail)) if isinstance(value, dict) else None
+    reported_usage = reported_token_usage(response_metadata.get("usage"))
+    usage = reported_usage or {}
 
     response_id = response_metadata.get("id")
     response_model = response_metadata.get("model")
+    service_tier = response_metadata.get("service_tier")
     log_event(
         "provider.language_generation",
         call_id=call_id,
@@ -108,14 +102,23 @@ def log_language_generation(
         reasoning_effort=reasoning_effort,
         response_id=response_id if isinstance(response_id, str) else None,
         response_model=response_model if isinstance(response_model, str) else None,
+        service_tier=service_tier if isinstance(service_tier, str) else None,
         max_output_tokens=max_output_tokens,
         image_count=image_count,
         usage_available=bool(usage),
         input_tokens=token_count(usage.get("input_tokens")),
         output_tokens=token_count(usage.get("output_tokens")),
         total_tokens=token_count(usage.get("total_tokens")),
-        cached_input_tokens=detail_count("input_tokens_details", "cached_tokens"),
-        reasoning_tokens=detail_count("output_tokens_details", "reasoning_tokens"),
+        cached_input_tokens=first_reported_count(
+            detail_count(usage, "input_tokens_details", "cached_tokens"),
+            usage.get("cache_read_input_tokens"), usage.get("cache_read_tokens")),
+        cache_write_tokens=first_reported_count(
+            detail_count(usage, "input_tokens_details", "cache_write_tokens"),
+            usage.get("cache_write_tokens"), usage.get("cache_creation_input_tokens")),
+        reasoning_tokens=detail_count(usage, "output_tokens_details", "reasoning_tokens"),
+        input_tokens_details=usage.get("input_tokens_details"),
+        output_tokens_details=usage.get("output_tokens_details"),
+        usage=reported_usage,
         success=success,
         completion_type=completion_type,
         elapsed_seconds=round(max(0.0, elapsed_seconds), 6),

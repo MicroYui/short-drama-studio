@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import json
 from pathlib import Path
 import subprocess
@@ -13,9 +14,10 @@ import imageio_ffmpeg
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
 from short_drama.models import (
     ApprovalStatus, Freshness, OutputSpec, ProjectDocument, SubtitleCue,
-    TimelineAudioClip, TimelineManifest,
+    TimelineAudioClip, TimelineManifest, VideoInspectionReport,
 )
 from short_drama.studio_editorial import EditorClip, EditorProject
+from short_drama.studio_audio_excerpt import inspection_audio_source
 from short_drama.studio_audio_selection import clip_audio_delegated, clip_audio_origin, clip_audio_path
 
 if TYPE_CHECKING:
@@ -94,9 +96,12 @@ def editorial_audio_input(
     takes = {take.id: take for take in service.repository.list_takes(document.project.id)}
     versions = {version.local_path: (asset.id, version.id)
                 for asset in document.assets for version in asset.versions if version.local_path}
+    imported_versions = {version.id: version for asset in document.assets for version in asset.versions}
     solo = any(track.solo for track in timeline.tracks)
     folder = service.workspace_root / document.project.id / "inspections" / f"editorial-input-{uuid4().hex}"
     audio: list[TimelineAudioClip] = []
+    inspection_reports: list[VideoInspectionReport] | None = None
+    excerpt_sources: list[dict[str, object]] = []
     for clip in timeline.clips:
         if clip_ids is not None and clip.id not in clip_ids:
             continue
@@ -119,12 +124,36 @@ def editorial_audio_input(
         if take is not None and take.media_path == source_path and shot_id:
             audio_shot_id, audio_take_id = shot_id, take_id
             asset_id, version_id = None, None
-        elif native_only:
-            continue
         elif version_id is not None:
-            audio_shot_id, audio_take_id = None, None
+            excerpt = None
+            if take is not None and shot_id:
+                if inspection_reports is None:
+                    inspection_reports = service.repository.list_video_inspections(document.project.id)
+                excerpt = inspection_audio_source(project_id=document.project.id, clip=clip, path=source_path,
+                    take=take, shot_id=shot_id, reports=inspection_reports,
+                    imported_version=imported_versions[version_id])
+            if excerpt is not None:
+                audio_shot_id, audio_take_id = excerpt.shot_id, excerpt.take_id
+                asset_id, version_id = None, None
+                excerpt_sources.append({"clip_id": clip.id, **asdict(excerpt)})
+            else:
+                if native_only:
+                    continue
+                audio_shot_id, audio_take_id = None, None
         else:
-            raise ValueError(f"Saved audio clip {clip.id} has no current Take or asset binding")
+            if inspection_reports is None:
+                inspection_reports = service.repository.list_video_inspections(document.project.id)
+            excerpt = inspection_audio_source(project_id=document.project.id, clip=clip, path=source_path,
+                take=take, shot_id=shot_id, reports=inspection_reports)
+            if excerpt is None:
+                if native_only:
+                    continue
+                raise ValueError(f"Saved audio clip {clip.id} has no current Take or asset binding")
+            audio_shot_id, audio_take_id = excerpt.shot_id, excerpt.take_id
+            asset_id, version_id = None, None
+            excerpt_sources.append({"clip_id": clip.id, **asdict(excerpt)})
+        # Excerpts already start at WAV-local zero. Their original Take offset
+        # belongs to provenance, not another trim of this PCM file.
         path, source_in = _edited_audio(clip, Path(source_path), folder, source_type=asset.type)
         audio.append(TimelineAudioClip(id=clip.id, shot_id=audio_shot_id, take_id=audio_take_id,
             asset_id=asset_id, asset_version_id=version_id, media_path=path,
@@ -161,5 +190,6 @@ def editorial_audio_input(
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "source.json").write_text(json.dumps({"editorial_revision": revision,
         "timeline_id": timeline.id, "project": project.model_dump(mode="json"),
+        "inspection_audio_sources": excerpt_sources,
         "audio_input": manifest.model_dump(mode="json")}, ensure_ascii=False), encoding="utf-8")
     return manifest, revision, timeline.id

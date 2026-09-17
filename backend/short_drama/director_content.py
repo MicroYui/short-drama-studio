@@ -8,7 +8,7 @@ from pydantic import JsonValue
 
 from short_drama.dialogue_sequence import ordered_dialogue_line_ids
 from short_drama.models import (
-    ProductionDocument, ProductionDocumentVersion, ProjectDocument, ShotPlan, ShotReferenceCue,
+    ProductionDocument, ProductionDocumentVersion, ProjectDocument, ShotPlan, ShotReferenceCue, Take,
 )
 from short_drama.production_contracts import StoryboardContent, StoryboardDraftContent
 from short_drama.studio_storyboard import current_draft
@@ -105,14 +105,15 @@ def prepare_repaired_storyboard(
     return source, version, payload
 
 
-def remap_split_editorial(document: ProjectDocument, source: ShotPlan, replacements: list[ShotPlan]) -> None:
+def remap_split_editorial(document: ProjectDocument, source: ShotPlan, replacements: list[ShotPlan], *, takes: list[Take] | None = None) -> None:
     """Keep every adopted frame and sound while giving split shots local views.
 
     A design change cannot stretch existing media. Divide each actual use by
     the new design proportions, leaving timeline duration and user styling intact.
     """
     from short_drama.studio_editorial import EditorClip, EditorProject
-    from short_drama.studio_shot_editorial import editorial_shot_windows
+    from short_drama.studio_shot_editorial import editorial_shot_windows, materialize_shared_shot
+    from short_drama.studio_shot_uses import slice_clip
 
     saved = document.editorial_timeline
     if not saved or not isinstance(saved.get("project"), dict):
@@ -121,6 +122,7 @@ def remap_split_editorial(document: ProjectDocument, source: ShotPlan, replaceme
     total = sum(item.duration_seconds for item in replacements)
     changed = False
     for timeline in editor.timelines:
+        materialize_shared_shot(timeline, editor.assets, takes or [], source.id)
         for window in editorial_shot_windows(timeline, source.id):
             cursor = window.start
             intervals: list[tuple[str, float, float]] = []
@@ -144,15 +146,13 @@ def remap_split_editorial(document: ProjectDocument, source: ShotPlan, replaceme
                     left, right = max(clip.startTime, begin), min(clip.startTime + clip.duration, end)
                     if right <= left:
                         continue
-                    part = clip.model_copy(deep=True)
+                    part = slice_clip(clip, left, right)
                     part.id = clip.id if not mapping else f"{clip.id}-split-{shot_id}"
-                    offset = (clip.startTime + clip.duration - right) if clip.reversed else (left - clip.startTime)
-                    part.trimStart = clip.trimStart + offset * clip.speed
-                    part.startTime, part.duration = left, right - left
                     if part.asset and part.asset.duration:
                         part.trimEnd = max(0.0, part.asset.duration - part.trimStart - part.duration * part.speed)
                     assert part.model_extra is not None
                     part.model_extra["sourceShotId"] = shot_id
+                    part.model_extra.pop("sourceShotIds", None)
                     # The replacement shot did not exist in the original Take.
                     # Persist its actual source interval so later candidate
                     # adoption can retain local cuts relative to this portion.

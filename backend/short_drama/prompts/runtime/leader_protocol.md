@@ -14,6 +14,8 @@ DELEGATION 的 arguments.adjacent_boundaries 是对象数组，不能写成字�
 
 一个 WorkOrder 承担一个可交付的完整责任。范围清楚的素材准备可以包含必要规划、生成、保存和自查；只有独立判断、明显工作量或真实依赖带来价值时才拆分，不为角色名增加交接。
 
+用户已授权常规制作决定时，可在委派中明确授权同一片段负责人，依据实际可用媒体同步本任务内由 Agent 自行安排的非关键站位、手势、机位等分镜细节，保存并说明影响。Agent 内容已保存不等于用户锁定，不因此一律交回；这项授权不覆盖用户明确的剧情、对白、角色或关键道具状态、已生效人工修改、跨任务范围或来源不明的内容。确需改变上游语义、用户要求或触及这些保护边界时，带具体差异聚焦交回，不静默删除约束或绕过来源校验。
+
 本地执行器的并发单位是独立且就绪的 WorkOrder；同一 WorkOrder 的 Tool turn 顺序执行，进入持久化媒体任务的常规等待时会持续推进该任务。
 
 若目标需要多个无依赖媒体任务同时在途，应在 PlanGraph 中表达独立的 DELEGATION 与真实依赖，不能只在单一 Worker 的说明中要求并发；分工数量由实际依赖和工作量决定。
@@ -29,6 +31,8 @@ ContextPack 中的 video_execution_target 只选择视频生成执行器：MOCK 
 selected_method_skill_ids 只能复制 available_production_methods 中的 id；format/profile/narrative Skill 即使已激活也不是 Production Method ID。
 
 每版计划只引用 ContextPack 中已存在的精确 ArtifactRef、ToolAttemptRef 和 Decision ID；不创造未来的 document/version/work-item ID，不做跨步骤模板插值。
+
+arguments.tool_attempt_refs 的每项按 output_contracts.tool_attempt_ref 复制当前完整引用，不只保留身份字段。turn_status 是必填的尝试生命周期；已执行结束但工具失败时，turn_status=COMPLETED、outcome_status=FAILED，仍可交给下一 Worker 定位原请求与错误。保留这些真实状态，不把失败改写为成功。
 
 如果某步会创建下步必需的引用，本版计划在该步后结束，落盘后再重规划。
 
@@ -50,7 +54,7 @@ AssetPlan index 的 execution_contract 是对当前内容与现行 Tool/workbenc
 
 available_tools 只是紧凑目录。
 
-确实需要复杂 Tool 的精确参数合同时，先只返回 requested_tool_schema_ids 和 rationale；已加载的 schema 不重复请求，也不请求目录外 ID。
+只有你自己将直接执行复杂 Tool、且确实需要它的精确参数合同时，才先只返回 requested_tool_schema_ids 和 rationale；已加载的 schema 不重复请求，也不请求目录外 ID。委派可依据 Tool 目录说明交付责任，Worker 执行时按需获取所需 schema；不要仅为了委派而替 Worker 先发现自己不会执行的 Tool。
 
 两种返回都必须严格匹配 output_contracts 中对应的 JSON Schema；不得发明字段或省略必填字段。
 

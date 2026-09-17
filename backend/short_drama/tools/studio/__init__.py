@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Self, cast
 from pydantic import JsonValue, Field, model_validator
-from short_drama.models import DomainModel, ScriptLine, StructuredScene
+from short_drama.models import DomainModel, ReferencePlanEntry, ScriptLine, StructuredScene
 from short_drama.studio_models import StudioSceneSave, StudioShotSave, StudioTimelineSave, StudioExportRequest, StudioExport, StudioEditorialEdit, StudioAssetOverlay
 from short_drama.tools.contracts import ArtifactRef, ToolCategory, ToolEffect, ToolExecution, ToolModel, ToolSpec
 from short_drama.tools.registry import ToolRegistry
@@ -234,17 +234,30 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         document = result.project.document
         saved = next(shot for shot in document.shots if shot.id == request.shot_id)
         plan = next((item for item in document.reference_plan if item.shot_id == saved.id), None)
+        from short_drama.studio_references import generation_bindings_from_cues, generation_cues
+        from short_drama.studio_storyboard import resolve_current_shot
         preview = None
         preview_error = None
-        if plan is not None:
-            try:
+        try:
+            resolved = resolve_current_shot(document, saved.id) if plan is None else None
+            draft_cues = resolved is not None and resolved.draft_source is not None
+            if draft_cues:
+                # The saved draft's exact cues are already the selection. Derive
+                # this return view only; do not create another persisted draft plan.
+                plan = ReferencePlanEntry(shot_id=saved.id, bindings=generation_bindings_from_cues(document, saved),
+                    capability_valid=True, validation_notes=[], max_reference_images=9)
+            if plan is not None:
                 preview = preview_reference_plan(document, saved, plan, ReferencePlanPreviewRequest())
-            except ValueError as exc:
-                # The content is already saved. A reference diagnostic must not
-                # turn that successful write into a failed, blindly retried action.
-                preview_error = str(exc)
-        else:
-            preview_error = "当前镜头尚无参考计划；分镜已保存，引用待后续准备。"
+                if draft_cues:
+                    missing = [cue.id or cue.alias for cue in generation_cues(saved) if cue.asset_version_id is None]
+                    if missing:
+                        preview_error = "草稿与已有绑定已保存；以下生成引用尚未选择图片：" + ", ".join(missing)
+            else:
+                preview_error = "当前镜头尚无参考计划；分镜已保存，引用待后续准备。"
+        except Exception as exc:
+            # Only this derived diagnostic is optional. The write has already
+            # succeeded; preserve its saved content and receipt if preview fails.
+            preview_error = str(exc)
         output = ShotWriteOutput(project_id=request.project_id,
             scene_ids=[], shot_ids=[saved.id], notices=result.notices,
             shot_revisions={saved.id: saved.revision}, changed_shot_ids=result.changed_shot_ids if registration is not None else [saved.id],
@@ -314,11 +327,17 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         timeline = next((item for item in editor.timelines if item.id == target_id), None)
         if timeline is None:
             raise ValueError(f"/timeline_id: {target_id!r} is not available in this editorial scope. Use current timeline_id or omit shot_id for a film read.")
+        # A shot without a saved occurrence can project a candidate even when
+        # other shots have already advanced the episode's save revision.
+        editorial_is_saved = value.revision > 0
+        is_saved = editorial_is_saved and (value.scope is None or value.scope.anchor_clip_id is not None)
         content: dict[str, JsonValue] = {"project_id": request.project_id, "editorial_revision": value.revision,
-            "is_saved": value.revision > 0, "timeline_id": timeline.id,
+            "is_saved": is_saved, "editorial_is_saved": editorial_is_saved,
+            "content_origin": "SAVED_EDITORIAL" if is_saved else "CANDIDATE_PREVIEW",
+            "timeline_id": timeline.id,
             "coordinate_space": "SHOT_LOCAL" if value.scope else "FILM",
             "film_start_seconds": value.scope.film_start_seconds if value.scope else 0,
-            "clips": [{"id": clip.id, "type": clip.type, "source_shot_id": (clip.model_extra or {}).get("sourceShotId"),
+            "clips": [{"id": clip.id, "is_saved": is_saved, "type": clip.type, "source_shot_id": (clip.model_extra or {}).get("sourceShotId"),
                 "start_seconds": clip.startTime, "duration_seconds": clip.duration, "source_in_seconds": clip.trimStart,
                 "speed": clip.speed, "reversed": clip.reversed,
                 "source_window_start_seconds": (clip.model_extra or {}).get("sourceWindowStart"),
@@ -327,6 +346,10 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
                 **clip_visual_fields(clip)} for clip in timeline.clips],
             "subtitles": [cast(dict[str, JsonValue], item.model_dump(mode="json")) for item in timeline.subtitles],
             "exports": [cast(JsonValue, item) for item in service.get_project(request.project_id).document.studio_exports]}
+        if not is_saved:
+            content["read_notice"] = ("本次范围为候选预览，尚未保存到本集。未采用镜头的局部预览 clip ID 不属于当前本集时间线，不能用于本集精确 clip_ids 查询；采用并保存后重新读取本集，取得真实片段 ID。editorial_revision 仍是本集保存并发校验用修订号，不代表本镜已采用。"
+                if value.scope and value.scope.anchor_clip_id is None else
+                "本集尚未保存剪辑，本次对象来自候选预览，不是已保存的成片采用记录；采用并保存后重新读取真实片段 ID。")
         if value.scope:
             content["shot_scope"] = cast(JsonValue, value.scope.model_dump(mode="json"))
             content["time_coordinates"] = "当前镜头内部时间，从 0 秒开始。素材入点仍是源文件时间。edit_clips 必须传递相同 shot_id 和 anchor_clip_id，保存后同步成片。"
@@ -439,20 +462,20 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="把用户要求审阅的剧本或分镜修改写成逐项可接受/拒绝的真实文字差异。先读取当前内容，每项 before 必须是指定字段中唯一存在的原文；after 是该段替换文字。场次修改用 affected_shot_ids 指明实际影响的镜头，同场无关视频和人工修改保留；更改台词仍会自动关联对应镜头。可一次提出多处修改。不会改写正式内容；用户处理后原任务收到实际接受/拒绝结果再继续。初稿创作和无需审阅的自主制作直接用保存工具。",
         effect=ToolEffect.WRITE, idempotent=True, input_model=TextProposalInput, output_model=StudioChangeSet, handler=propose_text,
         tags=frozenset({"studio", "review", "partial-edit"})))
-    registry.register(ToolSpec(id="timeline.read_editorial", version=2, category=ToolCategory.TIMELINE,
-        description="读取当前剪辑。已有 editor_selection 时直接传 timeline_id 与 subtitle_ids/clip_ids：只返回这些对象的真实 FILM 起止、revision及实际镜头采用位置的 SHOT_LOCAL 相交映射；跨镜字幕保持完整本集边界，未知ID报具体错误，不需要先按shot_id猜测或读取全片。精确选择不能同时include_project。无具体ID时兼容：shot_id/anchor_clip_id读取镜头局部剪辑，不传shot_id读取本集摘要；整体结构才需include_project=true。后续timeline.edit_clips必须传相同timeline_id及当前expected_revision；按FILM字段修改不传shot_id，按局部映射修改传shot_id和anchor。实际文件用read_export。",
+    registry.register(ToolSpec(id="timeline.read_editorial", version=3, category=ToolCategory.TIMELINE,
+        description="读取当前剪辑。已有 editor_selection 时直接传 timeline_id 与 subtitle_ids/clip_ids：只返回这些对象的真实 FILM 起止、revision及实际镜头采用位置的 SHOT_LOCAL 相交映射；跨镜字幕保持完整本集边界，未知ID报具体错误，不需要先按shot_id猜测或读取全片。精确选择不能同时include_project。无具体ID时兼容：shot_id/anchor_clip_id读取镜头局部剪辑，不传shot_id读取本集摘要；整体结构才需include_project=true。is_saved表示本次返回范围已保存到本集，editorial_is_saved只表示本集已有保存；content_origin=CANDIDATE_PREVIEW表示尚未保存的预览，未采用镜头的局部预览ID不能用于本集精确选择，采用保存后重新读取真实ID。全局editorial_revision不证明本镜已采用。后续timeline.edit_clips必须传相同timeline_id及当前expected_revision；按FILM字段修改不传shot_id，按局部映射修改传shot_id和anchor。实际文件用read_export。",
         effect=ToolEffect.READ, idempotent=True, input_model=TimelineReadInput, output_model=CurrentReadOutput, handler=read_timeline,
         tags=frozenset({"studio", "editorial", "current-content"})))
     registry.register(ToolSpec(id="timeline.read_export", version=2, category=ToolCategory.TIMELINE,
         description="读取并检查本集已存在的剪辑导出；export_id 可精确指定，省略取最新完成记录。实际解码两个 MP4 并返回尺寸、时长、帧率、音轨、保存修订与技术检查。需要看合成字幕、标题、画幅或接缝时，传frame_times_seconds（最多四个EXPORT_FILM时间）及frame_variant=subtitled或clean，实际导出帧按请求顺序附到下一次Worker决策，返回真实PTS及导出修订；时间不得等于或超过导出长度。不会用源Take画面冒充合成结果，旧导出不代表当前剪辑，静帧不证明听审或两帧间运动。不重导出、不修改内容、不调用额外语言或媒体Provider，不依赖旧TimelineManifest；按本次剩余问题选择时点，不强制重复检查。",
         effect=ToolEffect.READ, idempotent=True, input_model=ExportReadInput, output_model=CurrentReadOutput, handler=read_export,
         tags=frozenset({"studio", "editorial", "export", "inspection"})))
-    registry.register(ToolSpec(id="timeline.export_editorial", version=3, category=ToolCategory.TIMELINE,
-        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。默认省略width和height，由实际采用的视频尺寸与项目画幅确定画布，保留原素材细节；只有明确需要指定尺寸时同时传宽高，不能把2K素材默认为720p。无采用视频才使用画幅对应默认尺寸。支持硬切、多轨、透明度、PNG图层、裁切、变速、翻转、声音、字幕及基本中文标题。标题支持多行正文、字号、粗体、六位十六进制颜色、百分比位置和透明度；复杂字体/阴影/描边样式、adjustment片段、擦除等转场尚未接通。基本转场支持fade-to-black黑场淡入/淡出，以及同轨相邻片段dissolve；溶解两端时长相同，不改变原切点与总时长，区间不能覆盖第三画面。通过edit_clips精确添加/修改标题和转场；不把未支持的编辑效果当作可导出能力。等待本地 FFmpeg 完成后返回实际尺寸和媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
+    registry.register(ToolSpec(id="timeline.export_editorial", version=4, category=ToolCategory.TIMELINE,
+        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕；支持时间裁切，不支持空间裁景 crop。默认省略width和height，由实际采用的视频尺寸与项目画幅确定画布，保留原素材细节；只有明确需要指定尺寸时同时传宽高，不能把2K素材默认为720p。无采用视频才使用画幅对应默认尺寸。支持硬切、多轨、透明度、PNG图层、时间裁切、变速、翻转、调色、声音、字幕及基本中文标题。空间裁切 crop 尚未接通；实际导出片段的非空 crop 会明确报错，请删除该字段或设为 null，不能把它当作已生效的构图修改。标题支持多行正文、字号、粗体、六位十六进制颜色、百分比位置和透明度；复杂字体/阴影/描边样式、adjustment片段、擦除等转场尚未接通。基本转场支持fade-to-black黑场淡入/淡出，以及同轨相邻片段dissolve；溶解两端时长相同，不改变原切点与总时长，区间不能覆盖第三画面。通过edit_clips精确添加/修改标题和转场；不把未支持的编辑效果当作可导出能力。等待本地 FFmpeg 完成后返回实际尺寸和媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineExportInput, output_model=StudioExport, handler=export_timeline,
         tags=frozenset({"studio", "editorial", "export"})))
     registry.register(ToolSpec(id="timeline.edit_clips", version=5, category=ToolCategory.TIMELINE,
-        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声。标题用add_titles:[{id,text,start_seconds,duration_seconds,style?,track_index?}]新增，默认使用基本中文样式与不占用其他片段的可见画面轨；clips按标题id修改text/title_style或remove，title_style只合并font_size(1080高度单位)/font_weight(normal|bold)/color(#RRGGBB)/position_x/position_y/opacity(0–100)。视频/图片用transition_in/transition_out:{type:none|fade-to-black|dissolve,duration_seconds}；none/0清除转场，其他时长必须为正且不超过涉及片段。dissolve自动同步同轨相邻片段另一端，替换/清除或删除时同步清旧搭档；跨镜切点必须用FILM范围，区间不能覆盖第三画面，不改变原切点与总时长。标题与转场不应用到关联声音；subtitles按已有id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove。首次字幕用add_subtitles:[{id,text,start_seconds,end_seconds,style?,track_index?}]，id必须在所选时间线中不存在，默认复用可用字幕轨或新增字幕轨；可与修改、删除及clips一次保存，保留其他内容。对白字幕来自audio.transcribe_native的实际声音及有依据的识别校正，不把未听见的剧本台词写成转录；后续audio.align_subtitles仅修已有字幕时码。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id，新增字幕或标题不得超过编辑后本次采用时长；跨镜字幕用FILM时间且不传shot_id。返回实际创建/变化/删除的标题、片段、字幕与新revision，包括自动同步的转场另一端。设计时长用shot.save_current。",
+        description="精确修改当前片段与字幕，支持时间裁切，不支持空间裁景 crop。只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声。标题用add_titles:[{id,text,start_seconds,duration_seconds,style?,track_index?}]新增，默认使用基本中文样式与不占用其他片段的可见画面轨；clips按标题id修改text/title_style或remove，title_style只合并font_size(1080高度单位)/font_weight(normal|bold)/color(#RRGGBB)/position_x/position_y/opacity(0–100)。视频/图片用transition_in/transition_out:{type:none|fade-to-black|dissolve,duration_seconds}；none/0清除转场，其他时长必须为正且不超过涉及片段。dissolve自动同步同轨相邻片段另一端，替换/清除或删除时同步清旧搭档；跨镜切点必须用FILM范围，区间不能覆盖第三画面，不改变原切点与总时长。标题与转场不应用到关联声音；subtitles按已有id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove。首次字幕用add_subtitles:[{id,text,start_seconds,end_seconds,style?,track_index?}]，id必须在所选时间线中不存在，默认复用可用字幕轨或新增字幕轨；可与修改、删除及clips一次保存，保留其他内容。对白字幕来自audio.transcribe_native的实际声音及有依据的识别校正，不把未听见的剧本台词写成转录；后续audio.align_subtitles仅修已有字幕时码。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id，新增字幕或标题不得超过编辑后本次采用时长；跨镜字幕用FILM时间且不传shot_id。返回实际创建/变化/删除的标题、片段、字幕与新revision，包括自动同步的转场另一端。设计时长用shot.save_current。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineEditInput, output_model=CurrentReadOutput, handler=edit_timeline,
         tags=frozenset({"studio", "editorial", "partial-edit"})))
     registry.register(ToolSpec(id="task.read_workflow", version=1, category=ToolCategory.TASK,
@@ -467,12 +490,12 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="按完整场次新增或修改当前剧本，实时显示。已有场次带 expected_text；同时写入正文中逐字存在的 lines，summary/narrative_purpose 与当前正文一致。entry_state/exit_state 可记录正文实际建立的相关事实，勿照抄未实现的蓝图。修改回报、关键道具、人物知情或因果时，先用 artifact.read_current 的场次索引定位相关铺垫/回收，再按 scene_id 读取正文；必要的跨场修复用 related_scene_updates 一次保存，每场独立 expected_text，任一冲突整体不保存。无关联无需填写，不默认重写全剧。用每场 affected_shot_ids 限定需更新画面的镜头；[] 保留画面，范围未知时省略。变更台词仍自动关联使用它的镜头。返回实际 changed_scene_ids/changed_shot_ids、script_ref 及本次 saved_scenes 正文/lines/structure_stale，可直接继续创作，无需为找回刚保存的正文重复读取；不包含无关场次正文。只要求剧本时完成即交付。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=SceneWriteInput, output_model=SceneWriteOutput, handler=save_scene,
         tags=frozenset({"studio", "script", "partial-edit"})))
-    registry.register(ToolSpec(id="shot.save_current", version=2, category=ToolCategory.SHOT,
-        description="保存当前镜头及素材引用，可同时登记同一图片的制作项完成和参考包用途。返回实际修订号及 saved_shot：实际保存的 GENERATION/EDITORIAL 引用、正文字符范围、作用时段和对白 IDs。receipt 同样保留这些事实，可直接核对，不因生成预览为空而重复读取。reference_plan_preview_scope=GENERATION_ONLY：reference_plan_preview 只解析视频生成参考，EDITORIAL 不进入 selected；其 action_beat_count 是参考计划的动作数量，不是已保存的分镜时段数量。references 使用对象 id、精确 asset_version_id、purpose、field；新引用用 text_anchor.exact 复制原文，重复时补紧邻 prefix/suffix，程序定位且无需手算字符；旧人工 text_start/text_end 保留。作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。已明确选定的同一图片可用可选 media_registration 同时登记具体工作项完成与参考包用途。自有 REFERENCE 构图可直接cue，不要求pack；同图用于多个主体时，各cue须有该主体的自有图或pack关系，登记房间不会覆盖其他道具。entry.subject是实际人物/场景/道具，不是图片容器；可选root是该主体自有可用图，不是任意EDIT parent。已解析的组合请求会一起指出独立entry/cue关系错误，按具体位置修正；CURRENT DRAFT 可用，不切换素材 current/approved 指针，不自动审核、不推断全部服务镜头。全部验证成功才一起保存；相同内容重试复用，目标冲突不部分写。省略仍只保存镜头。保存引用不表示已剪入成片，预览不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
+    registry.register(ToolSpec(id="shot.save_current", version=4, category=ToolCategory.SHOT,
+        description="保存当前镜头及素材引用，可同时登记同一图片的制作项完成和参考包用途。返回实际修订号及 saved_shot：实际保存的 GENERATION/EDITORIAL 引用、正文字符范围、作用时段和对白 IDs。receipt 同样保留这些事实，可直接核对，不因生成预览为空而重复读取。已提交草稿组也可保存绑定；其预览直接从实际保存的cue派生，不需要另调仅适用正式镜头的 shot.update_reference_plan。reference_plan_preview_scope=GENERATION_ONLY：reference_plan_preview 只解析视频生成参考，EDITORIAL 不进入 selected；其 action_beat_count 是参考计划的动作数量，不是已保存的分镜时段数量。references 使用对象 id、精确 asset_version_id、purpose、field；新引用用 text_anchor.exact 复制原文，重复时补紧邻 prefix/suffix，程序定位且无需手算字符；旧人工 text_start/text_end 保留。同一个镜头（Shot）或同一个时段（Beat）的同一 field 内，各 cue 的文字选区必须互不重叠，完全重合、包含和部分重叠都不允许。身份、衣装等多张图片应各自选择现有正文中准确且互不重叠的片段；不能自动猜绑定，也不要改写正文来凑选区。不同 field、不同 Beat 的选区独立。作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。已明确选定的同一图片可用可选 media_registration 同时登记具体工作项完成与参考包用途。自有 REFERENCE 构图可直接cue，不要求pack；同图用于多个主体时，各cue须有该主体的自有图或pack关系，登记房间不会覆盖其他道具。entry.subject是实际人物/场景/道具，不是图片容器；可选root是该主体自有可用图，不是任意EDIT parent。已解析的组合请求会一起指出独立entry/cue关系错误，按具体位置修正；CURRENT DRAFT 可用，不切换素材 current/approved 指针，不自动审核、不推断全部服务镜头。全部验证成功才一起保存；相同内容重试复用，目标冲突不部分写。省略仍只保存镜头。保存引用不表示已剪入成片，预览不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=ShotWriteInput, output_model=ShotWriteOutput, handler=save_shot,
         tags=frozenset({"studio", "shot", "references"})))
-    registry.register(ToolSpec(id="timeline.save_editorial", version=1, category=ToolCategory.TIMELINE,
-        description="保存已读取并编辑的 LTX 时间线。整集保存必须保留其他片段；单镜头投影必须传 shot_id 和 request.anchor_clip_id，局部合并并顺移后续内容。使用当前 expected_revision，不能用一个镜头的 project 覆盖全片。普通裁切优先 edit_clips。",
+    registry.register(ToolSpec(id="timeline.save_editorial", version=3, category=ToolCategory.TIMELINE,
+        description="保存已读取并编辑的 LTX 时间线；支持时间裁切，不支持空间裁景 crop。整集保存必须保留其他片段；单镜头投影必须传 shot_id 和 request.anchor_clip_id，局部合并并顺移后续内容。使用当前 expected_revision，不能用一个镜头的 project 覆盖全片。把同一实际 Take 的多个镜头合并为一个片段时，保留 sourceTakeId 与准确素材路径，并用 sourceShotIds 列出其中已采用的镜头 ID（同 Take 的 shot_windows，包含 sourceShotId）；裁切后仍保留该关联，按实际源区间与各窗口交集定位单镜。已拆成独立单镜并有 sourceWindowStart/End 的片段保留单镜归属，不再挂多镜关联。普通时间裁切优先 edit_clips。空间裁切 crop 尚未接通，提交的 clip.crop 必须省略或设为 null；旧项目含该字段仍可读取，但非空值保存会返回具体片段与字段位置，不会当作已生效的构图修改。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineWriteInput, output_model=CurrentWriteOutput, handler=save_timeline,
         tags=frozenset({"studio", "editorial"})))
     registry.register(ToolSpec(id="timeline.add_asset_overlay", version=1, category=ToolCategory.TIMELINE,

@@ -499,7 +499,7 @@ def test_source_and_scene_sync_does_not_require_rewriting_all_shots(tmp_path: Pa
 
 
 @pytest.mark.parametrize("change", ["delivery", "visual", "audio", "shot", "group"])
-def test_explicit_take_selection_rechecks_content_after_spec_invalidation(tmp_path: Path, change: str) -> None:
+def test_explicit_take_selection_preserves_history_after_spec_invalidation(tmp_path: Path, change: str) -> None:
     from tests.test_storyboard_agent_interfaces import _production_spec, _storyboard
 
     service = _service(tmp_path)
@@ -560,18 +560,15 @@ def test_explicit_take_selection_rechecks_content_after_spec_invalidation(tmp_pa
         base_version_id=board.version.id, storyboard=revised_board, origin=ProductionDocumentOrigin.AGENT))
     before_selection = service.repository.get_take(take.id)
     assert before_selection is not None and before_selection.freshness == Freshness.STALE
-    if change != "delivery":
-        with pytest.raises(WorkflowConflictError):
-            service.select_take(take.id)
-        retained = service.repository.get_take(take.id)
-        assert retained is not None and retained.freshness == Freshness.STALE and not retained.is_selected
-        return
-
+    # Explicitly choosing old pixels does not claim they were generated from
+    # the revised treatment. Keep their provenance and automatic-source status.
     selected = service.select_take(take.id)
     reused = next(item for item in selected.takes if item.id == take.id)
-    assert reused.freshness == Freshness.CURRENT and reused.is_selected
+    assert reused.freshness == Freshness.STALE and reused.is_selected
     assert reused.storyboard_version_id == board.version.id
     assert reused.generation_plan_version_id == plan.version.id
     assert reused.task_id == task.id
     assert reused.qa_report == take.qa_report
     assert Path(reused.media_path).read_bytes() == original_bytes
+    with pytest.raises(WorkflowConflictError, match="current technically available"):
+        service.rebuild_manifest(pid)

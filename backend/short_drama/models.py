@@ -2615,7 +2615,28 @@ class GenerationUnitShotWindow(DomainModel):
         return self
 
 
+class H3PictureOnlyTarget(DomainModel):
+    """One saved picture occurrence; its current mix is retained locally."""
+
+    mode: Literal["PICTURE_ONLY"]
+    audio_policy: Literal["KEEP_CURRENT_AUDIO"]
+    timeline_id: str = Field(min_length=1)
+    clip_id: str = Field(min_length=1)
+    expected_editorial_revision: int = Field(ge=0)
+
+
+class H3PictureOnlyBinding(DomainModel):
+    """Server-resolved sources, not a second editable timeline."""
+
+    project_id: str
+    shot_id: str
+    target: H3PictureOnlyTarget
+    picture: dict[str, JsonValue]
+    audio_sources: list[dict[str, JsonValue]]
+
+
 class GenerationTask(DomainModel):
+    picture_only: H3PictureOnlyBinding | None = None
     id: str
     project_id: str
     shot_id: str

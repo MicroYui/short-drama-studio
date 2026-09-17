@@ -526,9 +526,9 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
     registry.register(
         ToolSpec(
             id="shot.append_storyboard_group",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
-            description='立即写入一组完整镜头并在产品中显示。包含场次、镜头设计、逐时段描述、对白与实际媒体引用。正文引用用 text_anchor.exact 复制所属 field 的原文，重复时补紧邻 prefix/suffix，无需计数。直接写入即可，不需要时长账本、预先确定全部组或检查通过。组时长应等于实际镜头时长之和；Provider 秒数限制在生成时处理。只返回当前进度及精确引用，后续按需要读取。',
+            description='立即写入一组完整镜头并在产品中显示。包含场次、镜头设计、逐时段描述、对白与实际媒体引用。正文引用用 text_anchor.exact 复制所属 field 的原文，重复时补紧邻 prefix/suffix，无需计数。直接写入即可，不需要时长账本、预先确定全部组或检查通过。追加期间其他既有组仅有局部文案或引用编辑时会保留当前修改；来源、结构、时序、连续性或同工作项变化仍需读取当前草稿后处理。组时长应等于实际镜头时长之和；Provider 秒数限制在生成时处理。只返回当前进度及精确引用，后续按需要读取。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftAppendInput,
@@ -817,10 +817,12 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
     registry.register(
         ToolSpec(
             id="shot.update_reference_plan",
-            version=2,
+            version=3,
             category=ToolCategory.SHOT,
             description=(
-                "Update one shot's reference, action, and interaction plan. "
+                "Update one formal standalone shot's legacy reference, action, and interaction plan. "
+                "Committed draft shots use artifact.read_current and shot.save_current exact cues; "
+                "their saved bindings do not require this separate plan. "
                 "Return the exact saved reference_plan and shot revision, without "
                 "a full project snapshot."
             ),

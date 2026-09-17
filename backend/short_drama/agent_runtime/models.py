@@ -500,6 +500,7 @@ class SpecialistTurnRecord(RuntimeModel):
 
     id: str = Field(min_length=1)
     sequence: int = Field(ge=1)
+    batch_id: str | None = Field(default=None, min_length=1)
     tool_name: str = Field(min_length=1, max_length=200)
     arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     reason: str = Field(min_length=1, max_length=1000)

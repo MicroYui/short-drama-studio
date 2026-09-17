@@ -6293,6 +6293,7 @@ export interface components {
             operation: components["schemas"]["OperationKind"];
             /** Output Slot Id */
             output_slot_id?: string | null;
+            picture_only?: components["schemas"]["H3PictureOnlyBinding"] | null;
             /** Project Id */
             project_id: string;
             /** Provider */
@@ -6523,6 +6524,47 @@ export interface components {
         H3NotSubmittedResolutionRequest: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * H3PictureOnlyBinding
+         * @description Server-resolved sources, not a second editable timeline.
+         */
+        H3PictureOnlyBinding: {
+            /** Audio Sources */
+            audio_sources: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            /** Picture */
+            picture: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Project Id */
+            project_id: string;
+            /** Shot Id */
+            shot_id: string;
+            target: components["schemas"]["H3PictureOnlyTarget"];
+        };
+        /**
+         * H3PictureOnlyTarget
+         * @description One saved picture occurrence; its current mix is retained locally.
+         */
+        H3PictureOnlyTarget: {
+            /**
+             * Audio Policy
+             * @constant
+             */
+            audio_policy: "KEEP_CURRENT_AUDIO";
+            /** Clip Id */
+            clip_id: string;
+            /** Expected Editorial Revision */
+            expected_editorial_revision: number;
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "PICTURE_ONLY";
+            /** Timeline Id */
+            timeline_id: string;
         };
         /** H3PricingSnapshot */
         H3PricingSnapshot: {
@@ -7167,6 +7209,7 @@ export interface components {
              * @constant
              */
             override_allowed: true;
+            picture_only?: components["schemas"]["H3PictureOnlyBinding"] | null;
             /** Prompt */
             prompt: string;
             /** Qa Focus Categories */
@@ -7285,6 +7328,8 @@ export interface components {
             /** Local Path */
             local_path: string;
             media_kind: components["schemas"]["H3MediaKind"];
+            /** Prepared Local Path */
+            prepared_local_path?: string | null;
             /** Provider File Id */
             provider_file_id: string;
             role: components["schemas"]["H3MediaRole"];
@@ -7721,6 +7766,13 @@ export interface components {
          * @enum {string}
          */
         ImageBackground: "auto" | "opaque" | "transparent";
+        /** ImageCachedTokenDetails */
+        ImageCachedTokenDetails: {
+            /** Image Tokens */
+            image_tokens?: number | null;
+            /** Text Tokens */
+            text_tokens?: number | null;
+        };
         /** ImageCostRecord */
         ImageCostRecord: {
             /**
@@ -8039,36 +8091,31 @@ export interface components {
         ImageTaskStatus: "QUEUED" | "SUBMITTING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "SUBMIT_UNKNOWN" | "OUTPUT_MISSING";
         /** ImageTokenDetails */
         ImageTokenDetails: {
-            /**
-             * Image Tokens
-             * @default 0
-             */
-            image_tokens: number;
-            /**
-             * Text Tokens
-             * @default 0
-             */
-            text_tokens: number;
+            /** Cached Tokens */
+            cached_tokens?: number | null;
+            cached_tokens_details?: components["schemas"]["ImageCachedTokenDetails"] | null;
+            /** Image Tokens */
+            image_tokens?: number | null;
+            /** Text Tokens */
+            text_tokens?: number | null;
         };
         /** ImageUsage */
         ImageUsage: {
-            /**
-             * Input Tokens
-             * @default 0
-             */
-            input_tokens: number;
+            /** Input Tokens */
+            input_tokens?: number | null;
             input_tokens_details?: components["schemas"]["ImageTokenDetails"];
-            /**
-             * Output Tokens
-             * @default 0
-             */
-            output_tokens: number;
+            /** Output Tokens */
+            output_tokens?: number | null;
             output_tokens_details?: components["schemas"]["ImageTokenDetails"];
             /**
-             * Total Tokens
-             * @default 0
+             * Reported Usage
+             * @description Provider-reported token counters and modality/cache breakdowns only. No inferred zeros or request contents; absent on older records.
              */
-            total_tokens: number;
+            reported_usage?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Total Tokens */
+            total_tokens?: number | null;
         };
         /**
          * InputCompatibilityDecision
@@ -8404,7 +8451,10 @@ export interface components {
         LanguagePromptCompileRequest: {
             /** Aspect Ratio */
             aspect_ratio?: string | null;
-            /** Duration Seconds */
+            /**
+             * Duration Seconds
+             * @description For a generation-unit target, omit to use ceil(unit.requested_duration_seconds), or pass that exact value. This field does not add source handles or change the saved unit. Save any intended shot/group timing change first, then prepare from that current source. A single-shot target uses its own duration rules.
+             */
             duration_seconds?: number | null;
             /** Generation Plan Document Id */
             generation_plan_document_id?: string | null;
@@ -8419,6 +8469,7 @@ export interface components {
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Method Skill Ids */
             method_skill_ids?: string[];
+            picture_only?: components["schemas"]["H3PictureOnlyTarget"] | null;
             /** Resolution */
             resolution?: string | null;
             /**
@@ -11431,6 +11482,8 @@ export interface components {
             arguments?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Batch Id */
+            batch_id?: string | null;
             /** Id */
             id: string;
             /** Reason */
@@ -13330,6 +13383,13 @@ export interface components {
         };
         /** StudioTakeSelectRequest */
         StudioTakeSelectRequest: {
+            /**
+             * Audio Policy
+             * @description KEEP_CURRENT_AUDIO changes only picture. Existing independent/linked audio and subtitles stay; an unsplit native soundtrack is retained as a local audio clip and the candidate video is muted. Requires one current clip and editorial revision.
+             * @default REPLACE_LINKED_AUDIO
+             * @enum {string}
+             */
+            audio_policy: "REPLACE_LINKED_AUDIO" | "KEEP_CURRENT_AUDIO";
             /** Clip Ids */
             clip_ids?: string[] | null;
             /** Expected Editorial Revision */
@@ -13405,7 +13465,10 @@ export interface components {
              * @default 0
              */
             expected_revision: number;
-            /** Timeline */
+            /**
+             * Timeline
+             * @description The current LTX editor project or a timeline record containing project. Spatial crop is unsupported: omit clip.crop or set it to null. trimStart/duration trim time, not the picture area.
+             */
             timeline: {
                 [key: string]: components["schemas"]["JsonValue"];
             };

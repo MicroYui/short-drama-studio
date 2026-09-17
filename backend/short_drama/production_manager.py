@@ -61,8 +61,9 @@ from short_drama.agent_runtime.artifact_resolver import (
 from short_drama.agent_runtime.models import utc_now
 from short_drama.agent_runtime.project_read_context import SPEC_WRITES, SETTINGS_FIELDS, retire_project_read
 from short_drama.agent_runtime.completion import verify_completion_claims
+from short_drama.agent_runtime.completion_receipt_view import project_completion_receipt_view
 from short_drama.agent_runtime.completion_saved_results import (
-    SAVED_RESULT_GUIDANCE, prepare_saved_completion_results, saved_tool_result_index,
+    SAVED_RESULT_GUIDANCE, prepare_saved_completion_results, saved_completion_artifact_refs, saved_tool_result_index,
 )
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
@@ -76,11 +77,12 @@ from short_drama.agent_runtime.asset_plan_context import asset_work_read_is_stal
 from short_drama.agent_runtime.asset_version_context import asset_construction_state, selected_asset_version_ids
 from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
-    BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result, project_leader_completion_actions,
+    BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, completion_selected_ids, leader_read_working_set, persist_leader_tool_result, project_leader_completion_actions,
 )
 from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, asset_inspection_reports, asset_inspection_scope, observed_media_handoffs
 from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
 from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, leader_artifact_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
+from short_drama.agent_runtime.media_tool_schemas import media_tool_schema_ids
 from short_drama.agent_runtime.visual_input import prepare_worker_visual_input
 from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
@@ -172,6 +174,21 @@ from short_drama.production_contracts import AssetPlanMutationSummaryResponse
 
 class ProductionManagerError(ValueError):
     """Raised when an Agent run cannot be planned or advanced as requested."""
+
+
+class ToolAttemptRefContractError(ProductionManagerError):
+    """Keep the exact nested reference validation issue for Leader correction."""
+
+    def __init__(
+        self, issues: list[dict[str, JsonValue]],
+        received_ref: dict[str, JsonValue] | None = None,
+    ) -> None:
+        self.issues = issues
+        self.received_ref = received_ref
+        super().__init__(
+            "DELEGATION contains an invalid Tool attempt reference: "
+            + json.dumps(issues, ensure_ascii=False, separators=(",", ":"))
+        )
 
 
 class SpecialistResultContractError(ProductionManagerError):
@@ -1081,7 +1098,7 @@ class SpecialistAgent(Protocol):
     def execute(
         self,
         work_order: AgentWorkOrderView,
-    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest: ...
+    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest | SpecialistReadBatchRequest: ...
 
 
 SpecialistAgentFactory = Callable[[LanguageProviderClient], SpecialistAgent]
@@ -1273,6 +1290,12 @@ def _visible_context_artifact_refs(context: ContextPack) -> list[ArtifactRef]:
         refs.extend(action.artifact_refs)
         if action.agent_result is not None:
             refs.extend(action.agent_result.evidence_refs)
+            # PARTIAL work can still hand back successfully persisted outputs.
+            # These server-built receipts are already visible to the Leader;
+            # arbitrary deliverable text is not an artifact source.
+            refs.extend(ref for ref in saved_completion_artifact_refs(
+                action.agent_result.completion_receipts,
+            ) if ref.project_id == context.project_id)
     return _unique_artifact_refs(refs)
 
 
@@ -1368,23 +1391,64 @@ def _delegation_task_inputs(arguments: Mapping[str, JsonValue]) -> dict[str, Jso
 
 def _tool_attempt_refs_argument(
     arguments: dict[str, JsonValue],
+    *, path: tuple[str | int, ...] = (),
 ) -> list[ToolAttemptRef]:
-    value = arguments.get("tool_attempt_refs")
+    value = arguments.get("tool_attempt_refs", [])
     if not isinstance(value, list):
-        return []
+        raise ToolAttemptRefContractError([{
+            "type": "list_type", "loc": [*path, "tool_attempt_refs"],
+            "msg": "tool_attempt_refs must be an array of complete ToolAttemptRef objects",
+        }])
     refs: list[ToolAttemptRef] = []
-    for item in value:
+    for index, item in enumerate(value):
+        item_path: list[JsonValue] = [*path, "tool_attempt_refs", index]
         if not isinstance(item, dict):
-            raise ProductionManagerError(
-                "DELEGATION tool_attempt_refs entries must be objects"
-            )
+            raise ToolAttemptRefContractError([{
+                "type": "model_type", "loc": item_path,
+                "msg": "tool_attempt_refs entries must be complete ToolAttemptRef objects",
+            }])
         try:
             refs.append(ToolAttemptRef.model_validate(item))
-        except ValueError as exc:
-            raise ProductionManagerError(
-                "DELEGATION contains an invalid Tool attempt reference"
-            ) from exc
+        except ValidationError as exc:
+            issues = _validation_issues(exc)
+            for issue in issues:
+                loc = issue.get("loc", [])
+                issue["loc"] = [*item_path, *(loc if isinstance(loc, list) else [])]
+            raise ToolAttemptRefContractError(issues, item) from exc
     return refs
+
+
+def _tool_attempt_ref_contract_feedback(
+    error: ToolAttemptRefContractError, context: ContextPack,
+) -> dict[str, JsonValue]:
+    received = error.received_ref
+    identity_fields = (
+        "project_id", "agent_run_id", "work_order_id", "attempt_id", "tool_name",
+    )
+    # A correction example is safe only for the exact already-visible locator.
+    # Unknown identities get no guessed replacement and no unrelated history.
+    exact_refs = [
+        ref.model_dump(mode="json") for ref in context.tool_attempt_refs
+        if received is not None and all(
+            received.get(field) == getattr(ref, field) for field in identity_fields
+        )
+    ]
+    return cast(dict[str, JsonValue], {
+        "kind": "INVALID_TOOL_ATTEMPT_REF_CONTRACT",
+        "issues": error.issues,
+        "matching_tool_attempt_refs": exact_refs,
+        "instruction": (
+            "Return a corrected complete AgentPlanProposal. At the listed path, "
+            "use the ToolAttemptRef contract in output_contracts.tool_attempt_ref. "
+            "Copy a complete matching reference exactly from matching_tool_attempt_refs "
+            "or the current ContextPack, including required turn_status. turn_status "
+            "is the persisted attempt lifecycle; outcome_status is its Tool result, "
+            "so COMPLETED with outcome_status FAILED is a valid failed attempt. "
+            "Do not infer a state or substitute another project/run/WorkOrder/attempt/Tool. "
+            "If no exact known reference exists, omit the dependent delegation and "
+            "obtain its reference before replanning."
+        ),
+    })
 
 
 def _plan_artifact_ref_entries(
@@ -1422,7 +1486,9 @@ def _plan_tool_attempt_ref_entries(
     for step_index, step in enumerate(proposal.steps):
         if step.kind != ActionKind.DELEGATION:
             continue
-        for ref_index, ref in enumerate(_tool_attempt_refs_argument(step.arguments)):
+        for ref_index, ref in enumerate(_tool_attempt_refs_argument(
+            step.arguments, path=("steps", step_index, "arguments"),
+        )):
             entries.append(
                 (
                     f"steps[{step_index}].arguments.tool_attempt_refs[{ref_index}]",
@@ -1658,6 +1724,7 @@ class LanguageProductionPlanner:
                 "output_contracts": {
                     "plan": AgentPlanProposal.model_json_schema(),
                     "tool_schema_request": AgentToolSchemaRequest.model_json_schema(),
+                    "tool_attempt_ref": ToolAttemptRef.model_json_schema(),
                 },
                 "current_plan": None
                 if current_plan is None
@@ -1677,7 +1744,9 @@ class LanguageProductionPlanner:
                     project_result=_specialist_read_observation_result,
                     document=None if self.projects is None else self.projects.get_project(context.project_id),
                 )
-                payload["working_set"] = read_working_set
+                payload["working_set"] = project_completion_receipt_view(
+                    read_working_set, project_id=context.project_id,
+                )
                 payload["context"] = project_leader_completion_actions(
                     cast(dict[str, JsonValue], payload["context"]), read_working_set,
                     store=self.context_compiler.store, run_id=context.run_id,
@@ -1710,7 +1779,7 @@ class LanguageProductionPlanner:
                     self._client, self.context_compiler,
                     run_id=context.run_id, project_id=context.project_id,
                     instructions=instructions,
-                    payload=cast(dict[str, JsonValue], payload),
+                    payload=ordered_agent_model_payload(cast(dict[str, JsonValue], payload)),
                     max_output_tokens=PLANNING_OUTPUT_TOKENS,
                 )
             except LanguageProviderIncompleteError as exc:
@@ -1858,6 +1927,8 @@ class LanguageProductionPlanner:
                     context,
                     observed_artifact_refs=observed_artifact_refs,
                 )
+            except ToolAttemptRefContractError as exc:
+                feedback = _tool_attempt_ref_contract_feedback(exc, context)
             except ProductionManagerError as exc:
                 issues = _validation_issues(exc)
                 feedback = cast(
@@ -1888,7 +1959,7 @@ class LanguageProductionPlanner:
                     separators=(",", ":"),
                 )
                 raise ProductionManagerError(
-                    "Production Manager repeated unresolved ArtifactRefs after receiving "
+                    "Production Manager repeated unresolved context references after receiving "
                     "typed plan validation feedback: " + issue_summary[:4000]
                 )
             invalid_plan_signatures.add(signature)
@@ -1956,14 +2027,75 @@ class LocalProductionPlanner:
         )
 
 
-class SpecialistToolRequest(DomainModel):
-    """One registry invocation requested by the built-in specialist Agent."""
+def ordered_agent_model_payload(payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Place stable catalogs/contracts before changing state, without sorting bodies."""
+    stable_keys = ("available_tools", "available_production_methods", "planning_response",
+                   "output_contracts", "response_schemas", "tool_schemas")
+    return {**{key: payload[key] for key in stable_keys if key in payload},
+            **{key: value for key, value in payload.items() if key not in stable_keys}}
+
+
+class SpecialistReadCall(DomainModel):
+    """One complete Tool invocation, without child-owned working notes."""
 
     tool_name: str = Field(min_length=1, max_length=200)
     reason: str = Field(default="Gather the evidence needed for the WorkOrder", max_length=1000)
     arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+
+
+class SpecialistToolRequest(SpecialistReadCall):
+    """One registry invocation requested by the built-in specialist Agent."""
+
     working_notes: str | None = Field(default=None, max_length=8000,
         description="可选：替换本任务的当前工作笔记，保留判断、所需引用和下一步，不抄写工具历史。")
+
+
+def _complete_worker_tool_after_output_limit(
+    error: LanguageProviderIncompleteError, known_tool_ids: set[str],
+) -> tuple[str, SpecialistToolRequest] | None:
+    """Recover only a complete typed Tool object followed by JSON whitespace."""
+    text = error.partial_output_text
+    if error.reason != "max_output_tokens" or text is None:
+        return None
+    complete = text.rstrip(" \t\r\n")
+    if complete == text:  # Require the observed trailing-whitespace failure shape.
+        return None
+    try:
+        value: object = json.loads(complete)
+        if not isinstance(value, dict):
+            return None
+        request = SpecialistToolRequest.model_validate_json(complete)
+    except ValueError:
+        return None
+    if request.tool_name not in known_tool_ids:
+        return None
+    return complete, request
+
+
+class SpecialistReadBatchRequest(DomainModel):
+    """One decision selecting independent, fully specified read-only calls."""
+
+    read_requests: list[SpecialistReadCall] = Field(min_length=2, max_length=4,
+        description="2–4个参数已知、互不依赖结果的READ且idempotent Tool。逐项执行；不支持子结果变量或写入/外部操作。")
+    independence_reason: str = Field(min_length=1, max_length=1000)
+    working_notes: str | None = Field(default=None, max_length=8000)
+
+
+def _validate_specialist_read_batch(
+    request: SpecialistReadBatchRequest, descriptors: Sequence[ToolDescriptor],
+) -> None:
+    available = {descriptor.id: descriptor for descriptor in descriptors}
+    for index, call in enumerate(request.read_requests):
+        if not call.reason.strip():
+            raise ValueError(f"/read_requests/{index}/reason: describe this read's purpose. "
+                             "The batch was not queued or executed.")
+        descriptor = available.get(call.tool_name)
+        if descriptor is None or descriptor.effect != ToolEffect.READ or not descriptor.idempotent:
+            raise ValueError(
+                f"/read_requests/{index}/tool_name: {call.tool_name!r} is not an available "
+                "READ and idempotent Tool. The batch was not queued or executed; "
+                "use a separate single Tool decision for writes or external operations."
+            )
 
 
 def specialist_tool_history_for_trace(
@@ -2110,6 +2242,7 @@ class SpecialistWorkingSet(DomainModel):
 
     total_tool_turns: int = Field(ge=0)
     latest_handoff: dict[str, JsonValue] | None = None
+    latest_read_batch: dict[str, JsonValue] | None = None
     entities: list[SpecialistEntitySnapshot] = Field(
         default_factory=list[SpecialistEntitySnapshot]
     )
@@ -2250,7 +2383,7 @@ def _specialist_working_set(
         if project_id is not None
         else (
             _specialist_working_set_project_id(work_order, ordered_turns)
-            if has_repairable_turn
+            if has_repairable_turn or (latest_turn is not None and latest_turn.batch_id is not None)
             else ""
         )
     )
@@ -2720,6 +2853,7 @@ def _specialist_working_set(
     return SpecialistWorkingSet(
         total_tool_turns=len(ordered_turns),
         latest_handoff=latest_handoff,
+        latest_read_batch=_specialist_read_batch_handoff(work_order, ordered_turns, resolved_project_id),
         entities=sorted(entities.values(), key=lambda item: (item.kind, item.id)),
         tool_checkpoints=sorted(
             checkpoints.values(), key=lambda item: item.tool_name
@@ -2742,6 +2876,37 @@ def _specialist_working_set(
         artifact_refs=_unique_artifact_refs(list(artifact_ref_slots.values())),
         progress=progress,
     )
+
+
+def _specialist_read_batch_handoff(
+    work_order: WorkOrder, ordered_turns: Sequence[SpecialistTurnRecord], project_id: str,
+) -> dict[str, JsonValue] | None:
+    if not ordered_turns or ordered_turns[-1].batch_id is None:
+        return None
+    batch_id = ordered_turns[-1].batch_id
+    items: list[JsonValue] = []
+    for turn in ordered_turns:
+        if turn.batch_id != batch_id:
+            continue
+        result = turn.result or {}
+        items.append({
+            "source_sequence": turn.sequence,
+            "attempt_ref": _tool_attempt_ref_for_turn(project_id, work_order, turn).model_dump(mode="json"),
+            "request": {"tool_name": turn.tool_name, "arguments": turn.arguments, "reason": turn.reason},
+            "turn_status": turn.status.value,
+            "outcome_status": result.get("status"),
+            "observed_at": turn.updated_at.isoformat(),
+            "error": result.get("error"),
+            "warnings": result.get("warnings", []),
+            "artifact_refs": result.get("artifact_refs", []),
+        })
+    return {"batch_id": batch_id, "items": items, "guidance": (
+        "These independent reads came from one decision. Every child outcome is listed, including "
+        "FAILED/INVALID_ARGUMENTS/INTERRUPTED; no failed read was automatically retried. "
+        "Combine successful bodies in latest_handoff, read_observations and entities by source_sequence/selection. "
+        "Each observation has its own time and revision, not a shared snapshot. Full results remain addressable "
+        "by the exact attempt_ref; do not repeat a successful read merely because another child failed."
+    )}
 
 
 def _retire_current_read_content(
@@ -3109,9 +3274,13 @@ def _specialist_checkpoint_arguments(
         # an exact observed source interval. Keep this small operation scope in
         # both the next handoff and its later checkpoint, without replaying a
         # ProjectAggregate or treating proposed arguments as saved facts.
-        for key in ("expected_editorial_revision", "source_in_seconds", "source_out_seconds"):
+        for key in ("expected_editorial_revision", "source_in_seconds", "source_out_seconds", "audio_policy"):
             if key in arguments:
                 identifiers[key] = arguments[key]
+    if tool_name in {"route.prepare_h3_group", "route.compile_h3_prompt"} and "picture_only" in arguments:
+        # This typed target binds picture-only preparation to the exact saved
+        # edit and audio policy; identifiers alone would erase its semantics.
+        identifiers["picture_only"] = arguments["picture_only"]
     return identifiers
 
 
@@ -5095,7 +5264,10 @@ def _specialist_runtime_instructions(*, may_call_tool: bool, system_prompt: str)
     tool_protocol = (
         "available_tools 是完整紧凑目录；tool_schemas 已含常用及本任务已发现的当前定义，可直接调用。"
         "只有尚未加载的复杂参数才请求 requested_tool_schema_ids 和 rationale，"
-        "已加载 schema 不重复请求。每次返回一个包含 tool_name、reason、arguments 的 Tool 请求；"
+        "已加载 schema 不重复请求。通常返回一个包含 tool_name、reason、arguments 的 Tool 请求；"
+        "若2–4个查询的完整参数已知且互不依赖结果，可按 read_batch_request 返回read_requests、"
+        "independence_reason及可选working_notes。每项必须在目录中为READ且idempotent；"
+        "不包含WRITE/EXTERNAL，不引用同批结果变量，下一选择依赖新结果时仍用单请求。"
         "可附 working_notes 更新简洁的当前工作笔记，不复制工具历史；"
         "结果持久化后继续同一 WorkOrder。"
         if may_call_tool else "当前没有可用 Tool，直接返回任务结果。"
@@ -5132,7 +5304,7 @@ class LanguageSpecialistAgent:
     def execute(
         self,
         work_order: AgentWorkOrderView,
-    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest:
+    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest | SpecialistReadBatchRequest:
         descriptors = (
             []
             if self._tools is None
@@ -5144,7 +5316,9 @@ class LanguageSpecialistAgent:
             )
         )
         tool_catalog = [
-            _compact_tool_catalog_entry(item) for item in descriptors
+            {**_compact_tool_catalog_entry(item),
+             **({"idempotent": item.idempotent} if item.effect == ToolEffect.READ else {})}
+            for item in descriptors
         ]
         tools_by_id = {item.id: item for item in descriptors}
         may_call_tool = bool(descriptors) and self._tools is not None
@@ -5206,6 +5380,12 @@ class LanguageSpecialistAgent:
             addressable_attempt_refs[latest_attempt_ref.identity()] = (
                 latest_attempt_ref
             )
+        if working_set.latest_read_batch is not None:
+            latest_batch_id = working_set.latest_read_batch.get("batch_id")
+            for turn in work_order.work_order.specialist_turns:
+                if turn.batch_id == latest_batch_id:
+                    ref = _tool_attempt_ref_for_turn(work_order.context.project_id, work_order.work_order, turn)
+                    addressable_attempt_refs[ref.identity()] = ref
         has_addressable_tool_attempt = bool(addressable_attempt_refs)
         asset_plan_attempt_tool_ids = {
             "artifact.create_asset_plan",
@@ -5234,6 +5414,7 @@ class LanguageSpecialistAgent:
         ]
         schema_ids_to_load = [
             *initial_tool_schema_ids(work_order.work_order),
+            *media_tool_schema_ids(work_order.work_order, work_order.context.project_id),
             *work_order.work_order.loaded_tool_schema_ids,
             *self._discovered_schema_ids.get(work_order.work_order.id, []),
             # Old persisted runs predate discovery state. Successful calls still
@@ -5275,21 +5456,36 @@ class LanguageSpecialistAgent:
         remember_schemas()
         schema_feedback: dict[str, JsonValue] | None = None
         rejected_schema_requests: set[tuple[str, ...]] = set()
+        latest_turn = max(work_order.work_order.specialist_turns, key=lambda turn: turn.sequence, default=None)
+        immediate_sequences = {
+            turn.sequence for turn in work_order.work_order.specialist_turns
+            if latest_turn is not None and latest_turn.batch_id is not None
+            and turn.batch_id == latest_turn.batch_id
+        }
+        # Every read from the latest decision is immediate input. Earlier batch
+        # children must not become historical large reads before the model sees
+        # them together; the normal full-request context budget still applies.
+        older_reads = [item for item in working_set.read_observations
+                       if item.source_sequence not in immediate_sequences]
         working_set_payload = project_retained_read_results(
-            working_set.model_dump(mode="json"), store=store,
+            working_set.model_copy(update={"read_observations": older_reads}).model_dump(mode="json"), store=store,
             project_id=work_order.context.project_id, work_order=work_order.work_order,
         )
+        projected_reads = working_set_payload.get("read_observations")
+        if immediate_sequences and isinstance(projected_reads, list):
+            reads_by_sequence = {item.get("source_sequence"): item for item in projected_reads if isinstance(item, dict)}
+            reads_by_sequence.update({item.source_sequence: item.model_dump(mode="json")
+                                      for item in working_set.read_observations
+                                      if item.source_sequence in immediate_sequences})
+            working_set_payload["read_observations"] = [reads_by_sequence[item.source_sequence]
+                                                       for item in working_set.read_observations]
         saved_result_index = saved_tool_result_index(work_order.work_order, work_order.context.project_id)
         if saved_result_index:
             working_set_payload["saved_tool_result_index"] = saved_result_index
             working_set_payload["saved_tool_result_guidance"] = SAVED_RESULT_GUIDANCE
         if store is not None:
-            selected_ids = exact_context_values(work_order.work_order.task_inputs)
-            selected_ids.update(ref.artifact_id for ref in [
-                *work_order.work_order.scope,
-                *(artifact.ref for artifact in work_order.context.artifacts),
-                *working_set.artifact_refs,
-            ] if ref.artifact_type not in BROAD_COMPLETION_REF_TYPES)
+            selected_ids = completion_selected_ids(work_order.work_order,
+                [artifact.ref for artifact in work_order.context.artifacts])
             handoffs, handoff_refs = completed_work_handoffs(store,
                 run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
                 selected_ids=selected_ids, exclude_work_order_id=work_order.work_order.id)
@@ -5305,13 +5501,18 @@ class LanguageSpecialistAgent:
                 working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
             media, media_refs = observed_media_handoffs(store,
                 run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
-                selected_ids=selected_ids, exclude_work_order_id=work_order.work_order.id)
+                selected_ids=selected_ids | {ref.artifact_id for ref in working_set.artifact_refs
+                    if ref.artifact_type not in BROAD_COMPLETION_REF_TYPES},
+                exclude_work_order_id=work_order.work_order.id)
             if media:
                 working_set_payload["media_observations"] = media
                 working_set_payload["media_observation_guidance"] = MEDIA_OBSERVATION_GUIDANCE
                 known_refs = {ref.identity(): ref for ref in _artifact_refs_from_json(working_set_payload.get("artifact_refs"))}
                 known_refs.update({ref.identity(): ref for ref in media_refs})
                 working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
+        working_set_payload = project_completion_receipt_view(
+            working_set_payload, project_id=work_order.context.project_id,
+        )
         visual_input = prepare_worker_visual_input(work_order.work_order, project_id=work_order.context.project_id)
         while True:
             execution_boundary()
@@ -5340,6 +5541,7 @@ class LanguageSpecialistAgent:
                                 _specialist_work_order_result_schema()
                             ),
                             "tool_request": SpecialistToolRequest.model_json_schema(),
+                            "read_batch_request": SpecialistReadBatchRequest.model_json_schema(),
                             "tool_schema_request": (
                                 AgentToolSchemaRequest.model_json_schema()
                             ),
@@ -5359,17 +5561,36 @@ class LanguageSpecialistAgent:
                         "current_goal": run.goal_summary,
                         "latest_user_instructions": run.latest_user_instructions,
                     }
-            raw = generate_context_managed_text(
-                self._client, self.context_compiler,
-                run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
-                instructions=instructions,
-                payload=cast(dict[str, JsonValue], payload),
-                # A semantic segment may contain several adjacent detailed groups.
-                # This is transport headroom so the Agent can finish valid JSON,
-                # not a creative length target or a fixed batching requirement.
-                max_output_tokens=20000,
-                visual_input=visual_input,
-            )
+            try:
+                raw = generate_context_managed_text(
+                    self._client, self.context_compiler,
+                    run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
+                    instructions=instructions,
+                    payload=ordered_agent_model_payload(cast(dict[str, JsonValue], payload)),
+                    # A semantic segment may contain several adjacent detailed groups.
+                    # This is transport headroom so the Agent can finish valid JSON,
+                    # not a creative length target or a fixed batching requirement.
+                    max_output_tokens=20000,
+                    visual_input=visual_input,
+                )
+            except LanguageProviderIncompleteError as exc:
+                if not may_call_tool:
+                    raise
+                recovered = _complete_worker_tool_after_output_limit(exc, set(tools_by_id))
+                if recovered is None:
+                    raise
+                raw, recovered_request = recovered
+                # The Provider still records incomplete/usage/failure. This only
+                # recovers a decision; normal scheduling and Tool validation follow.
+                record_trace("agent.worker_output_recovery", {
+                    "work_order_id": work_order.work_order.id,
+                    "reason": exc.reason,
+                    "tool_name": recovered_request.tool_name,
+                    "partial_output_characters": exc.partial_output_characters,
+                    "recovered_json_characters": len(raw),
+                    "trailing_whitespace_characters": len(exc.partial_output_text or "") - len(raw),
+                    "outcome": "COMPLETE_TOOL_REQUEST_RECOVERED",
+                })
             payload = _normalize_specialist_response_payload(raw)
             try:
                 result = _validate_specialist_result_ownership(
@@ -5396,6 +5617,15 @@ class LanguageSpecialistAgent:
                     return requested_tool
                 except ValueError as tool_error:
                     try:
+                        requested_batch = SpecialistReadBatchRequest.model_validate_json(payload)
+                        _validate_specialist_read_batch(requested_batch, descriptors)
+                        loaded_schema_ids.extend(call.tool_name for call in requested_batch.read_requests
+                                                 if call.tool_name not in loaded_schema_ids)
+                        remember_schemas()
+                        return requested_batch
+                    except ValueError as batch_error:
+                        batch_issues = _validation_issues(batch_error)
+                    try:
                         schema_request = AgentToolSchemaRequest.model_validate_json(
                             payload
                         )
@@ -5407,6 +5637,7 @@ class LanguageSpecialistAgent:
                                 validation_issues={
                                     "agent_result": _validation_issues(result_error),
                                     "tool_request": _validation_issues(tool_error),
+                                    "read_batch_request": batch_issues,
                                     "tool_schema_request": _validation_issues(
                                         schema_error
                                     ),
@@ -7457,13 +7688,9 @@ class ProductionManager:
                 raise ProductionManagerError(
                     f"Work order cannot be executed from {current.status.value}"
                 )
-            pending_turn = next(
-                (
-                    turn
-                    for turn in reversed(current.specialist_turns)
-                    if turn.status == SpecialistTurnStatus.REQUESTED
-                ),
-                None,
+            pending_turn = min(
+                (turn for turn in current.specialist_turns if turn.status == SpecialistTurnStatus.REQUESTED),
+                key=lambda turn: turn.sequence, default=None,
             )
         if pending_turn is not None:
             return self._execute_pending_specialist_tool(
@@ -7514,7 +7741,10 @@ class ProductionManager:
             raise ProductionManagerError(
                 f"Specialist Agent execution failed: {exc}"
             ) from exc
-        if isinstance(decision, SpecialistToolRequest):
+        if isinstance(decision, (SpecialistToolRequest, SpecialistReadBatchRequest)):
+            requests = decision.read_requests if isinstance(decision, SpecialistReadBatchRequest) else [decision]
+            batch_id = f"read-batch-{uuid4().hex}" if isinstance(decision, SpecialistReadBatchRequest) else None
+            request_names = ", ".join(request.tool_name for request in requests)
             with self._run_lock(work_order.parent_run_id):
                 current = self.runtime.store.get_work_order(work_order_id)
                 if current is None:
@@ -7526,6 +7756,18 @@ class ProductionManager:
                     raise ProductionManagerError(
                         f"Unknown agent run: {current.parent_run_id}"
                     )
+                if isinstance(decision, SpecialistReadBatchRequest):
+                    try:
+                        _validate_specialist_read_batch(decision, _tools_for_execution_target(
+                            self.tools.list(), current_run.execution_target,
+                        ))
+                    except ValueError as exc:
+                        return self._submit_specialist_protocol_feedback(work_order_id, SpecialistResponseProtocolError(
+                            SpecialistProtocolFeedback(id=f"specialist-feedback-{uuid4().hex}",
+                                rejected_response=decision.model_dump_json(),
+                                validation_issues={"read_batch_request": _validation_issues(exc)},
+                                loaded_tool_schema_ids=current.loaded_tool_schema_ids),
+                        ))
                 stale_reason = self._work_order_stale_reason(
                     current,
                     current_run.current_plan_revision_id,
@@ -7537,9 +7779,9 @@ class ProductionManager:
                             status=AgentResultStatus.PARTIAL,
                             concise_summary=(
                                 f"Superseded specialist requested Tool "
-                                f"{decision.tool_name}; request was not executed."
+                                f"{request_names}; request was not executed."
                             ),
-                            unresolved_questions=[decision.reason],
+                            unresolved_questions=[request.reason for request in requests],
                             next_owner=WorkOrderNextOwner.LEADER_REPLAN,
                         ),
                     )
@@ -7549,14 +7791,16 @@ class ProductionManager:
                 ) + 1
                 if decision.working_notes is not None:
                     current.working_notes = decision.working_notes
-                current.specialist_turns.append(
+                current.specialist_turns.extend(
                     SpecialistTurnRecord(
                         id=f"specialist-turn-{uuid4().hex}",
-                        sequence=next_sequence,
-                        tool_name=decision.tool_name,
-                        arguments=decision.arguments,
-                        reason=decision.reason,
+                        sequence=next_sequence + index,
+                        batch_id=batch_id,
+                        tool_name=request.tool_name,
+                        arguments=request.arguments,
+                        reason=request.reason,
                     )
+                    for index, request in enumerate(requests)
                 )
                 current.status = DelegationStatus.NEEDS_ATTENTION
                 current.next_owner = WorkOrderNextOwner.WORKER_TOOL
@@ -7567,7 +7811,7 @@ class ProductionManager:
                 AgentWorkOrderResultRequest(
                     status=AgentResultStatus.PARTIAL,
                     concise_summary=(
-                        f"专业 Agent 已请求 Tool {decision.tool_name}，"
+                        f"专业 Agent 已请求 Tool {request_names}，"
                         "请求已持久化，尚未执行。"
                     ),
                     recommended_next_actions=[
@@ -7841,13 +8085,20 @@ class ProductionManager:
 
         started = time.monotonic()
         try:
-            tool_result = self._invoke_scoped_tool(
-                project_id,
-                tool_name,
-                arguments,
-                agent_run_id=parent_run_id,
-                work_order_id=work_order_id,
-            )
+            if turn.batch_id is not None:
+                descriptor = self.tools.describe(tool_name)
+                if descriptor.effect != ToolEffect.READ or not descriptor.idempotent:
+                    raise AgentToolScopeError(
+                        "A persisted read-batch child must still be READ and idempotent; the Tool was not executed."
+                    )
+            with trace_context(attempt_id=turn_id, batch_id=turn.batch_id):
+                tool_result = self._invoke_scoped_tool(
+                    project_id,
+                    tool_name,
+                    arguments,
+                    agent_run_id=parent_run_id,
+                    work_order_id=work_order_id,
+                )
         except AgentToolScopeError as exc:
             # This is a request validation result, not a failed execution. The
             # original request stays in the same turn for precise correction.
@@ -7934,9 +8185,16 @@ class ProductionManager:
             turn.status = SpecialistTurnStatus.COMPLETED
             turn.result = persisted_result
             turn.updated_at = utc_now()
+            next_owner = (
+                WorkOrderNextOwner.WORKER_TOOL
+                if turn.batch_id is not None and any(
+                    child.batch_id == turn.batch_id and child.status == SpecialistTurnStatus.REQUESTED
+                    for child in current.specialist_turns
+                ) else WorkOrderNextOwner.WORKER_DECISION
+            )
             if current.status != DelegationStatus.CANCELLED:
                 current.status = DelegationStatus.NEEDS_ATTENTION
-                current.next_owner = WorkOrderNextOwner.WORKER_DECISION
+                current.next_owner = next_owner
             current.updated_at = turn.updated_at
             self.runtime.store.save_work_order(current)
 
@@ -7957,9 +8215,11 @@ class ProductionManager:
                 findings=findings,
                 evidence_refs=tool_result.artifact_refs,
                 recommended_next_actions=[
-                    "让专业 Agent 读取已持久化的 Tool 结果并继续判断。"
+                    "继续同批已持久化且尚未执行的独立只读请求。"
+                    if next_owner == WorkOrderNextOwner.WORKER_TOOL
+                    else "让专业 Agent 读取已持久化的 Tool 结果并继续判断。"
                 ],
-                next_owner=WorkOrderNextOwner.WORKER_DECISION,
+                next_owner=next_owner,
             ),
         )
 
@@ -9090,10 +9350,12 @@ class ProductionManager:
                 if work_order.status != DelegationStatus.IN_PROGRESS:
                     continue
                 interrupted_tool = False
+                interrupted_batches: set[str | None] = set()
                 for turn in work_order.specialist_turns:
                     if turn.status != SpecialistTurnStatus.IN_PROGRESS:
                         continue
                     interrupted_tool = True
+                    interrupted_batches.add(turn.batch_id)
                     turn.status = SpecialistTurnStatus.INTERRUPTED
                     turn.result = _interrupted_tool_result(turn)
                     turn.updated_at = utc_now()
@@ -9103,8 +9365,11 @@ class ProductionManager:
                 }:
                     work_order.next_owner = (
                         WorkOrderNextOwner.WORKER_TOOL
-                        if not interrupted_tool and any(
+                        if any(
                             turn.status == SpecialistTurnStatus.REQUESTED
+                            and (not interrupted_tool or (
+                                None not in interrupted_batches and turn.batch_id in interrupted_batches
+                            ))
                             for turn in work_order.specialist_turns
                         ) else WorkOrderNextOwner.WORKER_DECISION
                     )
@@ -9834,6 +10099,8 @@ __all__ = [
     "ProductionSkillDescriptor",
     "ProjectArtifactResolver",
     "SpecialistAgent",
+    "SpecialistReadBatchRequest",
+    "SpecialistReadCall",
     "SpecialistToolRequest",
     "production_skill_id",
 ]

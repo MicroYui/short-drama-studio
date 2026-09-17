@@ -14,7 +14,7 @@ from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE,
 from short_drama.agent_runtime.partial_storyboard_context import partial_storyboard_context
 from short_drama.agent_runtime.models import (
     ActionRecord, ActionStatus, AgentResultStatus, ArtifactRef, DelegationStatus,
-    SpecialistTurnRecord, SpecialistTurnStatus,
+    SpecialistTurnRecord, SpecialistTurnStatus, WorkOrder,
 )
 from short_drama.agent_runtime.store import AgentRuntimeStore
 from short_drama.agent_runtime.token_budget import count_text_tokens
@@ -30,6 +30,7 @@ COMPLETION_HANDOFF_TOKEN_BUDGET = 16_000
 BROAD_COMPLETION_REF_TYPES = frozenset({
     "project", "asset_plan", "asset_plan_index", "script", "script_version", "storyboard", "storyboard_draft",
     "production_spec", "production_document", "production_document_version", "bible", "bible_version", "generation_plan",
+    "editorial", "editorial_timeline",
 })
 
 
@@ -42,6 +43,51 @@ def exact_context_values(value: JsonValue) -> set[str]:
     if isinstance(value, dict):
         return {item for child in value.values() for item in exact_context_values(child)}
     return set()
+
+
+def _tool_selected_ids(arguments: Mapping[str, JsonValue]) -> set[str]:
+    """Operation selectors do not include objects merely carried in a save body."""
+    selected: set[str] = set()
+    for key, value in arguments.items():
+        if key.endswith(("_id", "_ids")) or key in {"artifact_ref", "artifact_refs", "scope"}:
+            selected.update(exact_context_values(value))
+        elif key in {"request", "selection", "target", "picture_only", "images", "media_inputs",
+                     "media_input", "source", "sources", "references", "reference"}:
+            if isinstance(value, dict):
+                selected.update(_tool_selected_ids(value))
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        selected.update(_tool_selected_ids(item))
+    return selected
+
+
+def completion_selected_ids(work: WorkOrder, contextual_refs: Sequence[ArtifactRef]) -> set[str]:
+    """Explicit selections and requests, not every object returned in a directory.
+
+    A generation-plan read can return every group's references. Those are
+    available facts, not a request to inherit every group's completed work.
+    Actual later selections (including images, Takes and saved result IDs)
+    remain visible through their persisted Tool arguments after a restart.
+    """
+    selected = exact_context_values(work.task_inputs)
+    selected.update(ref.artifact_id for ref in [*work.scope, *contextual_refs]
+                    if ref.artifact_type not in BROAD_COMPLETION_REF_TYPES)
+    for turn in work.specialist_turns:
+        selected.update(_tool_selected_ids(turn.arguments))
+        # A saved editorial read is a view of actual selected occurrences,
+        # unlike a generation/asset directory. Full-film reads retain every
+        # displayed occurrence; exact/shot reads retain their actual scope.
+        result = turn.result
+        if (turn.tool_name == "timeline.read_editorial"
+                and turn.status == SpecialistTurnStatus.COMPLETED
+                and isinstance(result, dict) and result.get("status") == "SUCCEEDED"):
+            output = result.get("output")
+            content = output.get("content") if isinstance(output, dict) else None
+            if isinstance(content, dict) and content.get("is_saved") is True:
+                selected.update(exact_context_values(content.get("clips")))
+                selected.update(exact_context_values(content.get("subtitles")))
+    return selected
 
 
 def completed_work_handoffs(
@@ -84,6 +130,8 @@ def completed_work_handoffs(
                     return set()
                 ids = {child for key, child in value.items() if key in {
                     "asset_id", "asset_version_id", "shot_id", "take_id", "item_id", "work_item_id", "artifact_id",
+                    "clip_id", "source_clip_id", "source_take_id",
+                    "generation_unit_id", "clip_group_id",
                 } and isinstance(child, str)}
                 return ids | {item for child in value.values() for item in subject_ids(child)}
             return set()

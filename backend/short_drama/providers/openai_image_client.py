@@ -10,10 +10,10 @@ from urllib.parse import urlsplit
 
 import requests
 from PIL import Image, UnidentifiedImageError
-from pydantic import ValidationError
 from requests import Response, Session
 
 from short_drama.image_models import ImageOperation, ImageProviderRequest, ImageUsage
+from short_drama.provider_usage import reported_token_usage
 from short_drama.models import ImageReferenceAuthority, ImageReferenceRole
 from short_drama.providers.image_provider import (
     ImageProviderDefiniteError,
@@ -313,15 +313,23 @@ class OpenAIImageClient:
                 "OpenAI image response contained invalid base64 data"
             ) from exc
 
-        usage = ImageUsage()
-        raw_usage = typed.get("usage")
-        if isinstance(raw_usage, dict):
-            try:
-                usage = ImageUsage.model_validate(raw_usage)
-            except ValidationError as exc:
-                raise ImageProviderSubmissionUnknown(
-                    "OpenAI image response contained invalid usage data"
-                ) from exc
+        usage = None
+        raw_usage = reported_token_usage(typed.get("usage"))
+        if raw_usage is not None:
+            counts = {key: raw_usage.get(key) for key in ("input_tokens", "output_tokens", "total_tokens")}
+            for group in ("input_tokens_details", "output_tokens_details"):
+                details = raw_usage.get(group)
+                if isinstance(details, dict):
+                    selected = {key: details[key] for key in (
+                        "image_tokens", "text_tokens", "cached_tokens", "cached_tokens_details"
+                    ) if key in details}
+                    cached = selected.get("cached_tokens_details")
+                    if isinstance(cached, dict):
+                        selected["cached_tokens_details"] = {
+                            key: cached[key] for key in ("image_tokens", "text_tokens") if key in cached
+                        }
+                    counts[group] = selected
+            usage = ImageUsage.model_validate({**counts, "reported_usage": raw_usage})
         revised_prompt = first.get("revised_prompt")
         mime_type = {
             "png": "image/png",

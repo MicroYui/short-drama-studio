@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from typing import cast
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -30,6 +31,8 @@ MEDIA_OBSERVATION_GUIDANCE = (
     "Reuse applicable visible findings; read omitted details through saved_observation.read rather than "
     "repeat an inspection to recover them. New visual questions may still need inspection. "
     "A saved reference entry records its stated use, not independent quality approval or current file availability."
+    " Native transcriptions retain their captured source and time space: TAKE_SOURCE is not FILM placement, "
+    "and saved ASR text/times do not verify speakers, performance or lip sync."
 )
 
 
@@ -109,6 +112,31 @@ def _observation(
         reference_ids = scope.get("canonical_reference_version_ids")
         related = _strings([asset_id, version_id, scope.get("shot_id"),
             *(reference_ids if isinstance(reference_ids, list) else [])])
+    elif turn.tool_name == "audio.transcribe_native" and success:
+        report_path, windows = output.get("report_path"), output.get("windows")
+        if not isinstance(report_path, str) or not report_path or not isinstance(windows, list):
+            return None
+        # Each saved ASR report is a distinct observation. Keep its exact source,
+        # range, captured revision, warnings and approximate character times;
+        # neither a busy producer nor a later cut makes that report unreadable.
+        identity = [turn.tool_name, report_path, request, output.get("source_context"),
+                    output.get("source_editorial_revision"), output.get("editorial_timeline_id")]
+        take_ids: set[str] = set()
+        clip_ids: set[str] = set()
+        shot_ids: set[str] = set()
+        for window in windows:
+            if not isinstance(window, dict):
+                continue
+            take_ids.update(_strings([window.get("take_id")]))
+            for key, target in (("clip_ids", clip_ids), ("shot_ids", shot_ids)):
+                values = window.get(key)
+                if isinstance(values, list):
+                    target.update(_strings(values))
+        body = {"kind": "native_transcription", "scope": request, "result": output,
+            "take_ids": cast(JsonValue, sorted(take_ids)), "clip_ids": cast(JsonValue, sorted(clip_ids)),
+            "shot_ids": cast(JsonValue, sorted(shot_ids))}
+        # Whole-project and timeline IDs must not select unrelated sound.
+        related = take_ids | clip_ids | shot_ids
     elif turn.tool_name == "artifact.add_reference_entry" and success:
         entry, pack = _dict(output.get("entry")), _dict(output.get("pack"))
         asset_id, version_id = pack.get("subject_asset_id"), entry.get("asset_version_id")
@@ -217,7 +245,7 @@ def observed_media_handoffs(
     A Worker gets observations intersecting selected objects, exact media or
     their explicitly stated reference inputs. Common project/plan IDs do not
     match. Completed/cancelled work can still supply historical image facts,
-    but never an in-progress check or a revived work assignment.
+    and transcription facts, but never an in-progress check or a revived work assignment.
     """
     run = store.get_run(run_id)
     if run is None or run.project_id != project_id:

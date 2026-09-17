@@ -33,13 +33,21 @@ def provider_media_model_view(value: JsonValue) -> JsonValue:
         samples = source.pop("samples")
         if isinstance(samples, list):
             frame_times: dict[str, list[JsonValue]] = {}
+            frame_time_is_source_pts: dict[str, list[JsonValue]] = {}
             for sample in samples:
                 if isinstance(sample, dict):
                     take_id = sample.get("source_take_id")
                     if isinstance(take_id, str):
                         frame_times.setdefault(take_id, []).append(sample.get("timestamp_seconds"))
+                        frame_time_is_source_pts.setdefault(take_id, []).append(
+                            sample.get("timestamp_is_source_pts") is True)
             source["sample_count"] = len(samples)
             source["sample_timestamps_by_take"] = cast(JsonValue, frame_times)
+            source["sample_timestamp_is_source_pts_by_take"] = cast(JsonValue, frame_time_is_source_pts)
+            source["sample_timestamp_guidance"] = (
+                "Flags align with sample_timestamps_by_take. True means actual source frame PTS; "
+                "false means a nominal sampling marker, not an exact source frame or cut time."
+            )
             source["sample_details_location"] = "persisted video_inspection.samples"
     if {"task_id", "media_inputs", "uploaded_inputs", "pricing"} <= source.keys():
         source = dict(source)

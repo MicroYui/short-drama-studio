@@ -297,6 +297,7 @@ export const assetSchema = z.object({
 export const timelineClipSchema = z.object({
   id: z.string(),
   sourceShotId: z.string().optional(),
+  sourceShotIds: z.array(z.string()).optional(),
   sourceTakeId: z.string().optional(),
   sourceWindowStart: z.number().optional(),
   sourceWindowEnd: z.number().optional(),

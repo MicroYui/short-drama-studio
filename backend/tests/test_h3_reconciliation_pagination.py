@@ -1,18 +1,30 @@
 """Bounded H3 history reads preserve unknown submissions and explicit ID recovery."""
 
+import json
 from pathlib import Path
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from pydantic import JsonValue
 
 from _routes.short_drama import router
 from short_drama.deps import get_short_drama_service
-from short_drama.h3_models import H3ProbeRequest, H3ReconciliationCandidatesResponse, H3RemoteTask
-from short_drama.models import GenerationTask, TaskStatus
+from short_drama.agent_runtime import ActionKind, PlanStep
+from short_drama.agent_runtime.model_input import ModelInputCompiler
+from short_drama.h3_models import (
+    H3ProbeRequest, H3ReconciliationCandidatesResponse, H3RemoteTask, H3TaskContent,
+)
+from short_drama.models import GenerationTask, ProductionExecutionTarget, TaskStatus
+from short_drama.production_manager import (
+    AgentPlanProposal, AgentRunAdvanceRequest, AgentRunCreateRequest, LanguageProductionPlanner,
+)
 from short_drama.providers.minimax_h3_client import H3TransientError
 from short_drama.service import ProviderOperationError, ShortDramaService
 from short_drama.tools import ToolCallStatus
+from short_drama.tools.contracts import ToolEffect
+from tests.test_harness_tool_context import ScriptedClient
 from tests.test_short_drama_h3 import FakeH3Client, _service
 
 
@@ -101,6 +113,8 @@ def test_default_window_stops_at_ten_pages_and_tool_can_continue(tmp_path: Path)
     assert page.tasks == [] and page.query is not None
     assert page.query.pages_scanned == 10 and page.query.tasks_scanned == 500
     assert page.query.stop_reason == "page_limit" and page.query.next_offset == 500
+    assert first.receipt is not None
+    assert first.receipt.current_state == {"query": page.query.model_dump(mode="json"), "candidate_count": 0}
     assert len(fake.list_calls) == 10
     _unchanged(service, task, fake)
 
@@ -111,6 +125,8 @@ def test_default_window_stops_at_ten_pages_and_tool_can_continue(tmp_path: Path)
     assert [item.id for item in remaining.tasks] == ["remote-1"]
     assert remaining.query is not None and remaining.query.start_offset == 500
     assert remaining.query.stop_reason == "empty_page"
+    assert second.receipt is not None
+    assert second.receipt.current_state == {"query": remaining.query.model_dump(mode="json"), "candidate_count": 1}
     assert fake.list_calls[10:] == [(500, 50), (550, 50), (551, 50)]
     _unchanged(service, task, fake)
 
@@ -196,3 +212,84 @@ def test_http_page_controls_bound_requests_and_return_continue_offset(tmp_path: 
             assert client.get("/api/short-drama/providers/minimax-h3/reconciliation-candidates", params=params).status_code == 422
     assert fake.list_calls == [(50, 1)]
     _unchanged(service, task, fake)
+
+
+@pytest.mark.parametrize("has_candidate", [False, True])
+def test_reconciliation_coverage_survives_leader_reopen_without_candidate_body_loss(
+    tmp_path: Path, has_candidate: bool,
+) -> None:
+    fake = PagedH3Client()
+    service, task = _unknown(tmp_path, fake)
+    original = fake.remote_tasks["remote-1"]
+    # A long, compatible candidate needs an exact read before any match is
+    # chosen; an incompatible row must not inflate the candidate count.
+    original.content = H3TaskContent(prompt="Saved remote prompt. " * 100 + "EXACT_PROMPT_END")
+    expected_tasks = [original.model_dump(mode="json")] if has_candidate else []
+    if has_candidate:
+        fake.remote_tasks["other-duration"] = original.model_copy(update={"id": "other-duration", "duration": 10})
+    else:
+        fake.remote_tasks.clear()
+    descriptor = service.tool_registry.describe("route.list_h3_reconciliation")
+    assert descriptor.effect == ToolEffect.EXTERNAL and descriptor.idempotent
+    view = service.create_agent_run(task.project_id, AgentRunCreateRequest(
+        objective="Read the exact remote query scope; unresolved submission stays unknown.",
+        execution_target=ProductionExecutionTarget.REAL_H3,
+        initial_plan=AgentPlanProposal(summary="Read candidates once.", steps=[PlanStep(
+            id="query", title="Read candidates", kind=ActionKind.TOOL_CALL,
+            assigned_agent="production-manager", tool_name="route.list_h3_reconciliation",
+            instructions="Read candidates and coverage without binding or resubmitting.",
+            arguments={"project_id": task.project_id, "task_id": task.id,
+                       "offset": 0, "page_size": 100, "max_pages": 10},
+        )]),
+    ))
+    run_id = view.snapshot.run.id
+    service.production_manager.advance(run_id, AgentRunAdvanceRequest(), allow_replanning=False)
+    actions = service.production_manager.runtime.store.list_actions(run_id)
+    assert len(actions) == 1 and actions[0].status.value == "SUCCEEDED"
+    action = actions[0]
+    assert action.tool_result_context_ref is not None
+    expected_calls = [(0, 100), (2, 100)] if has_candidate else [(0, 100)]
+    assert fake.list_calls == expected_calls
+
+    resumed = ShortDramaService(
+        database_path=tmp_path / "app_data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace", h3_client_factory=lambda _key: fake,
+    )
+    runtime = resumed.production_manager.runtime
+    saved = runtime.store.get_context_snapshot(action.tool_result_context_ref, run_id)
+    assert saved is not None
+    result = cast(dict[str, JsonValue], saved["result"])
+    output = cast(dict[str, JsonValue], result["output"])
+    assert output["tasks"] == expected_tasks
+    receipt = cast(dict[str, JsonValue], result["receipt"])
+    assert receipt["current_state"] == {"query": output["query"], "candidate_count": int(has_candidate)}
+    assert receipt["artifact_refs"] == result["artifact_refs"] and receipt["changed_ids"] == {}
+
+    client = ScriptedClient([json.dumps({"summary": "Query scope is known; submission remains unresolved.",
+                                        "goal_complete": True, "steps": []})])
+    planner = LanguageProductionPlanner(client)
+    planner.context_compiler = ModelInputCompiler(runtime.store)
+    planner.propose_plan(context=runtime.context(run_id), skill_prompt="", method_skills=[],
+        tools=resumed.production_manager.tools.list(), current_plan=None, reason="Continue after reopen.")
+    assert len(client.payloads) == 1
+    payload = client.payloads[0]
+    context = cast(dict[str, JsonValue], payload["context"])
+    recent = cast(list[dict[str, JsonValue]], context["recent_actions"])
+    visible = next(row for row in recent if row["id"] == action.id)
+    assert json.loads(cast(str, visible["summary"])) == receipt
+    assert "未找到候选不代表未提交" in cast(str, visible["summary"])
+    ref = cast(dict[str, JsonValue], visible["tool_result_ref"])
+    assert ref["context_ref"] == action.tool_result_context_ref and ref["pointer"] == "/result"
+    assert "EXACT_PROMPT_END" not in json.dumps(payload)  # No unasked candidate details inline.
+    assert [row.tool_name for row in runtime.store.list_actions(run_id)] == ["route.list_h3_reconciliation"]
+
+    if has_candidate:
+        read = resumed.tool_registry.invoke("agent.read_context", {
+            "project_id": task.project_id, "run_id": run_id,
+            "snapshot_id": action.tool_result_context_ref, "pointer": "/result/output/tasks", "limit": 6000,
+        })
+        assert read.status == ToolCallStatus.SUCCEEDED and read.output is not None
+        assert json.loads(cast(str, read.output["content"])) == expected_tasks
+        assert read.output["next_offset"] is None
+    assert fake.list_calls == expected_calls and fake.query_calls == []
+    _unchanged(resumed, task, fake)

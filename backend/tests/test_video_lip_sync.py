@@ -122,7 +122,7 @@ def lip_sync_fixture(tmp_path: Path, source: Path, fake: FakeKling, *, reverse: 
     assert clip.model_extra is not None
     clip.model_extra["colorCorrection"] = {"brightness": 15, "contrast": 0, "saturation": 0, "temperature": 0,
         "tint": 0, "exposure": 0, "highlights": 0, "shadows": 0}
-    clip.model_extra["crop"] = {"left": 5, "right": 0, "top": 0, "bottom": 0}
+    clip.model_extra["colorLabel"] = "blue"
     clip.audioFadeInSeconds, clip.audioFadeOutSeconds, clip.volume = 1.5, 1.25, .6
     clip.model_extra.update(transitionIn={"type": "fade-to-black", "duration": .5},
         transitionOut={"type": "fade-to-black", "duration": .5}) if clip.model_extra is not None else None
@@ -455,7 +455,7 @@ def test_exact_adoption_preserves_other_uses_manual_changes_and_actual_audio(tmp
     assert pieces[1].muted and pieces[1].volume == 0
     assert all(c.opacity == 73 and c.flipH for c in pieces)
     assert all((c.model_extra or {}).get("colorCorrection") == (before_editor.timelines[0].clips[0].model_extra or {}).get("colorCorrection") for c in pieces)
-    assert all((c.model_extra or {}).get("crop") == {"left": 5, "right": 0, "top": 0, "bottom": 0} for c in pieces)
+    assert all((c.model_extra or {}).get("colorLabel") == "blue" for c in pieces)
     assert (pieces[0].model_extra or {})["transitionIn"] == {"type": "fade-to-black", "duration": .5}
     assert (pieces[-1].model_extra or {})["transitionOut"] == {"type": "fade-to-black", "duration": .5}
     assert all((c.model_extra or {}).get("transitionIn", {}).get("type") == "none" for c in pieces[1:])

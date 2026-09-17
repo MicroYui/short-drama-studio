@@ -178,7 +178,19 @@ def project_retained_read_results(
         if not isinstance(observation, dict) or observation.get("tool_name") == "agent.read_context":
             continue
         result = observation.get("result")
-        if not isinstance(result, dict) or count_text_tokens(json_text(result)) <= 6000:
+        if not isinstance(result, dict):
+            continue
+        output = result.get("output")
+        generation_plan = output.get("generation_plan") if isinstance(output, dict) else None
+        units = generation_plan.get("units") if isinstance(generation_plan, dict) else None
+        # A retained plan read is also a directory of unselected groups. Keep
+        # their identities/order/windows; the exact prose stays in this read's
+        # durable snapshot. The selected unit's comparison criteria stay inline.
+        unit_matches = [isinstance(unit, dict) and bool(_selected_ids(unit) & selected)
+                        for unit in units] if isinstance(units, list) else []
+        scoped_plan = (observation.get("tool_name") == "route.get_generation_plan"
+                       and any(unit_matches) and not all(unit_matches))
+        if count_text_tokens(json_text(result)) <= 6000 and not scoped_plan:
             continue
         sequence = observation.get("source_sequence")
         snapshot_id = f"context-read-{work_order.id}-{sequence}"
@@ -223,7 +235,18 @@ def project_retained_read_results(
         content = output.get("content") if isinstance(output, dict) else None
         editor = content.get("project") if isinstance(content, dict) else None
         view: JsonValue
-        if observation.get("tool_name") == "timeline.read_editorial" and isinstance(editor, dict):
+        if scoped_plan and isinstance(units, list) and isinstance(generation_plan, dict) and isinstance(output, dict):
+            directory: list[JsonValue] = []
+            for position, unit in enumerate(units):
+                if unit_matches[position] or not isinstance(unit, dict):
+                    directory.append(unit)
+                    continue
+                directory.append({**{key: unit[key] for key in (
+                    "id", "clip_group_id", "output_slot_id", "shot_ids", "shot_windows",
+                    "requested_duration_seconds", "provider", "model", "resolution") if key in unit},
+                    "saved_content": marker(unit, f"/output/generation_plan/units/{position}")})
+            view = {**result, "output": {**output, "generation_plan": {**generation_plan, "units": directory}}}
+        elif observation.get("tool_name") == "timeline.read_editorial" and isinstance(editor, dict):
             # The typed timeline read already provides clip/subtitle summaries.
             # Its optional full editor serialization is needed for the immediate
             # read, but repeating every asset and clip in later decisions is not.

@@ -6,6 +6,8 @@ working_set 是当前可重建工作集，不是历史对话。
 
 read_observations 按只读 Tool 身份保留最新独立事实；latest_handoff 是刚完成的交接；tool_attempt_observations 按 attempt_ref 保留当前修复显式读取的其他精确候选；entities、tool_checkpoints、artifact_refs 是紧凑状态。
 
+latest_read_batch 列出同一次决定的全部独立读取及各自状态、错误、引用。成功正文仍在按选择范围折叠的 read_observations、entities 或 latest_handoff；结合各项观察时点/revision，不视为同一数据库快照。批内一项失败不代表其他项失败，也不要求重读已成功的内容；INTERRUPTED 的结果未知，由你依据具体缺项判断是否需再读。批内明确返回的图片按 image_observations 的实际索引查看，不把 unavailable 当作已观察。
+
 合并理解这些信息，不得仅因某个观察不是 latest_handoff 就重复读取；只在后续写入可能使事实过期时重读。
 
 不叠加 project.get、整份上游工件和当前任务切片。

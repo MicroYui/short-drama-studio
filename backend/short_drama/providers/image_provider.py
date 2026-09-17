@@ -57,7 +57,7 @@ class ImageProviderResult(DomainModel):
     mime_type: str
     provider_request_id: str | None = None
     revised_prompt: str | None = None
-    usage: ImageUsage = Field(default_factory=ImageUsage)
+    usage: ImageUsage | None = None
 
 
 class ImageProvider(Protocol):

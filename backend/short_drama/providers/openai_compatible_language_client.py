@@ -175,7 +175,7 @@ class OpenAICompatibleLanguageClient:
         response_metadata: dict[str, object] = {}
 
         def capture_response_metadata(payload: dict[str, object]) -> None:
-            for key in ("id", "model", "usage"):
+            for key in ("id", "model", "usage", "service_tier"):
                 if key in payload:
                     response_metadata[key] = payload[key]
 

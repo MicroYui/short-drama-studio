@@ -74,7 +74,10 @@ class StudioSceneOutline(DomainModel):
 
 
 class StudioTimelineSave(DomainModel):
-    timeline: dict[str, JsonValue]
+    timeline: dict[str, JsonValue] = Field(description=(
+        "The current LTX editor project or a timeline record containing project. "
+        "Spatial crop is unsupported: omit clip.crop or set it to null. "
+        "trimStart/duration trim time, not the picture area."))
     expected_revision: int = Field(default=0, ge=0)
     anchor_clip_id: str | None = None
 
@@ -90,6 +93,8 @@ class StudioTimelineSave(DomainModel):
 
 
 class StudioTakeSelectRequest(DomainModel):
+    audio_policy: Literal["REPLACE_LINKED_AUDIO", "KEEP_CURRENT_AUDIO"] = Field(default="REPLACE_LINKED_AUDIO",
+        description="KEEP_CURRENT_AUDIO changes only picture. Existing independent/linked audio and subtitles stay; an unsplit native soundtrack is retained as a local audio clip and the candidate video is muted. Requires one current clip and editorial revision.")
     shot_ids: list[str] | None = None
     clip_ids: list[str] | None = None
     expected_editorial_revision: int | None = Field(default=None, ge=0)
@@ -100,6 +105,8 @@ class StudioTakeSelectRequest(DomainModel):
 
     @model_validator(mode="after")
     def validate_source_selection(self) -> StudioTakeSelectRequest:
+        if self.audio_policy == "KEEP_CURRENT_AUDIO" and (not self.clip_ids or len(self.clip_ids) != 1 or self.expected_editorial_revision is None):
+            raise ValueError("KEEP_CURRENT_AUDIO requires exactly one saved clip_id and expected_editorial_revision")
         if (self.source_in_seconds is None) != (self.source_out_seconds is None):
             raise ValueError("source_in_seconds and source_out_seconds must be supplied together")
         if self.source_in_seconds is not None and self.source_out_seconds is not None:

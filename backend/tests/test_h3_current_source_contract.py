@@ -13,7 +13,7 @@ from short_drama.h3_group_operation import H3GroupOperationRequest, _source_iden
 from short_drama.h3_models import H3MediaInput, H3MediaKind, H3MediaRole, H3MediaSource, H3ProductionRoutePlanRequest, H3SavedRouteSource, H3ShotRouteDirective
 from short_drama.language_models import H3GenerationUnitContextRequest
 from short_drama.models import ApprovalStatus, AssetKind, AssetMediaType, Freshness, ImageReferenceRole, ProductionDocumentOrigin, ReferencePlanEntry, ShotReferenceCue, VideoGenerationRoute
-from short_drama.production_contracts import GenerationPlanCompileRequest, StoryboardPatchRequest, StoryboardShotReplacement
+from short_drama.production_contracts import GenerationPlanCompileRequest, StoryboardClipGroupSplice, StoryboardPatchRequest, StoryboardShotReplacement
 from short_drama.providers.h3_language_prompt import _compiler_instructions
 from short_drama.providers.h3_multishot_example import MULTISHOT_EXAMPLE
 from short_drama.providers.minimax_h3_compiler import build_h3_generation_unit_prompt
@@ -74,6 +74,55 @@ def test_source_read_does_not_substitute_unknown_requested_unit(tmp_path):
     request = _read_request(generation, unit).model_copy(update={"generation_unit_id": "missing-group"})
     with pytest.raises(KeyError):
         service.get_h3_generation_unit_context(document.project.id, request)
+    assert fake.calls == []
+
+
+def test_current_group_missing_from_pinned_plan_has_actionable_feedback_without_refresh(tmp_path):
+    service, fake, document, generation, unit, _ = _fixture(tmp_path)
+    project_id = document.project.id
+    board = service.get_storyboard(project_id)
+    original = board.storyboard.clip_groups[0]
+    new_group_id = "clip-group-xh-04"
+    split_groups = [original.model_copy(update={"shot_ids": [unit.shot_ids[0]]}),
+                    original.model_copy(update={"id": new_group_id, "shot_ids": [unit.shot_ids[1]]})]
+    service.patch_storyboard(project_id, StoryboardPatchRequest(
+        base_version_id=board.version.id, origin=ProductionDocumentOrigin.AGENT,
+        clip_group_splices=[StoryboardClipGroupSplice(
+            clip_group_ids=[original.id], clip_groups=split_groups)]))
+    # Reopen real SQLite: this current group exists, but not in the requested v1.
+    reopened = ShortDramaService(database_path=tmp_path / "data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace", language_provider_factory=lambda _key, _url: fake)
+    assert new_group_id in {group.id for group in reopened.get_storyboard(project_id).storyboard.clip_groups}
+    assert new_group_id not in {entry.id for entry in generation.generation_plan.units}
+    before = reopened.repository.get_project(project_id)
+    request = _read_request(generation, unit).model_copy(update={"generation_unit_id": new_group_id})
+    result = reopened.tool_registry.invoke("route.get_generation_unit_context", {
+        "project_id": project_id, "request": request.model_dump(mode="json")})
+    assert result.status == ToolCallStatus.FAILED and result.error is not None
+    assert result.error.kind == "KeyError" and result.error.retryable is False
+    for detail in (new_group_id, generation.document.id, generation.version.id, "(v1)",
+                   "already in that version", "route.prepare_h3_group", "clip_group_id",
+                   "artifact.read_current(shot_id=...)",
+                   "No current group was substituted for the requested unit."):
+        assert detail in result.error.message
+    assert result.output is None and result.artifact_refs == [] and result.receipt is None
+    with pytest.raises(KeyError, match="not present in requested GenerationPlan"):
+        reopened.get_h3_generation_unit_context(project_id, request)
+    assert reopened.repository.get_project(project_id) == before
+    assert reopened.repository.list_h3_route_plans(project_id) == []
+    assert reopened.repository.list_tasks(project_id) == [] and fake.calls == []
+
+    # The suggested current-shot read works immediately; no full-plan refresh is required.
+    read = reopened.tool_registry.invoke("artifact.read_current", {
+        "project_id": project_id, "shot_id": unit.shot_ids[1]})
+    assert read.status == ToolCallStatus.SUCCEEDED, read.error
+    assert reopened.repository.get_project(project_id) == before
+    # Only an explicit plan update adds the new member to a saved version.
+    current = _compile_current(reopened, project_id)
+    updated_request = request.model_copy(update={"generation_plan_version_id": current.version.id})
+    context = reopened.get_h3_generation_unit_context(project_id, updated_request)
+    assert context.generation_unit_id == new_group_id and context.source_status == "CURRENT_PLAN"
+    assert context.generation_plan_version_id == current.version.id != generation.version.id
     assert fake.calls == []
 
 

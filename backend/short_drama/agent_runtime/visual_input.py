@@ -1,11 +1,11 @@
-"""Supply the latest completed Tool's exact images to the next Worker decision."""
+"""Supply exact images from the latest Tool decision, including read batches."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from pydantic import JsonValue, ValidationError
 
-from short_drama.agent_runtime.models import SpecialistTurnStatus, WorkOrder
+from short_drama.agent_runtime.models import SpecialistTurnRecord, SpecialistTurnStatus, WorkOrder
 from short_drama.image_observation import VisualAttachment, encode_attachment
 
 
@@ -19,6 +19,53 @@ def prepare_worker_visual_input(work_order: WorkOrder, *, project_id: str) -> Pr
     if not work_order.specialist_turns:
         return None
     turn = max(work_order.specialist_turns, key=lambda item: item.sequence)
+    if turn.batch_id is None:
+        return _prepare_turn_visual_input(turn, project_id=project_id)
+    turns = sorted((item for item in work_order.specialist_turns if item.batch_id == turn.batch_id),
+        key=lambda item: item.sequence)
+    if any(item.status not in {SpecialistTurnStatus.COMPLETED, SpecialistTurnStatus.INTERRUPTED} for item in turns):
+        return None
+    urls: list[str] = []
+    images: list[JsonValue] = []
+    unavailable: list[JsonValue] = []
+    attempts: list[JsonValue] = []
+    has_selections = False
+    for item in turns:
+        identity: dict[str, JsonValue] = {
+            "tool_attempt_id": item.id, "source_sequence": item.sequence, "tool_name": item.tool_name,
+            "updated_at": item.updated_at.isoformat(),
+        }
+        attempts.append({**identity, "status": item.status.value,
+            "result_status": item.result.get("status") if isinstance(item.result, dict) else None})
+        prepared = _prepare_turn_visual_input(item, project_id=project_id)
+        if prepared is None:
+            continue
+        has_selections = True
+        selected_images = prepared.observations["images"]
+        if isinstance(selected_images, list):
+            for selected in selected_images:
+                if isinstance(selected, dict):
+                    images.append({**selected, **identity, "image_index": len(images) + 1})
+        selected_unavailable = prepared.observations["unavailable"]
+        if isinstance(selected_unavailable, list):
+            unavailable.extend({**selected, **identity} for selected in selected_unavailable if isinstance(selected, dict))
+        urls.extend(prepared.image_urls)
+    if not has_selections:
+        return None
+    return PreparedVisualInput(tuple(urls), {
+        "batch_id": turn.batch_id, "tool_attempts": attempts, "images": images, "unavailable": unavailable,
+        "guidance": (
+            "The attached images, in image_index order, are exact explicit selections from successful Tools in your latest read batch. "
+            "Each image and unavailable selection identifies its own tool_attempt_id, source_sequence and tool_name; "
+            "selection_index is local to that Tool, while image_index indexes this decision's attached images. "
+            "Failed or interrupted Tools supply no images. You can inspect the attached pixels now; viewing does not approve, "
+            "adopt, complete production or create a QA score. Do not claim an unavailable image was observed. "
+            "Use recorded purpose, status and dimensions, and save useful findings with exact version and purpose."
+        ),
+    })
+
+
+def _prepare_turn_visual_input(turn: SpecialistTurnRecord, *, project_id: str) -> PreparedVisualInput | None:
     result = turn.result
     if turn.status != SpecialistTurnStatus.COMPLETED or not isinstance(result, dict) or result.get("status") != "SUCCEEDED":
         return None

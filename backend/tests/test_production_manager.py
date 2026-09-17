@@ -4465,6 +4465,7 @@ def test_language_specialist_receives_append_only_work_order_progress(
     assert set(first_payload["response_schemas"]) == {
         "final_result",
         "tool_request",
+        "read_batch_request",
         "tool_schema_request",
     }
     assert list(
@@ -4564,6 +4565,7 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
     assert set(failed.pending_protocol_feedback.validation_issues) == {
         "agent_result",
         "tool_request",
+        "read_batch_request",
         "tool_schema_request",
     }
     assert marker in failed.pending_protocol_feedback.rejected_response

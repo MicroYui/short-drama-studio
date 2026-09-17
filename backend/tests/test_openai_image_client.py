@@ -154,7 +154,55 @@ def test_generation_uses_current_gpt_image_json_contract() -> None:
         "output_format": "png",
     }
     assert result.provider_request_id == "req-generation"
+    assert result.usage is not None
     assert result.usage.output_tokens_details.image_tokens == 100
+
+
+@pytest.mark.parametrize("raw_usage", [None, {}, {"input_tokens": 30}])
+def test_missing_image_usage_is_unknown_not_zero(raw_usage: object) -> None:
+    payload = _success_payload()
+    if raw_usage is None:
+        del payload["usage"]
+    else:
+        payload["usage"] = raw_usage
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, payload))
+    result = _client(session).create(ImageProviderRequest(operation=ImageOperation.GENERATE, prompt="image"), [])
+    if raw_usage in (None, {}):
+        assert result.usage is None
+    else:
+        assert result.usage is not None
+        assert result.usage.input_tokens == 30
+        assert result.usage.total_tokens is None
+        assert result.usage.output_tokens is None
+        assert result.usage.input_tokens_details.image_tokens is None
+        assert result.usage.input_tokens_details.cached_tokens is None
+
+
+def test_image_cached_modalities_and_safe_usage_survive_provider_parsing() -> None:
+    payload = _success_payload()
+    payload["usage"] = {
+        "input_tokens": 30, "output_tokens": 100, "total_tokens": 130,
+        "input_tokens_details": {"image_tokens": 20, "text_tokens": 10, "cached_tokens": 12,
+            "cached_tokens_details": {"image_tokens": 8, "text_tokens": 4},
+            "cache_write_tokens": 5, "authorization": "secret-detail"},
+        "output_tokens_details": {"image_tokens": 100, "text_tokens": 0},
+        "api_key": "secret-usage", "request": {"prompt": "secret-prompt"},
+    }
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, payload))
+    result = _client(session).create(ImageProviderRequest(operation=ImageOperation.GENERATE, prompt="image"), [])
+    assert result.usage is not None
+    assert result.usage.input_tokens_details.cached_tokens == 12
+    cached = result.usage.input_tokens_details.cached_tokens_details
+    assert cached is not None
+    assert (cached.image_tokens, cached.text_tokens) == (8, 4)
+    assert result.usage.reported_usage is not None
+    assert result.usage.reported_usage["input_tokens_details"] == {
+        "image_tokens": 20, "text_tokens": 10, "cached_tokens": 12,
+        "cached_tokens_details": {"image_tokens": 8, "text_tokens": 4}, "cache_write_tokens": 5,
+    }
+    assert "secret-" not in result.usage.model_dump_json()
 
 
 def test_edit_uses_high_fidelity_multi_image_inputs() -> None:

@@ -3,6 +3,7 @@ import { pathToFileUrl } from '../../lib/file-url'
 import type { ReferenceCue } from './studio-api'
 import { projectSchema, type Project } from '../../types/project-model'
 import { mediaLabel } from './studio-media-library'
+import { editorialShotUses } from './studio-shot-uses'
 export { assetGroups, mediaLabel } from './studio-media-library'
 export type { AssetGroup } from './studio-media-library'
 
@@ -52,21 +53,14 @@ export function shotMedia(project: ProjectAggregate, shot: ShotPlan) {
     ? Math.max(0, Math.min(take.duration_seconds, hasFollowingWindow ? windowEnd : take.duration_seconds) - window.source_in_seconds)
     : selectedClip?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds)
   const editorial = currentEditorial(project)
-  const timeline = editorial?.timelines.find(item => item.id === editorial.activeTimelineId)
-  const adopted = (timeline?.clips ?? []).filter(item => item.type === 'video' && item.sourceShotId === shot.id).sort((a, b) => a.startTime - b.startTime)
-  const occurrences: { start: number; end: number }[] = []
-  for (const item of adopted) {
-    const last = occurrences.at(-1)
-    if (last && item.startTime <= last.end + 0.001) last.end = Math.max(last.end, item.startTime + item.duration)
-    else occurrences.push({ start: item.startTime, end: item.startTime + item.duration })
-  }
+  const occurrences = editorial ? editorialShotUses(editorial, project.takes, shot.id) : []
   const adoptedDuration = editorial ? occurrences[0] ? occurrences[0].end - occurrences[0].start : null : clip?.duration_seconds ?? null
   return {
     take,
     materialDuration: take ? materialDuration : null,
     adoptedDuration,
     occurrenceCount: occurrences.length,
-    hasEditorial: Boolean(editorial && adopted.length),
+    hasEditorial: Boolean(editorial && occurrences.length),
     path: take?.media_path ?? clip?.media_path,
     sourceIn: selectedClip?.source_in_seconds ?? window?.source_in_seconds ?? 0,
     duration: window ? materialDuration : selectedClip?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds),

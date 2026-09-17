@@ -1148,6 +1148,8 @@ def validate_route_plan_freshness(
     plan: H3ProductionRoutePlan,
     document: ProjectDocument,
 ) -> None:
+    from short_drama.generation_storyboard import generation_document as source_view, generation_revision_matches
+    document = source_view(document)
     if plan.input_script_version_id != document.project.current_script_version_id:
         raise RoutePlanningError("Route plan uses an outdated script version")
     if plan.input_bible_version_id != document.project.current_bible_version_id:
@@ -1224,7 +1226,8 @@ def validate_route_plan_freshness(
         stale.extend(
             shot_id
             for shot_id, revision in expected_revisions.items()
-            if revision_by_shot.get(shot_id) != revision
+            if not generation_revision_matches(document, shot_id, revision,
+                plan.input_storyboard_document_id, plan.input_storyboard_version_id, item.clip_group_id)
         )
     stale = list(dict.fromkeys(stale))
     if stale:

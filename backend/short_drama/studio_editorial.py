@@ -137,10 +137,16 @@ def clip_media_source(asset: EditorAsset, clip: EditorClip) -> tuple[str, float]
 def validate_editorial(service: ShortDramaService, project_id: str, value: dict[str, JsonValue],
                        *, purpose: Literal["save", "export"] = "save") -> EditorProject:
     from short_drama.studio_media import resolve_media_path
+    from short_drama.studio_shot_uses import declared_group_windows, declared_relation_is_saved
     project = EditorProject.model_validate(value)
     if project.id != project_id:
         raise ValueError("剪辑与当前集不匹配。")
     assets = {asset.id: asset for asset in project.assets}
+    group_takes = ({take.id: take for take in service.repository.list_takes(project_id)}
+                   if any((clip.model_extra or {}).get("sourceShotIds") is not None
+                          for timeline in project.timelines for clip in timeline.clips) else {})
+    saved_group_project: EditorProject | None = None
+    saved_groups_loaded = False
     if len(assets) != len(project.assets):
         raise ValueError("素材标识重复。")
     if project.activeTimelineId not in {timeline.id for timeline in project.timelines}:
@@ -153,14 +159,40 @@ def validate_editorial(service: ShortDramaService, project_id: str, value: dict[
                 resolve_media_path(service, asset.path, project_id, require_exists=False)
             except ValueError as exc:
                 raise ValueError(f"素材 {asset.id}：{exc}") from exc
-    for timeline in project.timelines:
+    for timeline_index, timeline in enumerate(project.timelines):
         if len({clip.id for clip in timeline.clips}) != len(timeline.clips):
             raise ValueError("同一时间线的片段标识重复。")
         if len({cue.id for cue in timeline.subtitles}) != len(timeline.subtitles):
             raise ValueError("同一时间线的字幕标识重复，请为不同字幕保留独立标识。")
-        for clip in timeline.clips:
+        for clip_index, clip in enumerate(timeline.clips):
             if clip.trackIndex >= len(timeline.tracks):
                 raise ValueError("片段的轨道不存在。")
+            try:
+                windows = declared_group_windows(clip, assets, group_takes)
+                if windows:
+                    take = group_takes[str((clip.model_extra or {})["sourceTakeId"])]
+                    if not set(windows).issubset(take.selected_shot_ids):
+                        if not saved_groups_loaded:
+                            current = service.repository.get_project(project_id, include_studio_records=False)
+                            stored = (current.editorial_timeline or {}).get("project") if current else None
+                            saved_group_project = EditorProject.model_validate(stored) if isinstance(stored, dict) else None
+                            saved_groups_loaded = True
+                        if (saved_group_project is None or saved_group_project.id != project_id
+                                or not declared_relation_is_saved(clip, windows, saved_group_project, group_takes)):
+                            raise ValueError("sourceShotIds 包含该 Take 未采用、也没有当前已保存明确关联的镜头。")
+            except ValueError as exc:
+                raise ValueError(f"时间线 {timeline.id} / 片段 {clip.id} / sourceShotIds：{exc}") from exc
+            # Keep legacy projects readable, but never acknowledge an effect
+            # that neither the editor nor the shared renderer implements.
+            if ((clip.model_extra or {}).get("crop") is not None
+                    and (purpose == "save" or (
+                        timeline.id == project.activeTimelineId and editorial_clip_enabled(timeline, clip)))):
+                raise ValueError(
+                    f"时间线 {timeline.id} / 片段 {clip.id} / "
+                    f"/project/timelines/{timeline_index}/clips/{clip_index}/crop："
+                    "当前编辑器和导出不支持空间裁切 crop。请删除该字段或设为 null 后再保存/导出。"
+                    "trimStart/duration 只做时间裁切；flipH/flipV、opacity 和 colorCorrection "
+                    "分别控制翻转、透明度和调色，不能替代空间裁切。")
             if clip.type in {"video", "image", "audio"}:
                 asset = assets.get(clip.assetId or "")
                 # LTX keeps a video's separated original sound bound to the
@@ -197,6 +229,8 @@ def validate_editorial(service: ShortDramaService, project_id: str, value: dict[
 
 def read_editorial(service: ShortDramaService, project_id: str) -> StudioEditorial:
     aggregate = service.get_project(project_id)
+    from short_drama.generation_storyboard import generation_document
+    aggregate = aggregate.model_copy(update={"document": generation_document(aggregate.document)})
     saved = aggregate.document.editorial_timeline
     if saved and isinstance(saved.get("project"), dict):
         return StudioEditorial(revision=int(cast(int, saved.get("revision", 0))), project=cast(dict[str, JsonValue], saved["project"]),

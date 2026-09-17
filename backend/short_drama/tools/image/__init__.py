@@ -26,7 +26,7 @@ from short_drama.image_models import (
     ImageRegion,
 )
 from short_drama.image_observation import VisualAttachment, VisualRole, visual_attachment
-from short_drama.models import ProjectAggregate, ProjectDocument
+from short_drama.models import ApprovalStatus, Freshness, ProjectAggregate, ProjectDocument
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -161,10 +161,28 @@ class ImageViewInput(ToolModel):
     purpose: str = Field(min_length=1, max_length=1000)
 
 
+class ImageViewLocalSource(ToolModel):
+    local_path: str
+
+
+class ImageViewExternalSource(ToolModel):
+    external_url: str
+
+
+class ImageViewOriginalSource(ToolModel):
+    artifact_ref: ArtifactRef
+    asset_id: str
+    source: ImageViewLocalSource | ImageViewExternalSource
+    approval_status: ApprovalStatus
+    freshness: Freshness
+
+
 class ImageViewOutput(ToolModel):
     images: list[ArtifactRef]
     purpose: str
     delivery: Literal["NEXT_AGENT_DECISION"] = "NEXT_AGENT_DECISION"
+    original_sources: list[ImageViewOriginalSource] = Field(default_factory=list[ImageViewOriginalSource],
+        description="Exact registered originals in images order, not region crops or resized review images. Viewing does not approve these sources.")
 
 
 class ImageTaskActionInput(ToolModel):
@@ -264,17 +282,28 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             attachments.append(visual_attachment(request.project_id, asset_id, version,
                 role="REFERENCE", purpose=request.purpose, region=selection.region))
         refs = [item.artifact_ref for item in attachments]
-        return ToolExecution(output=ImageViewOutput(images=refs, purpose=request.purpose),
+        originals: list[ImageViewOriginalSource] = []
+        for attachment in attachments:
+            if attachment.external_url and attachment.region is None:
+                source = ImageViewExternalSource(external_url=attachment.external_url)
+            else:
+                assert attachment.local_path is not None
+                source = ImageViewLocalSource(local_path=attachment.local_path)
+            originals.append(ImageViewOriginalSource(artifact_ref=attachment.artifact_ref,
+                asset_id=attachment.asset_id, source=source,
+                approval_status=attachment.approval_status, freshness=attachment.freshness))
+        return ToolExecution(output=ImageViewOutput(images=refs, purpose=request.purpose, original_sources=originals),
             artifact_refs=tuple(refs), visual_attachments=tuple(attachments))
 
     registry.register(ToolSpec(
-        id="image.view", version=1, category=ToolCategory.IMAGE,
+        id="image.view", version=2, category=ToolCategory.IMAGE,
         description=(
             "读取本项目精确图片版本，按请求顺序把实际像素附到紧接的Worker决策，不调用语言/图像Provider、不创建版本。"
             "用于回看旧图、比较原始/合成/母图或查看细节；image.advance、crop等刚完成的结果已自动附图，不必为取像素再调用QA。"
             "region可选，按EXIF转正后的归一化x/y/width/height取原像素区域；观察图最长边2048，原文件不变。"
             "已拒绝或过期图片可以供诊断，状态如实保留，查看不等于采用、批准或检查通过。"
             "使用本次image_observations中的实际Image顺序、尺寸和不可读取原因；缺图不回退到current。"
+            "original_sources返回精确原图的asset/version和source，可供H3显式媒体输入使用；它不是region裁区或缩放观察图，后续生成仍校验来源和状态。"
         ), effect=ToolEffect.READ, idempotent=True, input_model=ImageViewInput,
         output_model=ImageViewOutput, handler=view_images,
         tags=frozenset({"image", "read", "observe", "region", "compare"}),

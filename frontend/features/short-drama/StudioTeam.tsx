@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BookOpen, Camera, Check, ChevronDown, CircleDot, Clapperboard, Layers3, Loader2, PenLine, ScanEye } from 'lucide-react'
 import type { StudioEvent, StudioJob, StudioWorker } from './studio-api'
 import { StudioMethodDetail } from './StudioMethodDetail'
+import { isWorkerWaitingForGeneration } from './studio-worker-status'
 
 const roles: Record<string, { label: string; Icon: typeof PenLine }> = {
   WRITER: { label: '编剧', Icon: PenLine }, CONCEPT: { label: '故事策划', Icon: PenLine },
@@ -57,8 +58,6 @@ const toolLabels: Record<string, string> = {
 }
 const labelTool = (name: string) => toolLabels[name] || name
 const stringField = (event: StudioEvent, key: string) => typeof event.data[key] === 'string' ? String(event.data[key]) : ''
-// A previous poll deadline can remain in history after the worker is running.
-const isPolling = (worker: StudioWorker) => worker.status === 'NEEDS_ATTENTION' && Boolean(worker.waiting_until) && !worker.waiting_review
 
 export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; events: StudioEvent[]; job: StudioJob }) {
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -85,7 +84,7 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
     <div className="sd-team-workers">{visible.map(worker => {
       const descriptor = roles[worker.skill_role ?? ''] ?? { label: worker.role, Icon: CircleDot }
       const Icon = descriptor.Icon
-      const polling = isPolling(worker)
+      const polling = isWorkerWaitingForGeneration(worker)
       const review = worker.waiting_review && !['COMPLETED', 'CANCELLED'].includes(worker.status)
       const running = active && worker.status === 'IN_PROGRESS' && !polling && !review
       const done = worker.status === 'COMPLETED'

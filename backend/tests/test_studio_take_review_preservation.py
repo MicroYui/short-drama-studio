@@ -225,3 +225,69 @@ def test_withdrawal_needs_an_explicit_reason_and_does_not_mark_passed() -> None:
         H3TakeReviewRequest(review_status=QaStatus.PASSED, hard_gate_passed=True,
             score=3, notes="No complete check.", retracted_issue_codes=["OLD_FINDING"],
             retraction_reason="Changed interpretation is not a complete check.")
+
+
+def test_pending_retraction_feedback_leads_to_a_normal_review_without_changing_the_edit(
+    current_h3_edit: tuple[ShortDramaService, str, Take],
+) -> None:
+    service, pid, take = current_h3_edit
+    service.review_h3_take(take.id, H3TakeReviewRequest(review_status=QaStatus.PENDING,
+        hard_gate_passed=False, score=3.5, notes="The current shot does not yet cover the originally planned exit.",
+        issues=[issue("ACTION_COMPLETION_MISMATCH", QaFailureCategory.CONTACT_CONTINUITY)]))
+    before = service.get_project(pid)
+    evidence_before = service.repository.get_route_evidence_for_take(take.id)
+    request = H3TakeReviewRequest(review_status=QaStatus.PENDING, hard_gate_passed=False, score=3.5,
+        notes="The user permits an implied exit; listening remains unknown.",
+        issues=[issue("LISTENING_NOT_VERIFIED")], retracted_issue_codes=["ACTION_COMPLETION_MISMATCH"],
+        retraction_reason="A complete visible exit was a self-imposed shot detail.").model_dump(mode="json")
+    failed = service.tool_registry.invoke("route.review_h3_take", {"take_id": take.id, "request": request})
+    assert failed.status.value == "FAILED" and failed.error is not None
+    assert "qa_status=PENDING" in failed.error.message
+    assert "remove both retracted_issue_codes and retraction_reason" in failed.error.message
+    assert "submit review_status=PENDING with the current issues and notes" in failed.error.message
+    assert service.get_project(pid) == before
+    assert service.repository.get_route_evidence_for_take(take.id) == evidence_before
+
+    # Follow the returned correction through the same registered Tool and persisted service.
+    del request["retracted_issue_codes"]
+    del request["retraction_reason"]
+    updated = service.tool_registry.invoke("route.review_h3_take", {"take_id": take.id, "request": request})
+    assert updated.status.value == "SUCCEEDED", updated.error
+    reviewed = service.repository.get_take(take.id)
+    assert reviewed and reviewed.qa_status == QaStatus.PENDING and not reviewed.qa_report.hard_gate_passed
+    assert reviewed.is_selected and reviewed.selected_shot_ids == take.selected_shot_ids
+    assert [item.code for item in reviewed.qa_report.issues] == ["LISTENING_NOT_VERIFIED"]
+    assert reviewed.qa_report.reviewer_notes == request["notes"]
+    after = service.get_project(pid)
+    assert after.document.editorial_timeline == before.document.editorial_timeline
+    assert after.document.shots == before.document.shots
+    assert [item for item in after.takes if item.id != take.id] == [item for item in before.takes if item.id != take.id]
+
+
+def test_unknown_retraction_feedback_names_current_codes_and_keeps_remaining_rejection(
+    current_h3_edit: tuple[ShortDramaService, str, Take],
+) -> None:
+    service, pid, take = current_h3_edit
+    service.review_h3_take(take.id, H3TakeReviewRequest(review_status=QaStatus.REJECTED,
+        hard_gate_passed=False, score=1, notes="Two recorded findings.",
+        issues=[issue("HAND_RULE"), issue("WRONG_DIALOGUE")]))
+    before = service.get_project(pid)
+    evidence_before = service.repository.get_route_evidence_for_take(take.id)
+    request = H3TakeReviewRequest(review_status=QaStatus.PENDING, hard_gate_passed=False, score=2,
+        notes="Dialogue failure still applies.", retracted_issue_codes=["ACTION_COMPLETION_MISMATCH"],
+        retraction_reason="The hand rule was misread.").model_dump(mode="json")
+    failed = service.tool_registry.invoke("route.review_h3_take", {"take_id": take.id, "request": request})
+    assert failed.status.value == "FAILED" and failed.error is not None
+    assert "qa_status=REJECTED" in failed.error.message
+    assert "Unrecorded retracted_issue_codes: ACTION_COMPLETION_MISMATCH" in failed.error.message
+    assert "Current recorded issue codes: HAND_RULE, WRONG_DIALOGUE" in failed.error.message
+    assert service.get_project(pid) == before
+    assert service.repository.get_route_evidence_for_take(take.id) == evidence_before
+
+    request["retracted_issue_codes"] = ["HAND_RULE"]
+    updated = service.tool_registry.invoke("route.review_h3_take", {"take_id": take.id, "request": request})
+    assert updated.status.value == "SUCCEEDED", updated.error
+    reviewed = service.repository.get_take(take.id)
+    assert reviewed and reviewed.qa_status == QaStatus.REJECTED and not reviewed.is_selected
+    assert [item.code for item in reviewed.qa_report.issues] == ["WRONG_DIALOGUE"]
+    assert service.get_project(pid).document.editorial_timeline == before.document.editorial_timeline

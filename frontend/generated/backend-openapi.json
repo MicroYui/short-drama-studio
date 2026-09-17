@@ -8739,6 +8739,16 @@
             ],
             "title": "Output Slot Id"
           },
+          "picture_only": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3PictureOnlyBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "project_id": {
             "title": "Project Id",
             "type": "string"
@@ -9520,6 +9530,89 @@
           "reason"
         ],
         "title": "H3NotSubmittedResolutionRequest",
+        "type": "object"
+      },
+      "H3PictureOnlyBinding": {
+        "additionalProperties": false,
+        "description": "Server-resolved sources, not a second editable timeline.",
+        "properties": {
+          "audio_sources": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Audio Sources",
+            "type": "array"
+          },
+          "picture": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Picture",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/H3PictureOnlyTarget"
+          }
+        },
+        "required": [
+          "project_id",
+          "shot_id",
+          "target",
+          "picture",
+          "audio_sources"
+        ],
+        "title": "H3PictureOnlyBinding",
+        "type": "object"
+      },
+      "H3PictureOnlyTarget": {
+        "additionalProperties": false,
+        "description": "One saved picture occurrence; its current mix is retained locally.",
+        "properties": {
+          "audio_policy": {
+            "const": "KEEP_CURRENT_AUDIO",
+            "title": "Audio Policy",
+            "type": "string"
+          },
+          "clip_id": {
+            "minLength": 1,
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "expected_editorial_revision": {
+            "minimum": 0.0,
+            "title": "Expected Editorial Revision",
+            "type": "integer"
+          },
+          "mode": {
+            "const": "PICTURE_ONLY",
+            "title": "Mode",
+            "type": "string"
+          },
+          "timeline_id": {
+            "minLength": 1,
+            "title": "Timeline Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "audio_policy",
+          "timeline_id",
+          "clip_id",
+          "expected_editorial_revision"
+        ],
+        "title": "H3PictureOnlyTarget",
         "type": "object"
       },
       "H3PricingSnapshot": {
@@ -11446,6 +11539,16 @@
             "title": "Override Allowed",
             "type": "boolean"
           },
+          "picture_only": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3PictureOnlyBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "prompt": {
             "maxLength": 7000,
             "minLength": 1,
@@ -11870,6 +11973,17 @@
           },
           "media_kind": {
             "$ref": "#/components/schemas/H3MediaKind"
+          },
+          "prepared_local_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Local Path"
           },
           "provider_file_id": {
             "title": "Provider File Id",
@@ -13035,6 +13149,37 @@
         "title": "ImageBackground",
         "type": "string"
       },
+      "ImageCachedTokenDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "image_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Tokens"
+          },
+          "text_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Tokens"
+          }
+        },
+        "title": "ImageCachedTokenDetails",
+        "type": "object"
+      },
       "ImageCostRecord": {
         "additionalProperties": false,
         "properties": {
@@ -13850,15 +13995,51 @@
       "ImageTokenDetails": {
         "additionalProperties": false,
         "properties": {
+          "cached_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Tokens"
+          },
+          "cached_tokens_details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageCachedTokenDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "image_tokens": {
-            "default": 0,
-            "title": "Image Tokens",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Tokens"
           },
           "text_tokens": {
-            "default": 0,
-            "title": "Text Tokens",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Tokens"
           }
         },
         "title": "ImageTokenDetails",
@@ -13868,25 +14049,61 @@
         "additionalProperties": false,
         "properties": {
           "input_tokens": {
-            "default": 0,
-            "title": "Input Tokens",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
           },
           "input_tokens_details": {
             "$ref": "#/components/schemas/ImageTokenDetails"
           },
           "output_tokens": {
-            "default": 0,
-            "title": "Output Tokens",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
           },
           "output_tokens_details": {
             "$ref": "#/components/schemas/ImageTokenDetails"
           },
+          "reported_usage": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider-reported token counters and modality/cache breakdowns only. No inferred zeros or request contents; absent on older records.",
+            "title": "Reported Usage"
+          },
           "total_tokens": {
-            "default": 0,
-            "title": "Total Tokens",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Tokens"
           }
         },
         "title": "ImageUsage",
@@ -14888,6 +15105,7 @@
                 "type": "null"
               }
             ],
+            "description": "For a generation-unit target, omit to use ceil(unit.requested_duration_seconds), or pass that exact value. This field does not add source handles or change the saved unit. Save any intended shot/group timing change first, then prepare from that current source. A single-shot target uses its own duration rules.",
             "title": "Duration Seconds"
           },
           "generation_plan_document_id": {
@@ -14941,6 +15159,16 @@
             },
             "title": "Method Skill Ids",
             "type": "array"
+          },
+          "picture_only": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3PictureOnlyTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resolution": {
             "anyOf": [
@@ -23713,6 +23941,18 @@
             "title": "Arguments",
             "type": "object"
           },
+          "batch_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "id": {
             "minLength": 1,
             "title": "Id",
@@ -29466,6 +29706,16 @@
       "StudioTakeSelectRequest": {
         "additionalProperties": false,
         "properties": {
+          "audio_policy": {
+            "default": "REPLACE_LINKED_AUDIO",
+            "description": "KEEP_CURRENT_AUDIO changes only picture. Existing independent/linked audio and subtitles stay; an unsplit native soundtrack is retained as a local audio clip and the candidate video is muted. Requires one current clip and editorial revision.",
+            "enum": [
+              "REPLACE_LINKED_AUDIO",
+              "KEEP_CURRENT_AUDIO"
+            ],
+            "title": "Audio Policy",
+            "type": "string"
+          },
           "clip_ids": {
             "anyOf": [
               {
@@ -29672,6 +29922,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/JsonValue"
             },
+            "description": "The current LTX editor project or a timeline record containing project. Spatial crop is unsupported: omit clip.crop or set it to null. trimStart/duration trim time, not the picture area.",
             "title": "Timeline",
             "type": "object"
           }

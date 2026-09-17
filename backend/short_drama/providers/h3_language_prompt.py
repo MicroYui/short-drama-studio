@@ -726,10 +726,41 @@ def build_generation_unit_language_prompt_input(
     resolution: str | None = None,
     aspect_ratio: str | None = None,
 ) -> tuple[str, str]:
+    """Build a real language-compiler input and record its selected methods."""
+
+    source_text = build_generation_unit_source_input(
+        document, unit, shots, route=route, duration_seconds=duration_seconds,
+        production_spec=production_spec, media_inputs=media_inputs,
+        source_prompt=source_prompt, revision_instructions=revision_instructions,
+        actual_previous_media_boundary=actual_previous_media_boundary,
+        resolution=resolution, aspect_ratio=aspect_ratio,
+    )
+    return (
+        _compiler_instructions(document, method_skill_ids=method_skill_ids, generation_unit=True),
+        source_text,
+    )
+
+
+def build_generation_unit_source_input(
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    production_spec: ProductionSpecContent,
+    media_inputs: list[H3MediaInput],
+    source_prompt: str | None = None,
+    revision_instructions: str | None = None,
+    actual_previous_media_boundary: dict[str, object] | None = None,
+    resolution: str | None = None,
+    aspect_ratio: str | None = None,
+) -> str:
     """Read one complete clip from canonical facts, without replaying other stages.
 
     Source facts are not a provider request and need not fit its 7000-character
     output limit. Each editorial window retains its dialogue and local roster.
+    Reading or validating sources does not load compiler roles or emit Trace.
     """
 
     resolution, _ratio = resolve_h3_output_format(route=route, resolution=resolution or unit.resolution or "768P",
@@ -819,17 +850,14 @@ def build_generation_unit_language_prompt_input(
             "references": "按 route_media_bindings 的实际顺序绑定全部参考；每镜可见范围以该镜 visible_asset_ids 和 locked_shot 为准。当前组的完整参考包不表示所有主体每镜都在场。",
             "audio": "落实已声明的逐镜对白、声线、环境声和动作声；未准备独立音轨不代表静音。BGM、配音替换和字幕按制作方向与用户要求决定，不因有对白而自动另配音或烧字幕。",
             "dialogue": _DIALOGUE_POLICY,
-            "output": "完整首稿软目标约6000字符，全部字段及标题/空白合计硬上限7000。主体映射与公共约束集中一次；retention只补图片用途例外；逐beat用短分句保留绝对时段、动作到结果、对白/声音。Ref2VA逐镜正文通常参考350–500英文词，不凑下限或机械删事实。字段间可调剂字符，保留全部独有事实。无法忠实容纳时明确报告冲突，不截断台词或私自改分镜。",
+            "output": "完整首稿软目标约6000字符，全部字段及标题/空白合计硬上限7000。主体映射与公共约束集中一次；retention只补图片用途例外；逐beat用短分句保留绝对时段、动作到结果、对白/声音。多个镜头共享整次请求篇幅，不按镜头数累加；各镜按实际独有事件选择所需长度。字段间可调剂字符，保留全部独有事实。无法忠实容纳时明确报告冲突，不截断台词或私自改分镜。",
         },
     }
     if source_prompt is not None:
         payload["source_prompt"] = source_prompt
     if revision_instructions is not None:
         payload["compiler_feedback"] = revision_instructions
-    return (
-        _compiler_instructions(document, method_skill_ids=method_skill_ids, generation_unit=True),
-        json.dumps(payload, ensure_ascii=False, indent=2),
-    )
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def validate_language_generation_unit_prompt(

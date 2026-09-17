@@ -132,7 +132,7 @@ def test_client_uses_acedata_endpoints_and_exact_payload(tmp_path: Path) -> None
     assert session.calls[3][2]["json"] == {"action": "delete", "id": task_id}
 
     source = tmp_path / "reference.png"
-    Image.new("RGB", (16, 16), "#ababab").save(source)
+    Image.new("RGB", (256, 256), "#ababab").save(source)
     assert client.upload_file(source) == "data:image/png;base64," + base64.b64encode(source.read_bytes()).decode("ascii")
     assert len(session.calls) == 4
 

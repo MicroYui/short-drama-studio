@@ -172,6 +172,11 @@ def apply_local_storyboard_patch(current: StoryboardContent, request: Storyboard
             raise ValueError("A clip group cannot appear in both clip_groups and clip_group_splices")
         group_values[group.id] = group
     structural = bool(request.shot_splices or request.clip_group_splices)
+    explicit_group_ids = {group.id for group in request.clip_groups or []}
+    changed_duration_ids = {
+        shot_id for shot_id in replaced_ids
+        if prior_shots[shot_id].duration_seconds != shot_values[shot_id].duration_seconds
+    }
     next_by_id = {shot.id: shot for shot in next_shots}
     next_groups: list[ClipGroup] = []
     for group_id in group_order:
@@ -180,7 +185,9 @@ def apply_local_storyboard_patch(current: StoryboardContent, request: Storyboard
             continue
         if any(shot_id not in next_by_id for shot_id in group.shot_ids):
             raise ValueError(f"Clip group {group.id} references a removed or unknown shot")
-        if structural:
+        # Inherited group timing follows its shots; explicitly supplied group
+        # timing still goes through the existing final consistency validation.
+        if structural or (group.id not in explicit_group_ids and changed_duration_ids.intersection(group.shot_ids)):
             duration = float(sum((Decimal(str(next_by_id[shot_id].duration_seconds)) for shot_id in group.shot_ids), Decimal(0)))
             group = group.model_copy(update={"duration_seconds": duration}, deep=True)
         next_groups.append(group)

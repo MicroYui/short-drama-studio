@@ -1865,7 +1865,7 @@ def select_take(
         selection = request or StudioTakeSelectRequest()
         return service.select_take(take_id, shot_ids=selection.shot_ids, clip_ids=selection.clip_ids,
             expected_editorial_revision=selection.expected_editorial_revision,
-            source_in_seconds=selection.source_in_seconds, source_out_seconds=selection.source_out_seconds)
+            source_in_seconds=selection.source_in_seconds, source_out_seconds=selection.source_out_seconds, audio_policy=selection.audio_policy)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

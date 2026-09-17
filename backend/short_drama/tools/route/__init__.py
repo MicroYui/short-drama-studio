@@ -290,11 +290,13 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                 artifact_refs=list(refs), current_state=result.model_dump(mode="json")))
 
     registry.register(ToolSpec(
-        id="route.prepare_h3_group", version=1, category=ToolCategory.ROUTE,
+        id="route.prepare_h3_group", version=3, category=ToolCategory.ROUTE,
         description=("Prepare one current shot/group through current plan, selected inputs, one H3 prompt compilation and saved route. "
+            "A complete saved draft group can prepare and execute before the episode storyboard is finalized; "
+            "its own shot content, timing and selected media must be complete and current. "
             "Use shot_id or clip_group_id; no manual plan IDs or prompt transfer. Defaults to preparation only; enqueue=true "
             "explicitly queues real H3 generation. Repeat/resume by operation_id reuses completed prompt/route/tasks. "
-            "When shot_id belongs to an existing ClipGroup, preparation covers that whole group; "
+            "By default, when shot_id belongs to an existing ClipGroup, preparation covers that whole group; "
             "a subset-only work order must hand off to the group owner instead of changing its scope. "
             "Omitted/null media_inputs expands all current generation bindings; an explicit list is this request's ordered selection "
             "(at most 9 reference images), not a command to remove other prose references or mark them EDITORIAL. "
@@ -305,7 +307,11 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             "Choose FRAME_FIRST explicitly with a complete prepared first_frame image when a hard start "
             "is needed; hard frame roles cannot mix with reference roles. Read get_generation_unit_context "
             "or use image/video tools to prepare an appropriate frame when needed, without a mandatory extra LM step. "
-            "For rework identify source_take_id/source_repair_id; this creates a whole affected-group candidate, never video inpainting. "
+            "For audiovisual rework identify source_take_id/source_repair_id; this creates an affected-group candidate, never video inpainting. "
+            "For one saved shot picture while keeping the current soundtrack, use shot_id plus picture_only with mode=PICTURE_ONLY, "
+            "audio_policy=KEEP_CURRENT_AUDIO and exact timeline_id/clip_id/expected_editorial_revision. This compiles that picture only, "
+            "not partial generated dialogue; current registered audio must exist for dialogue. H3 still requires 4–15 seconds. "
+            "Adopt its observed interval only at the bound clip using video.select_take with KEEP_CURRENT_AUDIO; other clips/subtitles stay. "
             "Blocked returns preserve exact phase and completed refs; retry_failed_step requests one retry."),
         effect=ToolEffect.EXTERNAL, idempotent=True, input_model=H3GroupOperationInput,
         output_model=H3GroupOperationResponse, handler=prepare_group,
@@ -337,11 +343,14 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         ))
 
     registry.register(ToolSpec(
-        id="route.get_generation_unit_context", version=1, category=ToolCategory.ROUTE,
+        id="route.get_generation_unit_context", version=2, category=ToolCategory.ROUTE,
         description=(
             "Read current facts for the exact requested group, even when its saved GenerationPlan is stale: complete ClipGroup, source document/version identities and changes, canonical shots, dialogue, timing, "
             "production direction and visible Bible, plus current usable media candidates "
             "with real local_path/external_url, AssetVersion, subject, role, purpose and tags. "
+            "The exact generation_unit_id must already exist in the requested plan version. "
+            "For a current group added after that version, use prepare_h3_group with its clip_group_id "
+            "or artifact.read_current with its shot_id; this read does not refresh the saved plan. "
             "Current available DRAFT images can be selected directly; approval status is not a prerequisite. "
             "Use this before compile_h3_prompt; it replaces full Storyboard/AssetPlan reads "
             "for video preparation. Select the route and ordered media subset yourself. "
@@ -433,7 +442,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(
         ToolSpec(
             id="route.compile_h3_prompt",
-            version=1,
+            version=2,
             category=ToolCategory.ROUTE,
             description=(
                 "Compile an H3 prompt from one canonical shot or an exact generation-plan "
@@ -442,6 +451,9 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                 "prompt_override with the same media order. A single-shot response has no generation-unit candidate "
                 "and cannot supply authored prompt/media to plan_h3. For full current-group preparation use "
                 "prepare_h3_group with enqueue=false; for a subset hand off the exact result to its group owner. "
+                "For an explicit PICTURE_ONLY request, provide picture_only with the saved timeline/clip/revision: "
+                "the original dialogue is context, the current bound sound stays local, and this compiles only that shot's picture. "
+                "Use prepare_h3_group with that same typed target for resumable compilation and candidate creation. "
                 "Does not submit video."
             ),
             effect=ToolEffect.EXTERNAL,
@@ -554,14 +566,22 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             request.task_id,
             offset=request.offset, page_size=request.page_size, max_pages=request.max_pages,
         )
+        refs = (ArtifactRef(
+            project_id=request.project_id,
+            artifact_type="generation_task",
+            artifact_id=request.task_id,
+        ),)
         return ToolExecution(
             output=result,
-            artifact_refs=(
-                ArtifactRef(
-                    project_id=request.project_id,
-                    artifact_type="generation_task",
-                    artifact_id=request.task_id,
-                ),
+            artifact_refs=refs,
+            # Keep coverage in the next decision; candidate details remain in
+            # the complete saved output, without implying a confirmed match.
+            receipt=ToolWriteReceipt(
+                artifact_refs=list(refs),
+                current_state={
+                    "query": result.query.model_dump(mode="json") if result.query is not None else None,
+                    "candidate_count": len(result.tasks),
+                },
             ),
         )
 
@@ -889,14 +909,16 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(
         ToolSpec(
             id="route.review_h3_take",
-            version=3,
+            version=4,
             category=ToolCategory.ROUTE,
             description=("Record the typed quality review for one generated H3 Take. Use review_status=PENDING "
                 "for incomplete checks or a conditionally usable result; this preserves an existing usable selection. "
                 "Use REJECTED only for an observed failure that makes the media unacceptable, with classified issues; "
                 "rejection clears selection. PASSED requires hard_gate_passed=true. Missing listening or observation "
-                "is not a rejection or a passed check. To withdraw specific earlier rejection findings after "
-                "reinspection/user clarification, use PENDING with exact retracted_issue_codes and retraction_reason; "
+                "is not a rejection or a passed check. If the current Take is PENDING, update issues and notes "
+                "normally without either retraction field; previous semantic findings are replaced. "
+                "Retraction applies only when the current Take is REJECTED: after reinspection/user clarification, "
+                "use PENDING with exact retracted_issue_codes and retraction_reason; "
                 "other failures remain and technical errors cannot be withdrawn here. This does not approve or "
                 "select the Take. Existing edit points are not changed by review."),
             effect=ToolEffect.WRITE,

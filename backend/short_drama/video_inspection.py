@@ -20,7 +20,12 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
 from pydantic import Field, JsonValue
 
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
-from short_drama.video_detail import extract_detail_frames, extract_source_audio, sample_dense_window
+from short_drama.video_detail import (
+    extract_detail_frames,
+    extract_source_audio,
+    sample_adaptive_candidates,
+    sample_dense_window,
+)
 from short_drama.models import (
     ApprovalStatus,
     Asset,
@@ -81,6 +86,12 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if path.exists():
             return ImageFont.truetype(str(path), size=size)
     return ImageFont.load_default()
+
+
+def _sample_time_label(sample: VideoFrameSample) -> str:
+    if sample.timestamp_is_source_pts:
+        return f"{sample.timestamp_seconds:.3f}s PTS"
+    return f"~{sample.timestamp_seconds:.3f}s nominal"
 
 
 def _run_ffmpeg(args: list[str]) -> None:
@@ -416,48 +427,22 @@ class VideoInspector:
         )
         with tempfile.TemporaryDirectory(prefix="short-drama-frames-") as temp_value:
             temp_dir = Path(temp_value)
-            pattern = temp_dir / "candidate-%04d.jpg"
-            _run_ffmpeg(
-                [
-                    "-y",
-                    "-ss",
-                    f"{source_in_seconds:.6f}",
-                    "-i",
-                    str(media_path),
-                    "-t",
-                    f"{span:.6f}",
-                    "-an",
-                    "-vf",
-                    f"fps={sample_fps:.6f},scale=360:-2:flags=lanczos",
-                    "-frames:v",
-                    str(candidate_count),
-                    "-q:v",
-                    "3",
-                    str(pattern),
-                ]
+            candidates = sample_adaptive_candidates(
+                source=media_path, take_id=take_id, output_dir=temp_dir,
+                start=source_in_seconds, end=end, fps=sample_fps, max_frames=candidate_count,
             )
-            candidates = sorted(temp_dir.glob("candidate-*.jpg"))
-            if len(candidates) < 2:
-                return self.extract_exact_samples(
-                    media_path=media_path, take_id=take_id, duration_seconds=probe.duration_seconds,
-                    timestamps=[source_in_seconds, max(source_in_seconds, end - min(0.001, span / 2))],
-                    output_dir=output_dir, prefix="range-boundary", reason="SOURCE_RANGE_BOUNDARY",
-                )
-            change_scores = self._change_scores(candidates)
+            change_scores = self._change_scores([Path(sample.image_path) for sample in candidates])
             selected, uniform_indices, change_indices = self._select_indices(
                 change_scores,
                 max_frames=max_frames,
             )
             samples: list[VideoFrameSample] = []
             for sequence, index in enumerate(selected, start=1):
-                timestamp = min(
-                    end,
-                    source_in_seconds + index / sample_fps,
-                )
+                candidate = candidates[index]
                 destination = output_dir / (
-                    f"frame-{sequence:02d}-{round(timestamp * 1000):06d}ms.jpg"
+                    f"frame-{sequence:02d}-{round(candidate.timestamp_seconds * 1000):06d}ms.png"
                 )
-                shutil.copy2(candidates[index], destination)
+                shutil.copy2(candidate.image_path, destination)
                 reasons: list[str] = []
                 if index == 0:
                     reasons.append("BOUNDARY_START")
@@ -470,13 +455,11 @@ class VideoInspector:
                 if not reasons:
                     reasons.append("TEMPORAL_COVERAGE")
                 samples.append(
-                    VideoFrameSample(
-                        source_take_id=take_id,
-                        timestamp_seconds=round(timestamp, 3),
-                        image_path=str(destination.resolve()),
-                        reasons=reasons,
-                        visual_change_score=round(change_scores[index], 4),
-                    )
+                    candidate.model_copy(update={
+                        "image_path": str(destination.resolve()),
+                        "reasons": reasons,
+                        "visual_change_score": round(change_scores[index], 4),
+                    })
                 )
             return samples
 
@@ -607,7 +590,7 @@ class VideoInspector:
                 detail=(
                     f"Selected {len(current_samples)} frames from source {request.source_in_seconds:.3f}–{source_end:.3f}s; "
                     + (f"Requested {request.dense_sample_fps:g} fps; returned frames carry actual source PTS."
-                       if request.dense_sample_fps is not None else "Coverage and high-change samples are both retained.")
+                       if request.dense_sample_fps is not None else "Actual source PTS; coverage and high-change samples are both retained.")
                 ),
             ),
         ]
@@ -833,7 +816,7 @@ class VideoInspector:
             image_y = y + 42
             canvas.paste(image, (image_x, image_y))
             reasons = ",".join(sample.reasons)
-            label = f"{index + 1:02d}  {sample.timestamp_seconds:.3f}s  {reasons}"
+            label = f"{index + 1:02d}  {_sample_time_label(sample)}  {reasons}"
             draw.text((x + 8, y + 10), label, fill=(170, 195, 225), font=label_font)
             draw.rectangle(
                 (x + 4, y + 4, x + cell_width - 4, y + cell_height - 4),
@@ -982,7 +965,8 @@ class VideoInspector:
                                                           for asset in document.assets for version in asset.versions)],
             "image_map": image_map,
             "notes": (
-                "每张接触表中的帧标签按时间顺序排列。VISUAL_CHANGE 只标记局部画面"
+                "每张接触表中的帧标签按时间顺序排列；PTS为真实源帧时间，~nominal仅为名义采样标记，"
+                "不能作为精确源帧或切点时间。VISUAL_CHANGE 只标记局部画面"
                 "变化较大，本身不代表错误。"
             ),
         }

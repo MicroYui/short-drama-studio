@@ -89,6 +89,71 @@ def test_dense_sampling_caps_at_36_and_does_not_invent_frames_for_slow_sources(t
     assert [frame.timestamp_seconds for frame in frames] == [0, 0.5, 1, 1.5, 2, 2.5]
 
 
+@pytest.mark.parametrize("fps", [24, 25])
+def test_reported_detail_time_roundtrips_exact_and_legacy_pts_pixels(tmp_path: Path, fps: int) -> None:
+    source = tmp_path / "source.mov"
+    render_source(source, fps=fps)
+    first = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "first",
+        times=[60.875 / fps], start=1, end=3.5, source_fps=fps, max_dimension=None)[0]
+    assert first.timestamp_seconds == 61 / fps
+    for name, reported in (("exact", first.timestamp_seconds), ("legacy", round(first.timestamp_seconds, 6))):
+        again = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / name,
+            times=[reported], start=1, end=3.5, source_fps=fps, max_dimension=None)[0]
+        assert again.timestamp_seconds == first.timestamp_seconds
+        assert again.requested_timestamp_seconds == reported
+        with Image.open(first.image_path) as expected, Image.open(again.image_path) as actual:
+            assert actual.convert("RGB").tobytes() == expected.convert("RGB").tobytes()
+
+
+def test_detail_report_tolerance_does_not_change_ordinary_forward_target(tmp_path: Path) -> None:
+    source = tmp_path / "source.mov"
+    render_source(source)
+    point = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "ordinary",
+        times=[1.042], start=1, end=3.5, source_fps=24, max_dimension=None)[0]
+    assert point.timestamp_seconds == 26 / 24
+    assert point.requested_timestamp_seconds == 1.042
+
+
+@pytest.mark.parametrize("fps", [24, 25])
+def test_detail_target_tolerance_never_expands_source_bounds(tmp_path: Path, fps: int) -> None:
+    source = tmp_path / "source.mov"
+    render_source(source, fps=fps)
+    boundary = 61 / fps
+    inclusive = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "inclusive",
+        times=[boundary], start=boundary, end=3.5, source_fps=fps, max_dimension=None)[0]
+    assert inclusive.timestamp_seconds == boundary
+    after = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "after",
+        times=[boundary + 0.0000003], start=boundary + 0.0000002, end=3.5,
+        source_fps=fps, max_dimension=None)[0]
+    assert after.timestamp_seconds == 62 / fps
+    exclusive = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "exclusive",
+        times=[boundary - 0.0000003], start=1, end=boundary, source_fps=fps, max_dimension=None)[0]
+    assert exclusive.timestamp_seconds == 60 / fps
+    with pytest.raises(MediaGenerationError, match="No timestamped source frame"):
+        extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "empty",
+            times=[boundary + 0.0000003], start=boundary + 0.0000002, end=boundary + 0.0000004,
+            source_fps=fps, max_dimension=None)
+
+
+def test_vfr_detail_time_roundtrip_and_sparse_tail_keep_source_pts(tmp_path: Path) -> None:
+    from tests.test_take_frame_asset import _render_sparse_tail
+
+    source = tmp_path / "sparse.mov"
+    _render_sparse_tail(source)
+    first = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "first",
+        times=[1.1], start=0.5, end=2, source_fps=2, max_dimension=None)[0]
+    assert first.timestamp_seconds == 1.2
+    again = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "again",
+        times=[first.timestamp_seconds], start=0.5, end=2, source_fps=2, max_dimension=None)[0]
+    assert again.timestamp_seconds == first.timestamp_seconds
+    with Image.open(first.image_path) as expected, Image.open(again.image_path) as actual:
+        assert actual.convert("RGB").tobytes() == expected.convert("RGB").tobytes()
+    tail = extract_detail_frames(source=source, take_id="take", output_dir=tmp_path / "tail",
+        times=[1.9], start=0.5, end=2, source_fps=2, max_dimension=None)[0]
+    assert tail.timestamp_seconds == 1.4
+    assert tail.reasons == ["DETAIL_KEYFRAME_LAST_AVAILABLE"]
+
+
 def render_tail_source(path: Path) -> None:
     # 243 real video frames end at PTS 242/24; audio extends the container to
     # 10.13 seconds. The requested 10.125 point has no following video frame.

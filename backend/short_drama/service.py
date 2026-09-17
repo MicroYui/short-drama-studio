@@ -15,7 +15,7 @@ import shutil
 import threading
 from copy import deepcopy
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -234,6 +234,7 @@ from short_drama.models import (
     ExportRecord,
     Freshness,
     GenerationTask,
+    H3PictureOnlyBinding,
     GenerationUnitShotWindow,
     ImageReferenceAuthority,
     ImageReferenceRole,
@@ -5870,7 +5871,7 @@ class ShortDramaService:
     ) -> StoryboardDraftMutationResponse:
         """Append and immediately persist one complete provider-bounded ClipGroup."""
 
-        with self._lock:
+        with self._lock, self.repository.atomic():
             document = self._require_project_mutation_allowed(project_id)
             draft_document = self._production_document(
                 document,
@@ -5882,15 +5883,20 @@ class ShortDramaService:
                     f"{draft_document.kind!r}; expected "
                     f"{STORYBOARD_DRAFT_DOCUMENT_KIND!r}"
                 )
-            if request.base_version_id != draft_document.current_version_id:
-                raise WorkflowConflictError(
-                    "Storyboard draft append is based on a stale version: "
-                    f"expected {draft_document.current_version_id}, "
-                    f"received {request.base_version_id}"
-                )
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
+            if request.base_version_id != current_version.id:
+                from short_drama.storyboard_append_scope import append_rebase_conflict
+                base = next((version for version in draft_document.versions if version.id == request.base_version_id), None)
+                conflict = ("base version is not a saved version of this draft" if base is None else
+                    append_rebase_conflict(self._parse_storyboard_draft(base), current, request))
+                if conflict is not None:
+                    raise WorkflowConflictError(
+                        "Storyboard draft append is based on a stale version: "
+                        f"expected {current_version.id}, received {request.base_version_id}; {conflict}. "
+                        "Read the current draft and retain its saved edits before retrying this group."
+                    )
             revised = self._validated_storyboard_group_append(
                 project_id,
                 document,
@@ -5901,7 +5907,7 @@ class ShortDramaService:
             result = self._revise_production_document_locked(
                 document,
                 production_document_id=draft_document.id,
-                base_version_id=request.base_version_id,
+                base_version_id=current_version.id,
                 payload=production_document_payload(revised),
                 source_artifact_refs=self._merge_production_document_refs(
                     self._storyboard_draft_source_refs(document, revised),
@@ -6337,7 +6343,17 @@ class ShortDramaService:
                     origin=request.origin,
                     created_at=now,
                 )
-            self._sync_storyboard_projection(document, storyboard)
+            # Initial finalization publishes the same saved groups. Preserve
+            # existing media when only the draft's revision counters reset.
+            unchanged_draft_shots: set[str] = set()
+            if previous is None:
+                from short_drama.generation_storyboard import draft_group_source_matches
+                probe = document.model_copy(update={"shots": storyboard.shots}, deep=True)
+                unchanged_draft_shots = {shot_id for group in draft.committed_groups
+                    if draft_group_source_matches(probe, draft_document.id, draft_version.id, group.clip_group.id)
+                    for shot_id in group.clip_group.shot_ids}
+                changed_shot_ids = [shot_id for shot_id in changed_shot_ids if shot_id not in unchanged_draft_shots]
+            self._sync_storyboard_projection(document, storyboard, unchanged_shot_ids=unchanged_draft_shots)
             slot = self._bind_output_slot_locked(
                 document,
                 OutputSlotBindRequest(
@@ -7822,24 +7838,18 @@ class ShortDramaService:
     ) -> GenerationPlanMutationResponse:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
-            storyboard_document = self._managed_project_document(
-                document,
-                request.storyboard_document_id,
-                STORYBOARD_DOCUMENT_KIND,
-            )
+            from short_drama.generation_storyboard import generation_storyboard_source, generation_document as source_view
+            source = generation_storyboard_source(document)
+            if request.storyboard_document_id != source.document.id or request.storyboard_version_id != source.version.id:
+                raise WorkflowConflictError("GenerationPlan requires the current saved Storyboard source version")
+            storyboard_document, storyboard_version, storyboard = source.document, source.version, source.content
             production_spec_document = self._managed_project_document(
                 document,
                 request.production_spec_document_id,
                 PRODUCTION_SPEC_DOCUMENT_KIND,
             )
-            if storyboard_document.id != document.storyboard_document_id:
-                raise WorkflowConflictError("GenerationPlan must use the project Storyboard")
             if production_spec_document.id != document.production_spec_document_id:
                 raise WorkflowConflictError("GenerationPlan must use the project ProductionSpec")
-            storyboard_version = self._production_document_version(
-                storyboard_document,
-                request.storyboard_version_id,
-            )
             spec_version = self._production_document_version(
                 production_spec_document,
                 request.production_spec_version_id,
@@ -7848,14 +7858,17 @@ class ShortDramaService:
                 raise WorkflowConflictError("GenerationPlan requires the current Storyboard version")
             if spec_version.id != production_spec_document.current_version_id:
                 raise WorkflowConflictError("GenerationPlan requires the current ProductionSpec version")
-            storyboard = self._parse_storyboard(storyboard_version)
             spec = self._parse_production_spec(spec_version)
             # Output-slot invalidation is a useful projection, but the versioned
             # documents remain addressable.  Revalidate both exact inputs at the
             # consumption boundary so a stale audio-led spec/storyboard cannot be
             # compiled merely because its document/version is still marked current.
             self._validate_production_spec(document, spec)
-            self._validate_storyboard(document, storyboard)
+            if isinstance(storyboard, StoryboardDraftContent):
+                self._validate_storyboard_draft(document, storyboard)
+            else:
+                self._validate_storyboard(document, storyboard)
+            current_shots = {shot.id: shot for shot in source_view(document).shots}
             try:
                 generation_plan = compile_generation_plan(
                     storyboard=storyboard,
@@ -7869,8 +7882,8 @@ class ShortDramaService:
                     # this new execution plan to the current preparation state,
                     # while preserving narrative and windows from its source.
                     shot_revisions={
-                        shot.id: self._require_shot_in_document(document, shot.id).revision
-                        for shot in storyboard.shots
+                        shot.id: current_shots[shot.id].revision
+                        for shot in source.shots
                     },
                 )
             except ValueError as exc:
@@ -10248,6 +10261,7 @@ class ShortDramaService:
         self,
         project_document: ProjectDocument,
         storyboard: StoryboardContent,
+        *, unchanged_shot_ids: set[str] | None = None,
     ) -> None:
         previous_shots = {item.id: item for item in project_document.shots}
         execution_by_shot = {
@@ -10260,7 +10274,7 @@ class ShortDramaService:
         next_references: list[ReferencePlanEntry] = []
         for shot in storyboard.shots:
             previous = previous_shots.get(shot.id)
-            unchanged = previous is not None and previous.revision == shot.revision
+            unchanged = shot.id in (unchanged_shot_ids or set()) or (previous is not None and previous.revision == shot.revision)
             execution = execution_by_shot.get(shot.id) if unchanged else None
             reference = reference_by_shot.get(shot.id) if unchanged else None
             next_execution.append(
@@ -10895,6 +10909,14 @@ class ShortDramaService:
         if shot is None:
             raise ArtifactNotFoundError(request.shot_id)
         duration = request.duration_seconds or math.ceil(shot.duration_seconds)
+        picture_binding: H3PictureOnlyBinding | None = None
+        original_picture_shot = shot
+        if request.picture_only is not None:
+            from short_drama.h3_picture_source import picture_only_binding, picture_prompt_projection, verify_retained_audio_files
+            picture_binding = picture_only_binding(document, shot.id, request.picture_only, store=self.repository)
+            verify_retained_audio_files(picture_binding, require_audio=bool(shot.dialogue_line_ids))
+            duration = request.duration_seconds or max(4, math.ceil(shot.duration_seconds))
+            document, shot = picture_prompt_projection(document, shot, duration)
         media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
         resolution, aspect_ratio = self._h3_output_format(route=request.route, resolution=request.resolution or "768P",
             aspect_ratio=request.aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)
@@ -10929,6 +10951,18 @@ class ShortDramaService:
             actual_previous_media_boundary=self._previous_adopted_media_boundary(document, shot.id),
         )
         compiled_prompt = ""
+        if picture_binding is not None:
+            payload: dict[str, JsonValue] = json.loads(input_text)
+            payload["picture_only"] = cast(JsonValue, {
+                "mode": "PICTURE_ONLY", "audio_policy": "KEEP_CURRENT_AUDIO",
+                "target": picture_binding.target.model_dump(mode="json"),
+                "retained_audio_sources": picture_binding.audio_sources,
+                "original_shot_context": original_picture_shot.model_dump(mode="json"),
+                "generated_dialogue": [],
+                "responsibility": "Only generate this shot's picture. Original dialogue is performance/listening context; do not generate a spoken utterance. Existing sound is preserved locally at adoption, not by the Provider.",
+            })
+            instructions += "\nPICTURE_ONLY: the request explicitly retains the existing editorial sound. Do not generate speech or <d> utterances; original shot dialogue is context only. Do not add another shot."
+            input_text = json.dumps(payload, ensure_ascii=False)
         try:
             client = self.language_provider_factory(api_key, base_url)
             compiled_prompt = self._generate_h3_language_prompt(
@@ -10943,6 +10977,9 @@ class ShortDramaService:
                 duration_seconds=duration,
                 media_inputs=media_inputs,
             )
+            if picture_binding is not None:
+                from short_drama.h3_picture_source import assert_picture_binding_current
+                assert_picture_binding_current(self._require_project_document(project_id), picture_binding, store=self.repository)
         except (LanguageProviderError, LanguagePromptValidationError) as exc:
             detail = f"\nUnaccepted compiler output (complete draft; never execute):\n{compiled_prompt}" if compiled_prompt else ""
             raise ProviderOperationError(f"{exc}{detail}") from exc
@@ -10956,13 +10993,16 @@ class ShortDramaService:
             duration_seconds=duration,
             source_prompt=source_prompt or "",
             compiled_prompt=compiled_prompt,
-            validation_notes=[*validation_notes,
+            validation_notes=[*validation_notes, *([
+                "PICTURE_ONLY: no generated dialogue; retained sound binding checked against the current saved edit. "
+                "Prepare/enqueue through route.prepare_h3_group with this exact picture_only target, then select only this clip with KEEP_CURRENT_AUDIO."
+            ] if picture_binding is not None else [
                 "Single-shot prompt only: no generation-unit candidate was created. "
                 "route.plan_h3 authored prompt/media requires a generation-unit candidate. "
                 "For complete current-group preparation use route.prepare_h3_group with "
                 "enqueue=false; for a partial-group work order, hand this exact result "
                 "to the group owner without changing the group or creating video tasks.",
-            ],
+            ])],
         )
 
     def _previous_adopted_media_boundary(
@@ -11034,6 +11074,8 @@ class ShortDramaService:
     ) -> tuple[ProjectDocument, GenerationPlanContent, GenerationUnit, list[ShotPlan], ProductionSpecContent]:
         with self._lock:
             document = self._require_project_document(project_id)
+            from short_drama.generation_storyboard import generation_document as source_view
+            document = source_view(document)
             generation_plan = self._current_generation_plan_for_video(
                 document,
                 request.generation_plan_document_id,
@@ -11054,11 +11096,10 @@ class ShortDramaService:
                 self._require_shot_in_document(document, shot_id)
                 for shot_id in unit.shot_ids
             ]
-            if any(
-                shot.revision != window.shot_revision
-                for shot, window in zip(shots, unit.shot_windows, strict=True)
-            ):
-                raise WorkflowConflictError("Generation unit references outdated shot revisions")
+            # _current_generation_plan_for_video proved exact group equivalence;
+            # use its pinned revisions in the compiler input across finalization.
+            shots = [shot.model_copy(update={"revision": window.shot_revision})
+                     for shot, window in zip(shots, unit.shot_windows, strict=True)]
             spec_document = self._managed_project_document(
                 document,
                 generation_plan.production_spec_document_id,
@@ -11110,7 +11151,14 @@ class ShortDramaService:
             aspect_ratio=request.aspect_ratio, default_aspect_ratio=spec.aspect_ratio)
         document = h3_prompt_document(document, route=request.route, aspect_ratio=aspect_ratio)
         if request.duration_seconds not in {None, duration}:
-            raise WorkflowConflictError("Prompt duration must match the generation unit")
+            raise WorkflowConflictError(
+                f"Prompt duration must match generation unit {unit.id}: "
+                f"requested {request.duration_seconds}s, expected {duration}s "
+                f"from ceil(unit.requested_duration_seconds={unit.requested_duration_seconds}). "
+                "Omit duration_seconds or use the expected value. To add source handles, "
+                "first save the intended shot/group timing change, then prepare the current group. "
+                "This compile request does not change saved timing."
+            )
         media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
         from short_drama.studio_references import assert_generation_references
         for current_shot in shots:
@@ -11377,6 +11425,16 @@ class ShortDramaService:
     ) -> ProjectAggregate:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            from short_drama.studio_storyboard import resolve_current_shot
+            current_shot = resolve_current_shot(document, shot_id)
+            if current_shot is not None and current_shot.draft_source is not None:
+                raise WorkflowConflictError(
+                    f"Shot {shot_id} is in the current committed draft (revision {current_shot.shot.revision}). "
+                    "Its current cues are already saved. shot.update_reference_plan is the legacy formal-shot plan API; "
+                    "it does not edit draft plans. Use artifact.read_current with this shot_id and shot.save_current "
+                    "to change its exact cues; retain the successful saved_shot receipt when no change is needed. "
+                    "Other draft groups can continue authoring; no separate plan is required to save these bindings."
+                )
             shot = self._require_shot_in_document(document, shot_id)
             plan = self._require_reference_plan(document, shot_id)
             before = plan.model_dump(mode="json")
@@ -12195,6 +12253,8 @@ class ShortDramaService:
         selected_generation_units = None
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            from short_drama.generation_storyboard import generation_document as source_view
+            document = source_view(document)
             if request.generation_plan_document_id is not None:
                 generation_plan = self._current_generation_plan_for_video(
                     document,
@@ -12554,6 +12614,7 @@ class ShortDramaService:
                 or task.clip_group_id != decision.clip_group_id
                 or task.output_slot_id != decision.output_slot_id
                 or task.shot_windows != decision.shot_source_windows
+                or task.picture_only != decision.picture_only
                 or task.provider != "minimax"
                 or task.model != "MiniMax-H3"
                 or task.operation != OperationKind.GENERATE
@@ -12612,6 +12673,7 @@ class ShortDramaService:
                 clip_group_id=decision.clip_group_id,
                 output_slot_id=decision.output_slot_id,
                 shot_windows=decision.shot_source_windows,
+                picture_only=decision.picture_only,
             )
             for candidate_index in expected_indices
         }
@@ -12666,8 +12728,31 @@ class ShortDramaService:
         # This runs before upload/submission under the Worker task lock. Only
         # read local facts/stat here; Provider IO remains outside the project lock.
         with self._lock:
-            plan = next((plan for plan in self.repository.list_h3_route_plans(task.project_id)
-                         if any(task.id in decision.task_ids for decision in plan.decisions)), None)
+            plans = self.repository.list_h3_route_plans(task.project_id)
+            plan = next((plan for plan in plans if any(task.id in decision.task_ids for decision in plan.decisions)), None)
+            if task.picture_only is not None and plan is None:
+                # Retry has a new task ID but the same compiled source. Keep
+                # checking its original preparation, including the preceding cut.
+                parent_id = task.retry_of_task_id
+                visited = {task.id}
+                while parent_id is not None and parent_id not in visited:
+                    visited.add(parent_id)
+                    parent = self.repository.get_task(parent_id)
+                    if parent is None or parent.project_id != task.project_id or parent.picture_only != task.picture_only:
+                        break
+                    parent_run = self.repository.get_provider_run(parent.id)
+                    if (parent_run is None or parent_run.project_id != task.project_id
+                            or parent_run.prompt != run.prompt or parent_run.media_inputs != run.media_inputs
+                            or parent_run.route != run.route or parent_run.aspect_ratio != run.aspect_ratio
+                            or parent.requested_duration_seconds != task.requested_duration_seconds
+                            or parent.resolution != task.resolution or parent.input_shot_revisions != task.input_shot_revisions):
+                        return "PICTURE_ONLY retry no longer matches its original compiled inputs; prepare this picture again"
+                    plan = next((item for item in plans if any(parent.id in decision.task_ids for decision in item.decisions)), None)
+                    if plan is not None:
+                        break
+                    parent_id = parent.retry_of_task_id
+                if plan is None:
+                    return "PICTURE_ONLY task has no saved preparation source; prepare this picture again"
             return self._h3_route_operation_staleness_reason(plan, media_inputs=run.media_inputs) if plan else None
 
     def execute_h3_production_route_plan(
@@ -12680,6 +12765,8 @@ class ShortDramaService:
         queued_tasks: list[GenerationTask] = []
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            from short_drama.generation_storyboard import generation_document as source_view
+            document = source_view(document)
             plan = self._require_h3_route_plan_state(
                 project_id,
                 plan_id,
@@ -12727,10 +12814,16 @@ class ShortDramaService:
                     )
                     try:
                         from short_drama.studio_references import assert_generation_references
-                        assert_complete_dialogue_request(document, [
-                            self._require_shot_in_document(document, covered_id)
-                            for covered_id in decision.shot_ids or [decision.shot_id]
-                        ])
+                        if decision.picture_only is not None:
+                            from short_drama.h3_picture_source import assert_picture_binding_current
+                            if decision.picture_only.shot_id != decision.shot_id or decision.shot_ids != [decision.shot_id]:
+                                raise ValueError("PICTURE_ONLY route must cover its one bound shot")
+                            assert_picture_binding_current(document, decision.picture_only, store=self.repository)
+                        else:
+                            assert_complete_dialogue_request(document, [
+                                self._require_shot_in_document(document, covered_id)
+                                for covered_id in decision.shot_ids or [decision.shot_id]
+                            ])
                         for covered_id in decision.shot_ids or [decision.shot_id]:
                             assert_generation_references(document, self._require_shot_in_document(document, covered_id), media_inputs, require_all=False)
                         validate_h3_probe(
@@ -12859,6 +12952,7 @@ class ShortDramaService:
                         clip_group_id=decision.clip_group_id,
                         output_slot_id=decision.output_slot_id,
                         shot_windows=decision.shot_source_windows,
+                        picture_only=decision.picture_only,
                     )
                     if task.request_fingerprint != fingerprint:
                         raise WorkflowConflictError(
@@ -13090,7 +13184,8 @@ class ShortDramaService:
                     if shot_cues(target_shot) or explicit:
                         sync_shot_references(document, target_shot)
                 if request.strategy == DirectorRepairStrategy.SPLIT_SHOT:
-                    remap_split_editorial(document, original_shot, [item for item in document.shots if item.id in affected_shot_ids])
+                    remap_split_editorial(document, original_shot, [item for item in document.shots if item.id in affected_shot_ids],
+                        takes=self.repository.list_takes(project_id))
                 repaired = prepare_repaired_storyboard(document, shot_id, affected_shot_ids)
                 if repaired is not None:
                     source, version, payload = repaired
@@ -14032,6 +14127,7 @@ class ShortDramaService:
                     clip_group_id=run.clip_group_id,
                     output_slot_id=run.output_slot_id,
                     shot_windows=run.shot_windows,
+                    picture_only=task.picture_only,
                 )
             else:
                 retry = self._new_task(
@@ -14149,49 +14245,54 @@ class ShortDramaService:
         _log_video_task_transition(persisted, task, action="recover_output")
         return task
 
-    def _validate_stale_take_reuse(self, document: ProjectDocument, take: Take) -> None:
-        """Recheck an explicitly chosen result after broad planning invalidation."""
-        if (take.storyboard_document_id is None or take.storyboard_version_id is None
-                or take.storyboard_document_id != document.storyboard_document_id):
-            raise WorkflowConflictError("A stale Take needs a matching current Storyboard before it can be selected")
-        board_document = self._production_document(document, take.storyboard_document_id)
-        source = self._parse_storyboard(self._production_document_version(board_document, take.storyboard_version_id))
-        current_version = self._production_document_version(board_document)
-        current = self._parse_storyboard(current_version)
-        current_shots, board_id, board_version_id = self._timeline_storyboard_truth(document)
-        if take.clip_group_id is not None:
-            source_group = next((item for item in source.clip_groups if item.id == take.clip_group_id), None)
-            current_group = next((item for item in current.clip_groups if item.id == take.clip_group_id), None)
-            if source_group is None or source_group != current_group:
-                raise WorkflowConflictError("The stale Take no longer matches its current clip group")
-        source_spec_document = self._production_document(document, source.production_spec_document_id)
-        source_spec = self._parse_production_spec(self._production_document_version(
-            source_spec_document, source.production_spec_version_id))
-        current_spec_document = self._production_document(document, current.production_spec_document_id)
-        current_spec = self._parse_production_spec(self._production_document_version(
-            current_spec_document, current.production_spec_version_id))
-        # Delivery notes and provider preferences do not change existing pixels.
-        # Creative direction and the actual shot inputs still have to match.
-        if (source_spec.visual != current_spec.visual or source_spec.audio != current_spec.audio
-                or source_spec.genre_and_setting != current_spec.genre_and_setting
-                or source_spec.language != current_spec.language or source_spec.aspect_ratio != current_spec.aspect_ratio
-                or source_spec.master_audio_binding_version_id != current_spec.master_audio_binding_version_id):
-            raise WorkflowConflictError("The stale Take no longer matches the current creative direction")
-        shots = {shot.id: shot for shot in current_shots}
-        for shot_id in take.covered_shot_ids():
-            if shot_id not in shots:
-                raise WorkflowConflictError("The stale Take covers a shot that is no longer current")
-            self._validate_timeline_take_source(document, take, shots[shot_id],
-                storyboard_document_id=board_id, storyboard_version_id=board_version_id)
+    def _validate_stale_take_reuse(
+        self, document: ProjectDocument, take: Take, selected_shot_ids: list[str],
+    ) -> None:
+        """Validate an explicit media choice without claiming its inputs are current.
+
+        Authored timing and treatment may be revised after observing a result.
+        Adoption keeps that result's historical source; automatic assembly and
+        generation still use their stricter current-input checks.
+        """
+        task = self.repository.get_task(take.task_id)
+        if task is None or task.project_id != document.project.id or take.project_id != document.project.id:
+            raise WorkflowConflictError("The selected Take has no generation task in the current project")
+        from short_drama.generation_storyboard import generation_document as source_view, generation_storyboard_source
+        current_shots = source_view(document).shots
+        if document.storyboard_document_id is not None:
+            current_board = self._production_document(document, document.storyboard_document_id)
+            current_shots = self._parse_storyboard(self._production_document_version(current_board)).shots
+        if set(selected_shot_ids) - {shot.id for shot in current_shots}:
+            raise WorkflowConflictError("The selected Take targets a shot that is no longer current")
+        if set(selected_shot_ids) - set(task.covered_shot_ids()):
+            raise WorkflowConflictError("The selected Take no longer matches its original task's shot coverage")
+        if take.clip_group_id != task.clip_group_id:
+            raise WorkflowConflictError("The selected Take carries a different clip group from its generation task")
+        if (take.storyboard_document_id, take.storyboard_version_id) != (
+                task.storyboard_document_id, task.storyboard_version_id):
+            raise WorkflowConflictError("The selected Take carries a different Storyboard source from its generation task")
+        for shot_id in selected_shot_ids:
+            source_window = next((window for window in task.shot_windows if window.shot_id == shot_id), None)
+            if take.source_window_for_shot(shot_id) != source_window:
+                raise WorkflowConflictError("The selected Take no longer matches its original task's source window")
+        if take.storyboard_document_id is not None:
+            source = generation_storyboard_source(document, document_id=take.storyboard_document_id, version_id=take.storyboard_version_id)
+            if set(selected_shot_ids) - {shot.id for shot in source.shots}:
+                raise WorkflowConflictError("The selected Take's original Storyboard does not cover these shots")
+            if take.clip_group_id is not None:
+                source_group = next((group for group in source.clip_groups if group.id == take.clip_group_id), None)
+                if source_group is None or set(selected_shot_ids) - set(source_group.shot_ids):
+                    raise WorkflowConflictError("The selected Take does not match its original clip group's shot coverage")
 
     def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
                     clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None,
-                    source_in_seconds: float | None = None, source_out_seconds: float | None = None) -> ProjectAggregate:
+                    source_in_seconds: float | None = None, source_out_seconds: float | None = None,
+                    audio_policy: Literal["REPLACE_LINKED_AUDIO", "KEEP_CURRENT_AUDIO"] = "REPLACE_LINKED_AUDIO") -> ProjectAggregate:
         from short_drama.studio_models import StudioTakeSelectRequest
         try:
             StudioTakeSelectRequest(shot_ids=shot_ids, clip_ids=clip_ids,
                 expected_editorial_revision=expected_editorial_revision,
-                source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds)
+                source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds, audio_policy=audio_policy)
         except ValueError as exc:
             raise WorkflowConflictError(str(exc)) from exc
         with self._lock:
@@ -14225,25 +14326,46 @@ class ShortDramaService:
                 if expected_editorial_revision is not None and (document.editorial_timeline or {}).get("revision", 0) != expected_editorial_revision:
                     raise WorkflowConflictError("Current editorial changed; read the affected shot's current edit before adopting this candidate")
                 if reusing_stale_take:
-                    self._validate_stale_take_reuse(document, take)
+                    self._validate_stale_take_reuse(document, take, selected_ids)
                 if take.qa_status == QaStatus.REJECTED:
                     raise WorkflowConflictError("A rejected Take cannot be selected; resolve the recorded failure or choose another usable candidate")
+                candidate_task = self.repository.get_task(take.task_id)
+                if candidate_task is not None and candidate_task.picture_only is not None:
+                    binding = candidate_task.picture_only
+                    if audio_policy != "KEEP_CURRENT_AUDIO" or clip_ids != [binding.target.clip_id] or selected_ids != [binding.shot_id]:
+                        raise WorkflowConflictError("PICTURE_ONLY candidate requires its exact saved clip/shot and KEEP_CURRENT_AUDIO")
+                    from short_drama.h3_picture_source import assert_picture_binding_current
+                    from short_drama.studio_editorial import EditorProject, clip_media_source
+                    current_edit = EditorProject.model_validate((document.editorial_timeline or {}).get("project"))
+                    if current_edit.activeTimelineId != binding.target.timeline_id:
+                        raise WorkflowConflictError("PICTURE_ONLY candidate belongs to a different timeline")
+                    current_clip = next((c for t in current_edit.timelines if t.id == binding.target.timeline_id
+                        for c in t.clips if c.id == binding.target.clip_id), None)
+                    current_asset = next((asset for asset in current_edit.assets if current_clip is not None and asset.id == current_clip.assetId), None)
+                    already_adopted = (current_clip is not None and current_asset is not None
+                        and (current_clip.model_extra or {}).get("sourceTakeId") == take.id
+                        and clip_media_source(current_asset, current_clip)[0] == take.media_path)
+                    if not already_adopted:
+                        try:
+                            assert_picture_binding_current(document, binding, store=self.repository)
+                        except ValueError as exc:
+                            raise WorkflowConflictError(str(exc)) from exc
                 from short_drama.studio_take_selection import adopt_take_in_editorial
                 previous_editorial = document.editorial_timeline
+                from short_drama.generation_storyboard import generation_document as source_view
+                edit_document = source_view(document)
                 try:
-                    adopted_ids = adopt_take_in_editorial(document, self.repository.list_takes(take.project_id), take, selected_ids,
-                        clip_ids=clip_ids, source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds)
+                    adopted_ids = adopt_take_in_editorial(edit_document, self.repository.list_takes(take.project_id), take, selected_ids,
+                        clip_ids=clip_ids, source_in_seconds=source_in_seconds, source_out_seconds=source_out_seconds, audio_policy=audio_policy)
                 except ValueError as exc:
                     raise WorkflowConflictError(str(exc)) from exc
+                document.editorial_timeline = edit_document.editorial_timeline
                 slot = self._project_output_slot(document, take.output_slot_id) if take.output_slot_id else None
                 binding_current = take.output_slot_id is None or (slot is not None and slot.current_artifact_ref is not None
                     and slot.current_artifact_ref.artifact_type == "take" and slot.current_artifact_ref.artifact_id == take.id)
-                if (not reusing_stale_take and binding_current and document.editorial_timeline is previous_editorial
+                if (binding_current and document.editorial_timeline is previous_editorial
                     and set(adopted_ids).issubset(take.selected_shot_ids)):
-                    return self._aggregate(document)
-                if reusing_stale_take:
-                    take.freshness = Freshness.CURRENT
-                    self.repository.save_take(take)
+                    return self._aggregate(source_view(document))
                 selected = self.repository.select_take(take_id, shot_ids=adopted_ids)
                 if selected is None:
                     raise ArtifactNotFoundError(take_id)
@@ -14265,7 +14387,7 @@ class ShortDramaService:
                 document.project.stage = self._task_derived_project_stage(take.project_id)
                 document.project.updated_at = now
                 self.repository.save_project(document)
-                return self._aggregate(document)
+                return self._aggregate(source_view(document))
 
     def extract_take_frame(
         self, project_id: str, request: TakeFrameAssetRequest,
@@ -14312,7 +14434,8 @@ class ShortDramaService:
             take = self.repository.get_take(take_id)
             if take is None:
                 raise ArtifactNotFoundError(take_id)
-            document = self._require_project_document(take.project_id)
+            from short_drama.generation_storyboard import generation_document as source_view
+            document = source_view(self._require_project_document(take.project_id))
             shot = self._require_shot_in_document(document, take.shot_id)
             if request.scope == "EDITORIAL":
                 takes = self.repository.list_takes(take.project_id)
@@ -14537,6 +14660,8 @@ class ShortDramaService:
 
         with self._lock:
             document = self._require_project_document(project_id).model_copy(deep=True)
+        from short_drama.generation_storyboard import generation_document as source_view
+        document = source_view(document)
         from short_drama.observation_sources import audio_source_context
         from short_drama.take_audio import prepare_take_audio, take_audio_source_is_current
         created_at = utc_now()
@@ -14580,6 +14705,8 @@ class ShortDramaService:
     ) -> NativeTranscriptionResponse:
         with self._lock:
             document = self._require_project_document(project_id).model_copy(deep=True)
+        from short_drama.generation_storyboard import generation_document as source_view
+        document = source_view(document)
         timing_service = self.audio_semantic_service
         if not isinstance(timing_service, AudioTimingService):
             raise WorkflowConflictError("Configured audio service does not provide native speech timestamps")
@@ -14590,6 +14717,8 @@ class ShortDramaService:
     ) -> NativeSubtitleAlignmentResponse:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id).model_copy(deep=True)
+        from short_drama.generation_storyboard import generation_document as source_view
+        document = source_view(document)
         timing_service = self.audio_semantic_service
         if not isinstance(timing_service, AudioTimingService):
             raise WorkflowConflictError("Configured audio service does not provide native subtitle timestamps")
@@ -14959,8 +15088,23 @@ class ShortDramaService:
             withdrawn = set(request.retracted_issue_codes)
             previous_issues = {issue.code: issue for issue in take.qa_report.issues}
             if withdrawn:
-                if take.qa_status != QaStatus.REJECTED or not withdrawn <= previous_issues.keys():
-                    raise WorkflowConflictError("Read the current rejected Take and withdraw only its recorded issue codes")
+                if take.qa_status != QaStatus.REJECTED:
+                    raise WorkflowConflictError(
+                        f"Take {take.id} currently has qa_status={take.qa_status.value}. "
+                        "Retraction fields apply only to a currently REJECTED Take. "
+                        "For an ordinary PENDING review, remove both retracted_issue_codes and retraction_reason, "
+                        "then submit review_status=PENDING with the current issues and notes. "
+                        "This replaces previous semantic findings while retaining technical media failures; "
+                        "it does not mark the Take as passed."
+                    )
+                if not withdrawn <= previous_issues.keys():
+                    raise WorkflowConflictError(
+                        f"Take {take.id} currently has qa_status=REJECTED. "
+                        f"Unrecorded retracted_issue_codes: {', '.join(sorted(withdrawn - previous_issues.keys()))}. "
+                        f"Current recorded issue codes: {', '.join(sorted(previous_issues)) or '(none)'}. "
+                        "Withdraw only exact recorded codes; other rejection findings remain, "
+                        "and technical media failures cannot be withdrawn by semantic review."
+                    )
                 if any(previous_issues[code].category == QaFailureCategory.TECHNICAL_MEDIA for code in withdrawn):
                     raise WorkflowConflictError("Technical media failures cannot be withdrawn by semantic review")
                 retraction_event = {
@@ -15366,6 +15510,9 @@ class ShortDramaService:
             source_revision = task.input_shot_revision
         else:
             source_revision = None
+        from short_drama.generation_storyboard import draft_group_source_matches
+        same_draft_group = draft_group_source_matches(project_document, task.storyboard_document_id,
+            task.storyboard_version_id, task.clip_group_id)
         expected_revision = shot.revision
         if storyboard_document_id is not None and storyboard_version_id is not None:
             # Canonical authoring and materialized preparation have separate
@@ -15379,7 +15526,7 @@ class ShortDramaService:
                     f"Shot {shot.id} execution projection differs from the current Storyboard"
                 )
             expected_revision = projected.revision
-        if source_revision != expected_revision:
+        if source_revision != expected_revision and not same_draft_group:
             raise WorkflowConflictError(
                 f"Selected Take {take.id} was generated from an outdated Shot revision"
             )
@@ -15396,11 +15543,11 @@ class ShortDramaService:
                 )
             return task
 
-        if task.storyboard_document_id != storyboard_document_id:
+        if task.storyboard_document_id != storyboard_document_id and not same_draft_group:
             raise WorkflowConflictError(
                 f"Selected Take {take.id} references a different Storyboard"
             )
-        if task.storyboard_version_id != storyboard_version_id:
+        if task.storyboard_version_id != storyboard_version_id and not same_draft_group:
             source_document = self._production_document(project_document, storyboard_document_id)
             source_version = next((item for item in source_document.versions
                                    if item.id == task.storyboard_version_id), None)
@@ -15815,13 +15962,16 @@ class ShortDramaService:
         clip_group_id: str | None = None,
         output_slot_id: str | None = None,
         shot_windows: list[GenerationUnitShotWindow] | None = None,
+        picture_only: H3PictureOnlyBinding | None = None,
         resolution: str = "768P",
         aspect_ratio: str | None = None,
     ) -> str:
         """Return the stable identity of one exact H3 candidate request."""
 
+        from short_drama.generation_storyboard import generation_document as source_view
+        document = source_view(document)
         shot = self._require_shot_in_document(document, shot_id)
-        normalized_request = {
+        normalized_request: dict[str, object] = {
             "provider": "minimax",
             "model": "MiniMax-H3",
             "project_id": document.project.id,
@@ -15841,7 +15991,7 @@ class ShortDramaService:
             "candidate_index": candidate_index,
             "script_version_id": document.project.current_script_version_id,
             "bible_version_id": document.project.current_bible_version_id,
-            "shot_revision": shot.revision,
+            "shot_revision": next((window.shot_revision for window in shot_windows or [] if window.shot_id == shot_id), shot.revision),
             "voice_reference_revision": document.project.voice_reference_revision,
             "learning_objective": learning_objective,
             "regression_case_id": regression_case_id,
@@ -15852,6 +16002,8 @@ class ShortDramaService:
             normalized_request["aspect_ratio"] = ratio
         elif ratio == "adaptive" and route == VideoGenerationRoute.REFERENCE:
             normalized_request["aspect_ratio"] = ratio
+        if picture_only is not None:
+            normalized_request["picture_only"] = picture_only.model_dump(mode="json")
         if generation_unit_id is not None:
             normalized_request.update(
                 {
@@ -15900,12 +16052,15 @@ class ShortDramaService:
         clip_group_id: str | None = None,
         output_slot_id: str | None = None,
         shot_windows: list[GenerationUnitShotWindow] | None = None,
+        picture_only: H3PictureOnlyBinding | None = None,
         resolution: str = "768P",
         aspect_ratio: str | None = None,
     ) -> tuple[GenerationTask, H3ProviderRun, RouteEvidence]:
         now = utc_now()
         task_id = f"task-{uuid4().hex}"
         run_id = f"h3-run-{uuid4().hex}"
+        from short_drama.generation_storyboard import generation_document as source_view
+        document = source_view(document)
         shot = self._require_shot_in_document(document, shot_id)
         fingerprint = self._h3_candidate_request_fingerprint(
             document=document,
@@ -15926,6 +16081,7 @@ class ShortDramaService:
             clip_group_id=clip_group_id,
             output_slot_id=output_slot_id,
             shot_windows=shot_windows,
+            picture_only=picture_only,
             resolution=resolution, aspect_ratio=aspect_ratio,
         )
         copied_windows = [
@@ -15935,6 +16091,7 @@ class ShortDramaService:
             item.shot_id: item.shot_revision for item in copied_windows
         }
         task = GenerationTask(
+            picture_only=picture_only,
             id=task_id,
             project_id=document.project.id,
             shot_id=shot_id,
@@ -15949,7 +16106,7 @@ class ShortDramaService:
             request_fingerprint=fingerprint,
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
-            input_shot_revision=shot.revision,
+            input_shot_revision=input_shot_revisions.get(shot_id, shot.revision),
             input_shot_revisions=input_shot_revisions,
             storyboard_document_id=storyboard_document_id,
             storyboard_version_id=storyboard_version_id,

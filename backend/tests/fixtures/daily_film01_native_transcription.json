@@ -1,0 +1,143 @@
+{
+  "source_project_id": "project-c4013371db86",
+  "source_trace": "20260917T053223738463-be0bc3b1-model.input.json",
+  "source_created_at": "2026-09-17T05:32:23.738463+00:00",
+  "handoff": {
+    "sequence": 31,
+    "request": {
+      "tool_name": "audio.transcribe_native",
+      "arguments": {
+        "project_id": "project-c4013371db86",
+        "request": {
+          "scope": "TAKE",
+          "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "source_start_seconds": 0,
+          "source_end_seconds": 15.08
+        }
+      },
+      "reason": "核对镜头4–6候选中的两句原声对白及实际原片时段，不建立临时时间线。"
+    },
+    "turn_status": "COMPLETED",
+    "attempt_ref": {
+      "project_id": "project-c4013371db86",
+      "agent_run_id": "agent-run-a4bc976c3e4b4abba11c9e0cda574f42",
+      "work_order_id": "work-order-ccc4d012bbac45d5ad35050f373e8e8a",
+      "attempt_id": "specialist-turn-1634bc9fa8e14cedafab147f1867741f",
+      "tool_name": "audio.transcribe_native",
+      "turn_status": "COMPLETED",
+      "outcome_status": "SUCCEEDED",
+      "has_arguments": true,
+      "has_result": true
+    },
+    "result": {
+      "tool_id": "audio.transcribe_native",
+      "status": "SUCCEEDED",
+      "artifact_refs": [],
+      "warnings": [
+        "TAKE_SOURCE times describe the original candidate only. Read the actual editorial use and convert coordinates before creating captions; this does not establish current FILM coverage or adoption"
+      ],
+      "error": null,
+      "output": {
+        "source_editorial_revision": null,
+        "editorial_timeline_id": null,
+        "observation_scope": "TAKE",
+        "time_space": "TAKE_SOURCE",
+        "source_context": {
+          "kind": "TAKE",
+          "project_id": "project-c4013371db86",
+          "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+          "shot_id": "shot-umbrella-04",
+          "shot_windows": [
+            {
+              "shot_id": "shot-umbrella-04",
+              "shot_revision": 1,
+              "source_in_seconds": 0.0,
+              "source_out_seconds": 5.0,
+              "duration_seconds": 5.0
+            },
+            {
+              "shot_id": "shot-umbrella-05",
+              "shot_revision": 1,
+              "source_in_seconds": 5.0,
+              "source_out_seconds": 10.5,
+              "duration_seconds": 5.5
+            },
+            {
+              "shot_id": "shot-umbrella-06",
+              "shot_revision": 1,
+              "source_in_seconds": 10.5,
+              "source_out_seconds": 14.5,
+              "duration_seconds": 4.0
+            }
+          ],
+          "media": {
+            "path": "/Users/liyifan/Documents/code/msft/ai短剧调研/output/daily-production-2026-09-17/runtime-r21/acceptance-profile/outputs/short-drama-projects/project-c4013371db86/takes/clip-group-umbrella-03/h3-task-5ac81027515a4ebfaea0ef3047faa650.mp4",
+            "size": 3082536,
+            "modified_ns": 1789622643074725662
+          },
+          "source_start_seconds": 0.0,
+          "source_end_seconds": 15.08,
+          "audio_projection": "STEREO_PCM_ENVELOPE_TO_MONO_1",
+          "time_space": "TAKE_SOURCE"
+        },
+        "source_status": "CURRENT",
+        "windows": [
+          {
+            "take_id": "take-task-5ac81027515a4ebfaea0ef3047faa650",
+            "clip_ids": [],
+            "shot_ids": [
+              "shot-umbrella-04",
+              "shot-umbrella-05",
+              "shot-umbrella-06"
+            ],
+            "start_seconds": 0.0,
+            "end_seconds": 15.08,
+            "transcript_text": "等等先拿着用吧",
+            "characters": [
+              {
+                "text": "等",
+                "start_seconds": 4.32,
+                "end_seconds": 5.95
+              },
+              {
+                "text": "等",
+                "start_seconds": 5.95,
+                "end_seconds": 7.58
+              },
+              {
+                "text": "先",
+                "start_seconds": 9.3,
+                "end_seconds": 9.44
+              },
+              {
+                "text": "拿",
+                "start_seconds": 9.44,
+                "end_seconds": 9.56
+              },
+              {
+                "text": "着",
+                "start_seconds": 9.56,
+                "end_seconds": 9.7
+              },
+              {
+                "text": "用",
+                "start_seconds": 9.7,
+                "end_seconds": 9.92
+              },
+              {
+                "text": "吧",
+                "start_seconds": 9.92,
+                "end_seconds": 11.08
+              }
+            ]
+          }
+        ],
+        "report_path": "/Users/liyifan/Documents/code/msft/ai短剧调研/output/daily-production-2026-09-17/runtime-r21/acceptance-profile/outputs/short-drama-projects/project-c4013371db86/inspections/native-transcript-c22a83d0dd1e4927887343f7ebb27e9f/transcript.json",
+        "warnings": [
+          "TAKE_SOURCE times describe the original candidate only. Read the actual editorial use and convert coordinates before creating captions; this does not establish current FILM coverage or adoption"
+        ],
+        "limitation": "Local ASR observations and approximate character times; not speaker identification, lip-sync review or verified dialogue. No captions were saved."
+      }
+    }
+  }
+}

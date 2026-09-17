@@ -3535,7 +3535,7 @@ def apply_storyboard_patch(
 
 def compile_generation_plan(
     *,
-    storyboard: StoryboardContent,
+    storyboard: StoryboardContent | StoryboardDraftContent,
     storyboard_document_id: str,
     storyboard_version_id: str,
     production_spec: ProductionSpecContent,
@@ -3556,12 +3556,20 @@ def compile_generation_plan(
     if storyboard.bible_version_id != production_spec.bible_version_id:
         raise ValueError("Production spec and storyboard bible versions must match")
 
-    shot_by_id = {item.id: item for item in storyboard.shots}
+    if isinstance(storyboard, StoryboardDraftContent):
+        from short_drama.studio_storyboard import _draft_shots  # pyright: ignore[reportPrivateUsage]
+        shots = _draft_shots(storyboard)
+        order = {node.id: node.sequence for node in storyboard.scene_nodes}
+        groups = [item.clip_group for item in sorted(storyboard.committed_groups,
+            key=lambda item: (order[item.scene_node_id], item.scene_group_sequence))]
+    else:
+        shots, groups = storyboard.shots, storyboard.clip_groups
+    shot_by_id = {item.id: item for item in shots}
     if shot_revisions is not None and set(shot_revisions) != set(shot_by_id):
         raise ValueError("GenerationPlan shot revisions must cover the complete Storyboard")
     preference = production_spec.provider_preference
     units: list[GenerationUnit] = []
-    for group in storyboard.clip_groups:
+    for group in groups:
         cursor = 0.0
         windows: list[GenerationUnitShotWindow] = []
         for shot_id in group.shot_ids:
@@ -3609,7 +3617,7 @@ def compile_generation_plan(
         production_spec_version_id=production_spec_version_id,
         script_version_id=storyboard.script_version_id,
         bible_version_id=storyboard.bible_version_id,
-        shot_ids=[item.id for item in storyboard.shots],
+        shot_ids=[item.id for item in shots],
         units=units,
         total_duration_seconds=sum(
             item.requested_duration_seconds for item in units

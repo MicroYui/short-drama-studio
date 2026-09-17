@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from statistics import median
+from tempfile import NamedTemporaryFile
 from typing import Protocol, cast
 
 import requests
@@ -29,11 +30,54 @@ from short_drama.h3_models import (
 
 
 # The encoded bytes changed from the previous unadapted Data URI cache.
-H3_LOCAL_INPUT_ENCODING_PROFILE = "acedata-h3-image-jpeg95-padding-v2"
+H3_LOCAL_INPUT_ENCODING_PROFILE = "acedata-h3-image-jpeg95-size-padding-v3"
+
+
+def h3_image_resize_size(width: int, height: int) -> tuple[int, int]:
+    """Uniformly scale to the actual provider's per-side limits, with pixel rounding."""
+    if width <= 0 or height <= 0:
+        raise H3DefiniteRequestError(400, "LOCAL_IMAGE_DIMENSIONS", "H3 image dimensions must be positive")
+    minimum_scale = 256 / min(width, height)
+    maximum_scale = 5760 / max(width, height)
+    if minimum_scale > maximum_scale:
+        raise H3DefiniteRequestError(
+            400, "LOCAL_IMAGE_DIMENSIONS",
+            f"H3 reference image is {width}x{height}; uniform scaling cannot keep both sides within "
+            "[256, 5760]. Select or derive a less elongated reference crop; the source has not been changed.",
+        )
+    scale = min(max(1.0, minimum_scale), maximum_scale)
+    return round(width * scale), round(height * scale)
+
+
+def prepare_h3_image_dimensions(path: Path, destination: Path) -> Path:
+    """Persist a size-only derivative when needed; keep valid sources byte-for-byte."""
+    try:
+        with Image.open(path) as source:
+            size = h3_image_resize_size(*source.size)
+            if size == source.size:
+                return path
+            if path.resolve() == destination.resolve():
+                raise ValueError("H3 image preparation must not overwrite the source file")
+            mode = "RGBA" if "A" in source.getbands() or "transparency" in source.info else "RGB"
+            resized = source.convert(mode).resize(size, Image.Resampling.LANCZOS)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with NamedTemporaryFile(dir=destination.parent, suffix=".png", delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+            try:
+                resized.save(temporary_path, format="PNG", icc_profile=source.info.get("icc_profile"))
+                temporary_path.replace(destination)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+            return destination
+    except (OSError, ValueError) as exc:
+        raise H3DefiniteRequestError(
+            400, "LOCAL_IMAGE_INVALID", f"H3 reference image could not be prepared: {path}; {exc}"
+        ) from exc
 
 
 def h3_image_transport_size(width: int, height: int) -> tuple[int, int]:
-    """Fit the provider's [0.4, 2.5] input aspect range by adding canvas only."""
+    """Fit side limits, then retain the existing [0.4, 2.5] canvas adaptation."""
+    width, height = h3_image_resize_size(width, height)
     return max(width, math.ceil(height * 0.4)), max(height, math.ceil(width / 2.5))
 
 
@@ -42,11 +86,14 @@ def _image_transport_bytes(raw: bytes, mime_type: str) -> tuple[bytes, str]:
         target_size = h3_image_transport_size(source.width, source.height)
         has_alpha = "A" in source.getbands() or "transparency" in source.info
         pixels = source.convert("RGBA" if has_alpha else "RGB")
+        resized_size = h3_image_resize_size(*source.size)
+        if resized_size != source.size:
+            pixels = pixels.resize(resized_size, Image.Resampling.LANCZOS)
         if has_alpha and pixels.getchannel("A").getextrema() == (255, 255):
             has_alpha = False
             pixels = pixels.convert("RGB")
         # Large opaque PNG references otherwise make a multi-image request tens
-        # of megabytes. Keep their pixel dimensions and the original local file.
+        # of megabytes. Keep legal pixel dimensions and the original local file.
         compress = (mime_type == "image/png" and len(raw) > 1024 * 1024
                     and source.mode in {"RGB", "RGBA", "L", "LA"} and not has_alpha)
         if target_size == source.size and not compress:
@@ -101,7 +148,7 @@ class H3TransientError(H3ClientError):
 
 
 def encode_h3_media_data_uri(path: Path) -> str:
-    """Encode local media, padding out-of-range images without editing the source."""
+    """Encode local media, fitting image dimensions without editing the source."""
     if not path.is_file():
         raise H3DefiniteRequestError(400, "LOCAL_FILE_MISSING", str(path))
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"

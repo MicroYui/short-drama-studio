@@ -16,7 +16,7 @@ from short_drama.language_models import H3CurrentSourceDocument, H3GenerationUni
 from short_drama.models import AssetMediaType, AudioInspectionReport, ProjectDocument, Take, VideoGenerationRoute, VideoInspectionReport
 from short_drama.production_contracts import GENERATION_PLAN_DOCUMENT_KIND, GenerationPlanContent
 from short_drama.production_media_context import previous_adopted_media_boundary
-from short_drama.providers.h3_language_prompt import build_generation_unit_language_prompt_input
+from short_drama.providers.h3_language_prompt import build_generation_unit_source_input
 from short_drama.providers.minimax_h3_compiler import validate_h3_audio_durations, validate_h3_probe
 from short_drama.studio_editorial import project_editorial_from_document
 from short_drama.studio_references import assert_generation_references
@@ -61,6 +61,8 @@ def resolve_h3_asset_inputs(document: ProjectDocument, media_inputs: list[H3Medi
 def generation_unit_context(document: ProjectDocument, request: H3GenerationUnitContextRequest, *,
                             store: H3SourceStore, require_current_plan: bool = False) -> H3GenerationUnitContextResponse:
     """The public current projection and strict source check share this exact read."""
+    from short_drama.generation_storyboard import generation_document, draft_group_source_matches
+    document = generation_document(document)
     project_id = document.project.id
     requested_document = next((item for item in document.production_documents
                                if item.id == request.generation_plan_document_id), None)
@@ -81,7 +83,14 @@ def generation_unit_context(document: ProjectDocument, request: H3GenerationUnit
         raise ValueError("Requested GenerationPlan belongs to another project")
     requested_unit = next((unit for unit in requested_plan.units if unit.id == request.generation_unit_id), None)
     if requested_unit is None:
-        raise KeyError(request.generation_unit_id)
+        raise KeyError(
+            f"Generation unit {request.generation_unit_id!r} is not present in requested "
+            f"GenerationPlan {requested_document.id!r}, version {requested_version.id!r} "
+            f"(v{requested_version.version}). Current projection requires a unit already in that version. "
+            "For a newly added current group, use route.prepare_h3_group with its current clip_group_id, "
+            "or read its current shots with artifact.read_current(shot_id=...). "
+            "No current group was substituted for the requested unit."
+        )
     current_plan, board, spec = derive_current_generation_plan(document)
     unit = next((unit for unit in current_plan.units if unit.id == request.generation_unit_id), None)
     if unit is None:
@@ -104,6 +113,12 @@ def generation_unit_context(document: ProjectDocument, request: H3GenerationUnit
         unit = requested_unit
     by_shot = {shot.id: shot for shot in document.shots}
     shots = [by_shot[shot_id] for shot_id in unit.shot_ids]
+    if require_current_plan and draft_group_source_matches(document, requested_plan.storyboard_document_id,
+            requested_plan.storyboard_version_id, unit.clip_group_id):
+        # Preserve the pinned compiler coordinates after identical finalization.
+        # The response still reports the actual current document/version above.
+        shots = [shot.model_copy(update={"revision": window.shot_revision})
+                 for shot, window in zip(shots, unit.shot_windows, strict=True)]
     current_group = next(group for group in board.clip_groups if group.id == unit.clip_group_id)
     takes = store.list_takes(project_id)
     saved = document.editorial_timeline or {}
@@ -112,7 +127,7 @@ def generation_unit_context(document: ProjectDocument, request: H3GenerationUnit
     boundary = previous_adopted_media_boundary(document, target_shot_id=shots[0].id,
         editorial_project=editorial, takes=takes, inspections=store.list_video_inspections(project_id),
         audio_inspections=store.list_audio_inspections(project_id))
-    _instructions, source_text = build_generation_unit_language_prompt_input(document, unit, shots,
+    source_text = build_generation_unit_source_input(document, unit, shots,
         route=VideoGenerationRoute.DIRECT, duration_seconds=math.ceil(unit.requested_duration_seconds),
         production_spec=spec, media_inputs=[], actual_previous_media_boundary=boundary)
     source: dict[str, JsonValue] = json.loads(source_text)
@@ -139,6 +154,9 @@ def operation_source_reason(document: ProjectDocument, record: H3GroupOperation,
                             store: H3SourceStore, media_inputs: list[H3MediaInput]) -> str | None:
     from short_drama.h3_group_operation import _media_file_states, _source_identity  # pyright: ignore[reportPrivateUsage]
 
+    if record.request.picture_only is not None:
+        from short_drama.h3_picture import picture_operation_reason
+        return picture_operation_reason(document, record, store=store, media_inputs=media_inputs)
     state = record.state
     if not state.generation_plan_document_id or not state.generation_plan_version_id or not state.generation_unit_id:
         return "Saved H3 operation is missing its generation-unit source"
@@ -160,6 +178,8 @@ def operation_source_reason(document: ProjectDocument, record: H3GroupOperation,
 
 def route_source_checks(document: ProjectDocument, plan: H3ProductionRoutePlan, *,
                         store: H3SourceStore) -> list[H3RouteSourceCheck]:
+    from short_drama.generation_storyboard import generation_document
+    document = generation_document(document)
     checks: list[H3RouteSourceCheck] = []
     for decision in plan.decisions:
         status: Literal["CURRENT", "STALE", "UNKNOWN"] = "CURRENT"

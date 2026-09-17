@@ -308,7 +308,10 @@ class StudioWorkspaceService:
             if current is None:
                 raise KeyError(shot_id)
             if current.revision != request.expected_revision:
-                raise StudioContentConflict("此镜头已更新；你的修改已保留在编辑器中，请合并最新内容。")
+                raise StudioContentConflict(
+                    f"镜头 {shot_id} 已更新（请求修订 {request.expected_revision}，当前修订 {current.revision}）；"
+                    "本次未保存。请读取最新镜头，合并所需修改后重试。"
+                )
             if request.shot.id != shot_id or request.shot.project_id != project_id:
                 raise ValueError("镜头必须属于当前集")
             replacement = request.shot.model_copy(deep=True)

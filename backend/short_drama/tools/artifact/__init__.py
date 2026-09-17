@@ -1648,7 +1648,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
         return ToolExecution(output=result, artifact_refs=tuple(refs))
 
     registry.register(ToolSpec(id="artifact.create_assets", version=1, category=ToolCategory.ARTIFACT,
-        description="一次保存多个已确定的新人物、场景、道具或参考对象的文字设定。request.assets 每项复用 create_asset 的 kind/name/descriptor/brief；全批先校验，成功后一次局部追加保存，返回本批实际 Asset、brief、初始文本版本与精确引用，不返回整份项目。不生成图片、不修改已有对象、不要求凑齐全片对象；多个对象已明确时优先此入口，避免逐个语言轮搬运。已有对象设定用 artifact.update_brief，图像制作另用 image 工具。",
+        description=("一次保存多个已确定的新人物、场景、道具或参考对象的文字设定。request.assets 每项复用 create_asset 的 kind/name/descriptor/brief；全批先校验，成功后一次局部追加保存，返回本批实际 Asset、brief、初始文本版本与精确引用，不返回整份项目。"
+            "这里只创建项目 Asset 及其 TEXT_REFERENCE 版本，不自动创建 Bible 实体；bible_entity_id 为 null 不表示资产保存失败。资产引用直接使用刚返回的 asset.id 与 current_version_id，不可将它们当作 Bible 实体 ID 或 speaker_character_id。只有后续写入接口明确要求 Bible 实体，或用户交付目标需要时，才补齐对应实体与关联。"
+            "不生成图片、不修改已有对象、不要求凑齐全片对象；多个对象已明确时优先此入口，避免逐个语言轮搬运。已有对象设定用 artifact.update_brief，图像制作另用 image 工具。"),
         effect=ToolEffect.WRITE, idempotent=False, input_model=AssetsCreateInput, output_model=AssetBatchMutationResponse,
         handler=create_assets, tags=frozenset({"asset", "project", "batch", "current-content"})))
 

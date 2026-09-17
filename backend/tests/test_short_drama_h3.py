@@ -1373,7 +1373,7 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
     )
     assert orientation_risk.observed_failure_count == 1
     assert orientation_risk.evidence_take_ids == [take.id]
-    with pytest.raises(WorkflowConflictError, match="stale"):
+    with pytest.raises(WorkflowConflictError, match="A rejected Take cannot be selected"):
         service.select_take(take.id)
 
 

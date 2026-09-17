@@ -106,7 +106,13 @@ def test_new_builder_uses_field_contract_and_can_still_discover_full_patch(tmp_p
     assert "artifact.patch_asset_plan_fields" in first and "artifact.patch_asset_plan" not in first
     assert "artifact.patch_asset_plan" in second
     catalogue = cast(list[dict[str, JsonValue]], client.payloads[0]["available_tools"])
-    assert all(set(entry) == {"id", "description", "effect"} for entry in catalogue)
+    for entry in catalogue:
+        listed_tool = tools.describe(cast(str, entry["id"]))
+        expected_keys = {"id", "description", "effect"}
+        if listed_tool.effect == ToolEffect.READ:
+            expected_keys.add("idempotent")
+            assert entry["idempotent"] is listed_tool.idempotent
+        assert set(entry) == expected_keys
     assert {entry["id"] for entry in catalogue} == {tool.id for tool in tools.list()}
     descriptor = tools.describe("artifact.patch_asset_plan")
     assert descriptor.version == 3 and set(descriptor.tags) == {"asset-plan", "field-patch"}
