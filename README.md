@@ -1,64 +1,134 @@
+<div align="center">
+
+<img src="docs/assets/readme/studio-mark.svg" width="80" height="80" alt="Short Drama Studio 标志">
+
 # Short Drama Studio
 
-单用户本地 AI Agent 视频制片工作台。用一句话说明想完成什么，在剧本、镜头和成片中查看、直接修改内容；项目资产统一管理，制作助手常驻右侧。只要求完整剧本时，Agent 写完即结束；要求成片时，继续完成所需制作。
+**从剧本到成片的 AI 视频制作工作台**
 
-## 当前产品
+[演示](#演示) · [功能](#功能) · [开始使用](#开始使用) · [常见问题](#常见问题) · [开发](#开发)
 
-- **剧本**：导入文本、按场次直接编辑、Agent 写作与逐场更新。
-- **镜头**：完整分镜设计、逐时段文案、精确 `@` 图片引用及悬停预览，与实际视频放在同一镜头内；可导入或替换片段。
-- **项目资产**：多集共享人物、场景、道具和声音；查看具体文件、使用位置与待补内容。
-- **成片与剪辑**：复用 LTX 非模型多轨编辑，支持裁切、拆分、移动、变速、音量和字幕；镜头与成片打开同一集的剪辑，保存到后端，实际 FFmpeg 导出。
-- **制作助手**：按当前目标和范围工作，显示实际动作、处理定向修改和恢复；语言角色统一 `gpt-6-astra / xhigh`。
-- **制作记录**：导出目标、当前内容、动作、模型输入/输出、上下文与用量、素材和成片索引，保留用户补图及开发修复事实。
+</div>
 
-不启用或分发 LTX 模型权重。ComfyUI 是可选外部服务，可配置地址、导入 API 工作流、绑定素材并回收结果；本机已连接 `http://127.0.0.1:18188`，真实工作流、素材回收和制作记录导出已验收。服务需要独立保持运行，主制片和剪辑流程不依赖它。使用方法见 [可选 ComfyUI](docs/comfyui-local-integration.md)。
+Short Drama Studio 是一款桌面视频制作工具。描述你想拍的故事，或导入已有剧本和素材，让制作助手完成分镜、图片、视频与剪辑。生成的内容会留在项目中，你可以继续改剧本、换参考图、补拍某个镜头，或亲手调整时间线。
 
-## 启动与使用
+## 演示
 
-当前内部候选 **r7** 面向 **macOS arm64**，位于 [Short Drama Studio.app](<output/commercial-delivery-2026-09-16/package-final-r7/mac-arm64/Short Drama Studio.app>)，包含本地 Python 与导出运行时，当前视频生成只使用 MiniMax H3。包内 726 份后端文件与构建输入逐字节一致，前端及导出运行时相对 r6 保持；见[r7 构建记录](output/commercial-delivery-2026-09-16/native-final-r7-build.md)。正常升级后，四个项目的正式内容、八份完整任务保持；恢复时实际变更的 Agent 记忆及派生上下文也已逐项说明，见[r7 升级核对](output/commercial-delivery-2026-09-16/r7-upgrade/reviewed-differences.md)。
+<a href="docs/assets/readme/shop-film.mp4"><img src="docs/assets/readme/shop-preview.webp" width="960" alt="成片节选：花店店主将花瓶放到窗边，走向店门"></a>
 
-用户本轮确认“两部新片验收没问题”，并对原片/H3 候选顺序对照回复“两段都可以”。原 H3 返工任务已在 r7 继续至完成：只将镜头 02 的 5.545 秒替换为指定候选源窗，微调该句字幕，并交付 1920×1080 / 24 fps 的净版和字幕版；原生预览、字幕显示、回零和重播已验证。候选按用户确认记为可用，不宣称比原片更优或由模型完成听审。r6 采用成功后的重复读取/采用及 r7 回执修复保留在[续跑记录](output/commercial-delivery-2026-09-16/stage4-real/dialogue-reverse-h3-rework/resumed-acceptance/README.md)，原生观察范围见[播放记录](output/commercial-delivery-2026-09-16/stage4-real/dialogue-reverse-h3-rework/resumed-acceptance/native-playback.md)。两版文件均完整解码 502 个视频帧、音轨无损坏，采样接点与字幕核验通过。本轮五阶段适用验收已完成，完整分项状态见[产品成熟化实施与验收](docs/product-commercial-delivery.md)。
+《店门开了》· 使用 Studio 制作。上方为 12 秒无声节选，[观看完整视频，含声音（34 秒）](docs/assets/readme/shop-film.mp4)。
 
-早期空用户目录、r3 完整源副本离线后的原生导入/编辑/导出、r4 播放与 r5 有限任务保留各自验收范围，未将增量升级写成重复执行全部流程，见[迁移验收](output/commercial-delivery-2026-09-16/current-native-migration/README.md)及[r5 有限验收](output/commercial-delivery-2026-09-16/stage4-real/prop-handover-r5-context-check/README.md)。r5 已完成一次约 3 秒麦克风实测，保存 2.76 秒 WAV、角色绑定、重开与试听通过；用户确认“麦克风看起来解决没再遇到”，当前录音链路通过。首次授权弹窗及拒绝路径本次未触发、未覆盖，不阻挡本轮，见[麦克风实测](output/commercial-delivery-2026-09-16/microphone-native-acceptance/README.md)。
+## 功能
 
-这是本机验收候选，未签名、公证或公开发布。用户明确暂不发行，签名、公证、发行授权与 FFmpeg 对应源码交付暂缓，不阻挡本轮本地验收，也未勾选为完成；见[分发条件复核](docs/research/2026-09-16-commercial-distribution-review.md)。Windows/Linux 未在本次环境打包验收。
+### 剧本、镜头和成片，放在同一个项目里
 
-普通启动使用 `~/Library/Application Support/ShortDramaStudio/` 保存项目和设置。先新建作品，在“设置与创作方法”配置语言、图片和视频服务；媒体 Provider 独立配置。`STUDIO_APP_DATA_DIR` 可指定独立数据目录，便于测试和演示。
+从一句话开始，也可以上传已有剧本，让助手接着做。剧本按场次呈现，镜头页同时展示分镜、参考素材和生成视频，成片页查看完整剪辑。右侧始终保留对话和任务进度，随时可以补充要求。
 
-首次配置、编辑导出、项目收集与迁移、保存和中断恢复，见[本地使用与恢复](docs/studio-local-use-and-recovery.md)。日常项目保存在 SQLite，媒体保留为文件；备份和搬迁项目时使用包含媒体的项目包，不能只复制数据库。
+只想先看剧本，就让助手写到剧本为止；需要完整视频，再交给它继续制作。
 
-打开当前候选可执行：
+<img src="docs/assets/readme/workspace.webp" width="1120" alt="剧本工作台：左侧项目导航，中间按场次阅读与编辑，右侧制作助手和任务进度">
+
+### 改一个镜头，也能保留已经做好的部分
+
+每个镜头都能单独修改分镜、替换参考图或重新生成。正文中的 `@` 引用关联实际素材，悬停即可预览，进入分镜编辑后更换。人物、场景、道具和声音集中管理，多集作品可以共用。
+
+需要补拍时，直接说明要改的位置和希望保留的内容：
+
+> 重做第 3 镜的画面，让父亲先看女儿，轻轻笑一下，再低头。保留原来的声音、字幕和其他镜头。
+
+新片段可以只采用其中一段。只换画面时，已有声音和字幕继续使用，其他镜头与已保存的人工编辑也会保留。
+
+### 在时间线上完成剪辑
+
+裁切、拆分、移动片段，调整速度和音量，修改字幕。可以打开一个镜头精修，也可以展开全片调整节奏；单镜头的修改保存后同步到成片。
+
+完成后选择画幅、帧率和字幕设置，导出视频与字幕文件。画面、声音和字幕仍分别保存在项目中，之后可以继续修改。
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/assets/readme/shot-references.webp" alt="分镜中的素材引用：悬停人物名称，查看当前绑定的参考图">
+      <p><strong>分镜与参考图</strong><br>查看这处镜头实际使用的素材。</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/assets/readme/shot-editor.webp" alt="单镜头编辑器：分别调整画面、原声和字幕">
+      <p><strong>单镜头剪辑</strong><br>调整画面、声音与字幕，保存到全片。</p>
+    </td>
+  </tr>
+</table>
+
+### 保存项目，接着上次的工作继续
+
+项目和素材保存在本机。制作过程中可以暂停，重开应用后沿原任务继续。任务面板显示正在做什么、已经完成什么，以及需要处理的问题；制作记录中可以查看每次调用的模型、耗时和服务报告的用量。
+
+保存好编辑后，可以将项目连同媒体收集为项目包，用于备份或迁移到另一台机器。
+
+## 开始使用
+
+### 1. 启动应用
+
+当前运行平台为 **macOS（Apple Silicon）**，桌面包尚未公开发布。源码运行需要 **Node.js 22.12+、Python 3.13 和 uv**。
+
+在仓库根目录执行：
 
 ```sh
-open "output/commercial-delivery-2026-09-16/package-final-r7/mac-arm64/Short Drama Studio.app"
+# 首次安装开发依赖
+./scripts/pnpm-project.sh setup:dev
+
+# 启动桌面应用与本地后端
+./scripts/pnpm-project.sh dev
 ```
 
-应用包不包含 API 凭据、模型权重或案例文件。原校园案例和 `scripts/launch-studio-case.sh` 保留历史用途；该脚本仍指向旧包及 `output/product-delivery/native-case-data`，不是当前候选的启动入口。旧案例媒体通过原有本机路径读取，迁移与验证记录见[原 131 秒案例](docs/50-complete-film-agent-case-trace.md)及当前交付清单。
+仓库使用受管理的 Microsoft npm 源，首次安装需要能够访问该源及 Python 依赖源。已有开发环境可以直接运行第二条命令。更多环境与打包说明见[开发指南](docs/development.md)。
 
-## 本地开发与检查
+### 2. 配置生成服务
 
-本环境不从公共 npm 源安装依赖；优先现有二进制和项目包装器。
+打开左下角的「设置与创作方法」，填写各项 API Key，保存并验证连接。语言和图片服务还可以设置服务地址。
 
-```sh
-./node_modules/.bin/tsc --noEmit
-./node_modules/.bin/vite build
-node scripts/package-studio.mjs
-(cd backend && PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q)
-```
+| 服务 | 当前接入 |
+| --- | --- |
+| 语言与制作助手 | GPT-6 Astra |
+| 图片生成 | GPT Image 2 |
+| 视频生成 | MiniMax H3 |
 
-本地网页调试需分别启动服务与前端：
+AI 生成需要联网，费用由配置的服务供应商收取。项目保存、已有素材剪辑和导出在本机完成。声音可以使用生成视频的原声，也可以导入音频或录制。
 
-```sh
-LTX_APP_DATA_DIR="$PWD/output/product-delivery/app-data" LTX_PORT=8018 backend/.venv/bin/python backend/short_drama_server.py
-STUDIO_WEB_PREVIEW=1 STUDIO_BACKEND_URL=http://127.0.0.1:8018 ./node_modules/.bin/vite --port 5178 --strictPort
-```
+### 3. 创建第一部作品
 
-打包脚本只使用缓存中的固定 pnpm 和已安装 Electron，缺少本地依赖时停止，不自动下载。`vite build` 同时编译共享剪辑导出运行时。只运行后端的剪辑导出或相关测试时，先执行 `node scripts/build-studio-runtime.mjs`；生成的运行时和依赖缓存标识不纳入 Git。
+新建项目和本集，在右侧告诉助手想做什么。例如：
 
-## 设计、结果与来源
+> 做一部 35–40 秒的温暖都市短片。故事发生在一家小店，两个人通过一个具体行动化解误会。台词和镜头由你决定，完成横屏视频、声音和中文字幕。
 
-[产品定义](docs/product-prd-and-roadmap.md) · [工程指南](AGENTS.md) · [当前成熟化验收](docs/product-commercial-delivery.md) · [本地使用与恢复](docs/studio-local-use-and-recovery.md) · [历史交付记录](docs/product-delivery-checklist.md) · [Skills 与模型](docs/agent-skills-and-model-redesign.md) · [原 131 秒案例](docs/50-complete-film-agent-case-trace.md)
+在「项目资产」导入要使用的图片、视频或声音，再向助手说明用途；已有文本可从「剧本」页的「导入剧本」添加。需要逐字保留的台词，直接写在要求里。想先看剧本时，加上“先写完剧本给我看，暂时不生成图片和视频”。
 
-原校园案例包含用户提供的图片、内容确认、开发修复和多次恢复。当前产品验收另行记录；不把它描述为一次无人工参与的稳定成功，也不把缺失的历史 usage 当作 0。独立稳定性重复实验继续暂缓。
+制作过程中，在「剧本」看场次和台词，在「镜头」看分镜与视频，在「成片」播放和剪辑。需要修改时选中相应内容，使用「请 Agent 修改」，或直接在对话中说明位置。完成后从「成片」导出。
 
-项目复用及再分发边界见 [NOTICES](NOTICES.md)，LTX 上游历史介绍仅作为[维护资料](docs/upstream-ltx-readme.md)。
+## 常见问题
+
+**可以用自己的图片、视频和声音吗？**
+
+可以。导入的文件会进入项目资产，可用于参考图、镜头画面和声音。已有剧本也可以直接导入并继续编辑。
+
+**需要安装本地视频模型或 ComfyUI 吗？**
+
+视频生成使用 H3 API，无需安装本地视频模型。ComfyUI 是可选入口，需要自定义处理时再连接；处理结果可以回到项目中继续使用。
+
+**暂停后会丢掉已经生成的内容吗？**
+
+已保存的内容会保留。点击暂停后，已开始的操作会先结束并保存。需要继续时，在同一任务恢复。已经提交给供应商的生成任务可能仍在远端执行。
+
+**项目保存在哪里，怎样备份？**
+
+macOS 默认数据目录为 `~/Library/Application Support/ShortDramaStudio/`。使用「项目收集与迁移」导出包含媒体的项目包，再将项目包保存到备份位置。项目包不包含服务凭据。
+
+## 开发
+
+桌面端使用 Electron、React 和 TypeScript，本地后端使用 FastAPI 和 Python。结构化内容保存到 SQLite，图片、视频和声音以文件保存。剪辑基于 LTX Desktop，媒体导出使用 FFmpeg。
+
+开发环境、源码入口、检查命令和打包方式见[开发指南](docs/development.md)。修改代码前请阅读 [工程约定](AGENTS.md)。
+
+## 致谢与许可
+
+感谢 [LTX Desktop](https://github.com/Lightricks/LTX-Desktop) 提供桌面应用与剪辑基础。Short Drama Studio 不启用或分发 LTX 模型权重。
+
+应用与剪辑代码沿用 [Apache-2.0](LICENSE.txt)。第三方组件、制片方法和媒体运行时遵循各自的许可，详见 [NOTICES](NOTICES.md)。
