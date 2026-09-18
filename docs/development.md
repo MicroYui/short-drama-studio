@@ -2,6 +2,15 @@
 
 本页介绍 Short Drama Studio 的开发入口、依赖、检查和本地打包。日常创作请从[使用与恢复](studio-local-use-and-recovery.md)开始；产品边界与工程约定见 [AGENTS.md](../AGENTS.md)。
 
+## 获取源码与工作目录
+
+```sh
+git clone git@github.com:MicroYui/short-drama-studio.git
+cd short-drama-studio
+```
+
+下文的“仓库根目录”指 `short-drama-studio/`。Python 检查另行进入 `backend/`；已有源码可直接进入相应目录。
+
 ## 环境与依赖
 
 当前桌面包验收平台为 macOS Apple Silicon。仓库保留 Windows/Linux 构建配置，但本轮未完成这两个平台的打包验收。

@@ -69,9 +69,12 @@ Short Drama Studio 是一款桌面视频制作工具。描述你想拍的故事�
 
 当前运行平台为 **macOS（Apple Silicon）**，桌面包尚未公开发布。源码运行需要 **Node.js 22.12+、Python 3.13 和 uv**。
 
-在仓库根目录执行：
+先获取源码，再在仓库根目录执行安装与启动命令：
 
 ```sh
+git clone git@github.com:MicroYui/short-drama-studio.git
+cd short-drama-studio
+
 # 首次安装开发依赖
 ./scripts/pnpm-project.sh setup:dev
 
@@ -79,7 +82,7 @@ Short Drama Studio 是一款桌面视频制作工具。描述你想拍的故事�
 ./scripts/pnpm-project.sh dev
 ```
 
-仓库使用受管理的 Microsoft npm 源，首次安装需要能够访问该源及 Python 依赖源。已有开发环境可以直接运行第二条命令。更多环境与打包说明见[开发指南](docs/development.md)。
+仓库使用受管理的 Microsoft npm 源，首次安装需要能够访问该源及 Python 依赖源。已有开发环境可以在仓库根目录直接执行 `./scripts/pnpm-project.sh dev`。更多环境与打包说明见[开发指南](docs/development.md)。
 
 ### 2. 配置生成服务
 
