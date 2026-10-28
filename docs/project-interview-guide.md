@@ -4,6 +4,12 @@
 
 推荐读法：先熟悉口述稿、架构和四个难点，再按面试方向阅读问答。后端 / Agent 方向优先 Q09–Q44，前端方向优先 Q36–Q38、Q45–Q50、Q58–Q65，全栈方向贯通完整链路。
 
+面向游戏 Agent 岗位的深入准备，继续阅读[多 Agent、长程稳定性与游戏迁移深挖手册](interview-agent-deep-dive/README.md)。该手册补充完整纠错调用链、真实迭代与未达目标、Memory/RAG、论文对照及闭卷验收；区分已有实现与游戏方向扩展。
+
+Multi-Agent 专项从[交互、上下文、工具与调度实现](interview-agent-deep-dive/01-multi-agent-runtime.md)进入，配套[完整工具目录](interview-agent-deep-dive/01a-tool-catalog.md)与[五 Worker 并行推演](interview-agent-deep-dive/01b-multi-agent-walkthrough.md)。这些补充按 2026-10-22 检出核对，原指南的历史基线与实验口径保持原样。
+
+方法和长程执行进一步拆成[Skill 选择、加载、缓存与更新](interview-agent-deep-dive/01c-skills-management.md)和[持续进度、工作集与下一执行者](interview-agent-deep-dive/01d-progress-and-next-action.md)：结合真实失败解释“知识已写入文件”“状态已保存”和“下一次模型实际收到”之间的区别，配套闭卷验收。
+
 ## 1. 可以直接讲的项目介绍
 
 ### 90 秒口述稿
